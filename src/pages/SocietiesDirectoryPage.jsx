@@ -303,10 +303,20 @@ export default function SocietiesDirectoryPage() {
                           }}>
                             {s.type === 'HOSTEL' ? <GraduationCap size={16} /> : <Building2 size={16} />}
                           </div>
-                          <div>
-                            <strong style={{ fontSize: '13.5px', color: '#0F172A' }}>{s.name}</strong>
-                            <div style={{ fontSize: '11px', color: '#64748B' }}>
-                              Code: <code style={{ color: '#234B3C', fontWeight: 700 }}>{s.id}</code> • {s.address}
+                          <div style={{ minWidth: 0, maxWidth: '280px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <strong style={{ fontSize: '13px', color: '#0F172A', whiteSpace: 'nowrap' }}>{s.name}</strong>
+                              <code style={{ fontSize: '10px', color: '#234B3C', background: '#EBF2EE', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>{s.id}</code>
+                            </div>
+                            <div style={{ 
+                              fontSize: '11px', 
+                              color: '#64748B', 
+                              whiteSpace: 'nowrap', 
+                              overflow: 'hidden', 
+                              textOverflow: 'ellipsis',
+                              marginTop: '1px'
+                            }} title={s.address}>
+                              {s.address ? s.address.replace(/\r?\n/g, ', ') : 'Address on file'}
                             </div>
                           </div>
                         </div>

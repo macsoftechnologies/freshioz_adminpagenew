@@ -386,8 +386,15 @@ export default function WarehousesPage() {
                     </td>
 
                     <td>
-                      <div style={{ fontSize: '12px', color: '#334155', maxWidth: '240px' }}>
-                        {wh.location}
+                      <div style={{ 
+                        fontSize: '12px', 
+                        color: '#334155', 
+                        maxWidth: '220px',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }} title={wh.location}>
+                        {wh.location ? wh.location.replace(/\r?\n/g, ', ') : 'Location on file'}
                       </div>
                     </td>
 
@@ -434,11 +441,13 @@ export default function WarehousesPage() {
                     </td>
 
                     <td>
-                      <div style={{ fontSize: '12.5px', color: '#0F172A', fontWeight: 700 }}>
-                        {wh.managerName || 'Operations Lead'}
-                      </div>
-                      <div style={{ fontSize: '11px', color: '#64748B' }}>
-                        {wh.managerPhone || '+91 98450 11223'}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
+                        <span style={{ fontSize: '12.5px', color: '#0F172A', fontWeight: 700 }}>
+                          {wh.managerName || 'Operations Lead'}
+                        </span>
+                        <span style={{ fontSize: '11px', color: '#64748B' }}>
+                          ({wh.managerPhone || '+91 98450 11223'})
+                        </span>
                       </div>
                     </td>
 

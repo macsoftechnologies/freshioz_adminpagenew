@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Users, 
   UserPlus, 
@@ -560,56 +560,54 @@ export default function EmployeeManagementPage() {
                           }}>
                             {emp.name?.[0]?.toUpperCase()}
                           </div>
-                          <div>
-                            <strong style={{ fontSize: '13.5px', color: '#0F172A' }}>{emp.name}</strong>
-                            <div style={{ fontSize: '11.5px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '8px', marginTop: '1px' }}>
-                              <span>+91 {emp.phone}</span>
-                              {emp.email && <span>• {emp.email}</span>}
+                          <div style={{ minWidth: 0, maxWidth: '240px', whiteSpace: 'nowrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <strong style={{ fontSize: '13px', color: '#0F172A' }}>{emp.name}</strong>
+                              <span style={{ fontSize: '11px', color: '#64748B' }}>• +91 {emp.phone}</span>
                             </div>
+                            {emp.email && (
+                              <div style={{ fontSize: '10.5px', color: '#94A3B8', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {emp.email}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>
 
                       <td>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-                          {[...(emp.roles || [])].sort((a, b) => (a === 'SUPER_ADMIN' ? -1 : b === 'SUPER_ADMIN' ? 1 : 0)).map(roleId => {
-                            const roleDef = AVAILABLE_ROLES.find(r => r.id === roleId) || { label: roleId, badgeColor: '#64748B' };
-                            const isSuper = roleId === 'SUPER_ADMIN';
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}>
+                          {(() => {
+                            const sortedRoles = [...(emp.roles || [])].sort((a, b) => (a === 'SUPER_ADMIN' ? -1 : b === 'SUPER_ADMIN' ? 1 : 0));
+                            const primaryRole = sortedRoles[0];
+                            const roleDef = AVAILABLE_ROLES.find(r => r.id === primaryRole) || { label: primaryRole || 'STAFF', badgeColor: '#64748B' };
+                            const isSuper = primaryRole === 'SUPER_ADMIN';
 
                             return (
-                              <span
-                                key={roleId}
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '4px',
-                                  background: isSuper ? '#234B3C' : '#F8FAFC',
-                                  color: isSuper ? '#FFFFFF' : roleDef.badgeColor,
-                                  border: isSuper ? '1px solid #19352A' : `1px solid ${roleDef.badgeColor}35`,
-                                  fontSize: '11px',
-                                  fontWeight: 800,
-                                  padding: '2px 8px',
-                                  borderRadius: '6px'
-                                }}
-                              >
-                                {isSuper ? (
-                                  <>
-                                    <span>👑</span>
-                                    <span>Super Admin (Main)</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    {roleId === 'DELIVERY_EXECUTIVE' && <span>🚚</span>}
-                                    {roleId === 'WAREHOUSE_MANAGER' && <span>🏢</span>}
-                                    {roleId === 'WAREHOUSE_STAFF' && <span>📦</span>}
-                                    {roleId === 'PROCUREMENT_OFFICER' && <span>🌾</span>}
-                                    {roleId === 'SALES_OFFICER' && <span>📋</span>}
-                                    <span>{roleDef.label}</span>
-                                  </>
+                              <>
+                                <span
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    background: isSuper ? '#234B3C' : '#F8FAFC',
+                                    color: isSuper ? '#FFFFFF' : roleDef.badgeColor,
+                                    border: isSuper ? '1px solid #19352A' : `1px solid ${roleDef.badgeColor}35`,
+                                    fontSize: '11px',
+                                    fontWeight: 800,
+                                    padding: '2px 8px',
+                                    borderRadius: '6px'
+                                  }}
+                                >
+                                  {isSuper ? '👑 Super Admin' : roleDef.label}
+                                </span>
+                                {sortedRoles.length > 1 && (
+                                  <span style={{ fontSize: '10px', background: '#F1F5F9', color: '#475569', padding: '2px 6px', borderRadius: '4px', fontWeight: 700 }} title={sortedRoles.slice(1).join(', ')}>
+                                    +{sortedRoles.length - 1}
+                                  </span>
                                 )}
-                              </span>
+                              </>
                             );
-                          })}
+                          })()}
                         </div>
                       </td>
 

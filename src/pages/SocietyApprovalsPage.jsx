@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   CheckCircle, 
   XCircle, 
@@ -292,11 +292,22 @@ export default function SocietyApprovalsPage() {
                             <Building2 size={15} />
                           </div>
                         )}
-                        <div>
-                          <strong style={{ fontSize: '13px', color: '#0F172A' }}>{soc.name}</strong>
-                          <div style={{ fontSize: '11px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                            <MapPin size={11} color="#F28E14" />
-                            <span>{soc.address}</span>
+                        <div style={{ minWidth: 0, maxWidth: '280px' }}>
+                          <strong style={{ fontSize: '13px', color: '#0F172A', display: 'block', whiteSpace: 'nowrap' }}>{soc.name}</strong>
+                          <div style={{ 
+                            fontSize: '11px', 
+                            color: '#64748B', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '3px',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
+                          }} title={soc.address}>
+                            <MapPin size={11} color="#F28E14" style={{ flexShrink: 0 }} />
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {soc.address ? soc.address.replace(/\r?\n/g, ', ') : 'Address on file'}
+                            </span>
                           </div>
                         </div>
                       </div>
