@@ -30,6 +30,7 @@ import AdminPagination from '../components/common/AdminPagination';
 
 export const resolveImageUrl = (img) => {
   if (!img) return 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600&auto=format&fit=crop&q=80';
+  if (typeof img !== 'string') return 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600&auto=format&fit=crop&q=80';
   if (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('data:')) return img;
   if (img.startsWith('/uploads/')) return `https://api.freshioz.com${img}`;
   if (img.startsWith('uploads/')) return `https://api.freshioz.com/${img}`;
@@ -100,10 +101,41 @@ export default function MasterDataPage() {
   const products = store.products || [];
   const units = store.units || [];
 
-  const [activeTab, setActiveTab] = useState('PRODUCTS'); // 'PRODUCTS' | 'CATEGORIES' | 'UNITS'
+  const getTabFromHash = () => {
+    if (typeof window === 'undefined') return 'PRODUCTS';
+    const hash = window.location.hash.toLowerCase().replace('#', '').trim();
+    if (hash === 'categories') return 'CATEGORIES';
+    if (hash === 'units') return 'UNITS';
+    if (hash === 'produce' || hash === 'products') return 'PRODUCTS';
+    return null;
+  };
+
+  const [activeTab, setActiveTab] = useState(() => getTabFromHash() || 'PRODUCTS');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
+
+  const handleTabSwitch = (tabKey) => {
+    setActiveTab(tabKey);
+    setSearchQuery('');
+    setCurrentPage(1);
+    const hash = tabKey === 'CATEGORIES' ? '#categories' : tabKey === 'UNITS' ? '#units' : '#produce';
+    if (window.location.hash !== hash) {
+      window.location.hash = hash;
+    }
+  };
+
+  useEffect(() => {
+    const onHashChange = () => {
+      const tab = getTabFromHash();
+      if (tab) {
+        setActiveTab(tab);
+        setCurrentPage(1);
+      }
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
 
   // Modals
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -712,7 +744,7 @@ export default function MasterDataPage() {
         <div style={{ display: 'inline-flex', background: '#F1F5F9', padding: '3px', borderRadius: '8px', gap: '3px' }}>
           <button
             type="button"
-            onClick={() => { setActiveTab('PRODUCTS'); setSearchQuery(''); }}
+            onClick={() => handleTabSwitch('PRODUCTS')}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -736,7 +768,7 @@ export default function MasterDataPage() {
 
           <button
             type="button"
-            onClick={() => { setActiveTab('CATEGORIES'); setSearchQuery(''); }}
+            onClick={() => handleTabSwitch('CATEGORIES')}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -760,7 +792,7 @@ export default function MasterDataPage() {
 
           <button
             type="button"
-            onClick={() => { setActiveTab('UNITS'); setSearchQuery(''); }}
+            onClick={() => handleTabSwitch('UNITS')}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -1290,7 +1322,6 @@ export default function MasterDataPage() {
       {isProductModalOpen && (
         <div 
           className="admin-modal-overlay" 
-          onClick={() => setIsProductModalOpen(false)}
           style={{ zIndex: 1050, background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
         >
           <div 
@@ -1573,7 +1604,7 @@ export default function MasterDataPage() {
                           <span>Produce Photo Attached</span>
                         </div>
                         <p style={{ fontSize: '10.5px', color: '#64748B', margin: '2px 0 6px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {productForm.image.startsWith('data:') ? 'Local file optimized' : 'Server/Online photo linked'}
+                          {(typeof productForm.image === 'string' && productForm.image.startsWith('data:')) ? 'Local file optimized' : 'Server/Online photo linked'}
                         </p>
                         <div style={{ display: 'flex', gap: '8px' }}>
                           <label style={{

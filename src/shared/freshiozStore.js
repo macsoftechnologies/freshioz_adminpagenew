@@ -229,8 +229,20 @@ export function areEntityCollectionsEqual(localData, serverData) {
     'societyRequests', 'withdrawals', 'employees'
   ];
   for (const key of collections) {
-    if (JSON.stringify(localData[key] || []) !== JSON.stringify(serverData[key] || [])) {
-      return false;
+    const localArr = localData[key] || [];
+    const serverArr = serverData[key] || [];
+    if (!Array.isArray(localArr) || !Array.isArray(serverArr)) {
+      if (JSON.stringify(localArr) !== JSON.stringify(serverArr)) return false;
+      continue;
+    }
+    if (localArr.length !== serverArr.length) return false;
+    for (let i = 0; i < localArr.length; i++) {
+      const l = localArr[i];
+      const s = serverArr[i];
+      if (!l || !s) return false;
+      if (l.id !== s.id || l.status !== s.status || l.updatedAt !== s.updatedAt || l.name !== s.name) {
+        return false;
+      }
     }
   }
   return true;
@@ -238,6 +250,15 @@ export function areEntityCollectionsEqual(localData, serverData) {
 
 export async function syncFreshiozStoreFromServer() {
   try {
+    // If the user is currently typing in an input, textarea, or contentEditable element,
+    // skip dispatching store re-renders to prevent cursor jumps or closing modals.
+    if (typeof document !== 'undefined') {
+      const activeEl = document.activeElement;
+      if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.isContentEditable)) {
+        return null;
+      }
+    }
+
     const token = localStorage.getItem('freshioz_auth_token') || localStorage.getItem('freshioz_admin_token');
     const headers = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
