@@ -221,6 +221,21 @@ export async function pushStoreToServer(storeData) {
   }
 }
 
+export function areEntityCollectionsEqual(localData, serverData) {
+  if (!localData || !serverData) return false;
+  const collections = [
+    'categories', 'units', 'products', 'warehouses', 'societies',
+    'orders', 'vendors', 'procurementLogs', 'warehouseInventory',
+    'societyRequests', 'withdrawals', 'employees'
+  ];
+  for (const key of collections) {
+    if (JSON.stringify(localData[key] || []) !== JSON.stringify(serverData[key] || [])) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export async function syncFreshiozStoreFromServer() {
   try {
     const token = localStorage.getItem('freshioz_auth_token');
@@ -235,12 +250,18 @@ export async function syncFreshiozStoreFromServer() {
     if (res && res.ok) {
       const serverData = await res.json();
       if (serverData && typeof serverData === 'object' && Array.isArray(serverData.categories)) {
-        const localRaw = localStorage.getItem(STORAGE_KEY);
-        const serverRaw = JSON.stringify(serverData);
-        if (localRaw !== serverRaw) {
-          localStorage.setItem(STORAGE_KEY, serverRaw);
-          window.dispatchEvent(new CustomEvent('freshioz_store_updated', { detail: serverData }));
-          return serverData;
+        const currentLocal = getFreshiozStore();
+        // Only update storage and dispatch re-render if data collections ACTUALLY changed.
+        // This prevents aggressive re-renders every 5s from interrupting user typing or closing open modals.
+        if (!areEntityCollectionsEqual(currentLocal, serverData)) {
+          const mergedData = {
+            ...currentLocal,
+            ...serverData,
+            dailyPricingHistory: currentLocal.dailyPricingHistory || serverData.dailyPricingHistory || {}
+          };
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedData));
+          window.dispatchEvent(new CustomEvent('freshioz_store_updated', { detail: mergedData }));
+          return mergedData;
         }
       }
     }

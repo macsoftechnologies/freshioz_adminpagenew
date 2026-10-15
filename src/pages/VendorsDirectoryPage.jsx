@@ -479,7 +479,7 @@ export default function VendorsDirectoryPage() {
               </button>
             </div>
 
-            <form onSubmit={handleSaveVendor}>
+            <form onSubmit={handleSaveVendor} onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault(); }}>
               {/* Basic Information */}
               <div style={{ marginBottom: '16px' }}>
                 <div style={{ fontSize: '12px', fontWeight: 800, textTransform: 'uppercase', color: '#234B3C', letterSpacing: '0.5px', marginBottom: '8px' }}>

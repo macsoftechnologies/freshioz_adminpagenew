@@ -486,7 +486,7 @@ export default function WarehousesPage() {
               </button>
             </div>
 
-            <form onSubmit={handlePreSaveWarehouse}>
+            <form onSubmit={handlePreSaveWarehouse} onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault(); }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '14px', marginBottom: '14px' }}>
                 <div>
                   <label className="form-label-title">Hub Code *</label>

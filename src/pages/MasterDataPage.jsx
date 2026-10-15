@@ -1132,7 +1132,7 @@ export default function MasterDataPage() {
       {/* MODAL: ADD / EDIT PRODUCE ITEM (Taxonomy Specs ONLY, NO Pricing Fields) */}
       {isProductModalOpen && (
         <div className="admin-modal-overlay">
-          <div className="admin-modal-card" style={{ maxWidth: '580px' }}>
+          <div className="admin-modal-card" style={{ maxWidth: '580px' }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Apple size={20} color="#234B3C" />
@@ -1149,7 +1149,7 @@ export default function MasterDataPage() {
               ℹ️ <strong>Daily Pricing Separation:</strong> Market buying rates, consumer retail selling prices, wholesale crate rates, and GST % are managed daily at <strong>/daily-pricing</strong> based on morning APMC arrivals.
             </div>
 
-            <form onSubmit={handlePreSaveProduct}>
+            <form onSubmit={handlePreSaveProduct} onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault(); }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '12px', marginBottom: '12px' }}>
                 <div>
                   <label className="form-label-title" style={{ fontSize: '11px' }}>Produce Name *</label>
@@ -1552,6 +1552,7 @@ export default function MasterDataPage() {
         >
           <div 
             className="admin-modal-card" 
+            onClick={(e) => e.stopPropagation()}
             style={{ 
               maxWidth: '480px', 
               border: '2px solid #E2E8F0',
@@ -1721,7 +1722,7 @@ export default function MasterDataPage() {
       {/* MODAL: ADD / EDIT CATEGORY */}
       {isCategoryModalOpen && (
         <div className="admin-modal-overlay">
-          <div className="admin-modal-card" style={{ maxWidth: '440px' }}>
+          <div className="admin-modal-card" style={{ maxWidth: '440px' }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
               <h3 style={{ fontSize: '16px', fontWeight: 800, margin: 0 }}>Category Master Setup</h3>
               <button type="button" onClick={() => setIsCategoryModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}>
@@ -1729,7 +1730,7 @@ export default function MasterDataPage() {
               </button>
             </div>
 
-            <form onSubmit={handleSaveCategory}>
+            <form onSubmit={handleSaveCategory} onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault(); }}>
               <div style={{ marginBottom: '12px' }}>
                 <label className="form-label-title" style={{ fontSize: '11px' }}>Category Name *</label>
                 <input
@@ -1808,7 +1809,7 @@ export default function MasterDataPage() {
       {/* MODAL: ADD / EDIT PACKAGING UNIT (SIMPLIFIED: kg, tones, crate) */}
       {isUnitModalOpen && (
         <div className="admin-modal-overlay">
-          <div className="admin-modal-card" style={{ maxWidth: '420px' }}>
+          <div className="admin-modal-card" style={{ maxWidth: '420px' }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Scale size={18} color="#234B3C" />
@@ -1819,7 +1820,7 @@ export default function MasterDataPage() {
               </button>
             </div>
 
-            <form onSubmit={handleSaveUnit}>
+            <form onSubmit={handleSaveUnit} onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault(); }}>
               <div style={{ marginBottom: '12px' }}>
                 <label className="form-label-title" style={{ fontSize: '11px' }}>Unit Code / Short Form *</label>
                 <input

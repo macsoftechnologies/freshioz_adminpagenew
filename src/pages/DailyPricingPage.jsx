@@ -39,6 +39,7 @@ export default function DailyPricingPage() {
   const [isConfirmPricingModalOpen, setIsConfirmPricingModalOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
+  const isEditingRef = React.useRef(false);
 
   const isPastDate = selectedDate < todayStr;
   const isToday = selectedDate === todayStr;
@@ -54,7 +55,18 @@ export default function DailyPricingPage() {
     } else {
       setProducts(store.products || []);
     }
-  }, [selectedDate, store.products, store.dailyPricingHistory]);
+    isEditingRef.current = false;
+  }, [selectedDate]);
+
+  useEffect(() => {
+    if (isEditingRef.current) return;
+    const history = store.dailyPricingHistory || {};
+    if (history[selectedDate]) {
+      setProducts(history[selectedDate]);
+    } else {
+      setProducts(store.products || []);
+    }
+  }, [store.products, store.dailyPricingHistory]);
 
   // Live volume bulk tier discount calculator (standardized to clean rupee integers)
   const calculateBulkStats = (prod) => {
@@ -78,6 +90,7 @@ export default function DailyPricingPage() {
 
   const handlePriceChange = (id, field, value) => {
     if (isPastDate) return;
+    isEditingRef.current = true;
     setProducts(prev => prev.map(p => {
       if (p.id === id) {
         return { ...p, [field]: value === '' ? '' : Number(value) };
@@ -129,6 +142,7 @@ export default function DailyPricingPage() {
 
     setIsConfirmPricingModalOpen(false);
     showToast(`✓ Dynamic Retail Rates & Volume Discounts for ${selectedDate === todayStr ? 'Today' : selectedDate === tomorrowStr ? 'Tomorrow' : selectedDate} saved!`, 'success');
+    isEditingRef.current = false;
     setSuccessToast(`✓ Rates for ${selectedDate === todayStr ? 'Today' : selectedDate === tomorrowStr ? 'Tomorrow' : selectedDate} successfully recorded.`);
     setTimeout(() => setSuccessToast(''), 5000);
   };
