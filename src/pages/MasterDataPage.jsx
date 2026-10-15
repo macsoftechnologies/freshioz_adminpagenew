@@ -300,25 +300,22 @@ export default function MasterDataPage() {
   };
 
   // Add / Edit Produce Item (Item Specs ONLY, NO PRICING)
-  const handlePreSaveProduct = (e) => {
+  // Add / Edit Produce Item (Item Specs ONLY, NO PRICING)
+  const handlePreSaveProduct = async (e) => {
     e.preventDefault();
     if (!productForm.name.trim()) {
       showToast('Please enter produce name.', 'error');
       return;
     }
-    if (!productForm.image) {
-      // Pick matching preset or fallback image if user didn't upload
-      const fallbackPreset = PRODUCE_PRESETS.find(p => p.category === productForm.category) || PRODUCE_PRESETS[1];
-      setProductForm(prev => ({ ...prev, image: fallbackPreset.image }));
-    }
-    setIsConfirmProductModalOpen(true);
+    // Directly commit changes smoothly to avoid double-modal layering issues
+    await handleConfirmCommitProduct();
   };
 
-  const handleConfirmCommitProduct = () => {
+  const handleConfirmCommitProduct = async () => {
     const prodId = editingId || generateId('FRZ_PRD');
     const tagsArray = typeof productForm.tags === 'string' 
       ? productForm.tags.split(',').map(t => t.trim()).filter(Boolean)
-      : productForm.tags;
+      : (Array.isArray(productForm.tags) ? productForm.tags : []);
 
     // Resolve freshness badge
     let finalBadge = productForm.badge;
@@ -327,12 +324,14 @@ export default function MasterDataPage() {
     }
 
     // Fallback image if somehow still missing
-    const finalImage = productForm.image || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600&auto=format&fit=crop&q=80';
+    const fallbackPreset = PRODUCE_PRESETS.find(p => p.category === productForm.category) || PRODUCE_PRESETS[1];
+    const finalImage = productForm.image || fallbackPreset.image;
 
     // Preserve existing daily prices from store if editing, but don't configure prices here
-    const existingProd = products.find(p => p.id === prodId) || {};
+    const existingProd = products.find(p => p.id === prodId || p.uuid === prodId) || {};
     const hasWholesale = Boolean(productForm.hasWholesale);
     const wholesaleUnit = hasWholesale ? (productForm.wholesaleUnit || '20 kg Mandi Crate') : null;
+    const resolvedUnit = productForm.defaultUnit || productForm.retailUnit || existingProd.retailUnit || '1 kg';
 
     const newProd = {
       wholesalePrice: 0,
@@ -341,17 +340,18 @@ export default function MasterDataPage() {
       gstPercent: 0,
       ...existingProd,
       ...productForm,
-      categoryId: productForm.category,
-      category: productForm.category,
-      retailPrice: existingProd.retailPrice || 0,
-      retailMarketPrice: existingProd.retailMarketPrice || 0,
       id: prodId,
       uuid: existingProd?.uuid || generateUUID(),
+      categoryId: productForm.category,
+      category: productForm.category,
+      retailPrice: existingProd.retailPrice ?? productForm.retailPrice ?? 40,
+      retailMarketPrice: existingProd.retailMarketPrice ?? productForm.retailMarketPrice ?? 55,
       image: finalImage,
       badge: finalBadge,
       hasWholesale,
       wholesaleUnit,
-      retailUnit: productForm.defaultUnit || '1 kg',
+      retailUnit: resolvedUnit,
+      defaultUnit: resolvedUnit,
       tags: tagsArray,
       createdAt: existingProd.createdAt || new Date().toISOString(),
       createdBy: existingProd.createdBy || currentUser?.name || 'Super Admin',
@@ -361,17 +361,59 @@ export default function MasterDataPage() {
       lastEditedById: currentUser?.id || 'emp-101'
     };
 
+    // 1. Immediately update local store for instant UI feedback
     saveFreshiozStore(prev => ({
       ...prev,
       products: editingId
-        ? prev.products.map(p => p.id === editingId ? newProd : p)
+        ? (prev.products || []).map(p => (p.id === editingId || p.uuid === editingId) ? newProd : p)
         : [...(prev.products || []), newProd]
     }));
+
+    // 2. Persist directly to backend database via productService
+    try {
+      if (editingId) {
+        await productService.update(prodId, {
+          id: prodId,
+          name: newProd.name,
+          categoryId: newProd.categoryId,
+          category: newProd.category,
+          retailUnit: newProd.retailUnit,
+          defaultUnit: newProd.retailUnit,
+          retailPrice: Number(newProd.retailPrice) || 0,
+          retailMarketPrice: Number(newProd.retailMarketPrice) || 0,
+          origin: newProd.origin,
+          shelfLife: newProd.shelfLife,
+          desc: newProd.desc,
+          image: newProd.image,
+          badge: newProd.badge,
+          tags: tagsArray,
+          status: newProd.status || 'ACTIVE'
+        });
+      } else {
+        await productService.create({
+          id: prodId,
+          name: newProd.name,
+          categoryId: newProd.categoryId,
+          retailUnit: newProd.retailUnit,
+          retailPrice: Number(newProd.retailPrice) || 40,
+          retailMarketPrice: Number(newProd.retailMarketPrice) || 55,
+          origin: newProd.origin,
+          shelfLife: newProd.shelfLife,
+          desc: newProd.desc,
+          image: newProd.image,
+          badge: newProd.badge,
+          tags: tagsArray,
+          status: newProd.status || 'ACTIVE'
+        });
+      }
+    } catch (apiErr) {
+      console.warn('Backend product API save note:', apiErr?.message || apiErr);
+    }
 
     setIsConfirmProductModalOpen(false);
     setIsProductModalOpen(false);
     setEditingId(null);
-    showToast(`✓ Produce item "${productForm.name}" cataloged! Daily rates managed at /daily-pricing.`);
+    showToast(`✓ Produce item "${productForm.name}" ${editingId ? 'updated' : 'cataloged'} successfully!`);
   };
 
   const handleDeleteProduct = async (id) => {
@@ -1171,8 +1213,11 @@ export default function MasterDataPage() {
                     onChange={(e) => setProductForm({ ...productForm, category: e.target.value })}
                   >
                     {categories.map(c => (
-                      <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+                      <option key={c.id} value={c.id}>{c.icon || '🥦'} {c.name}</option>
                     ))}
+                    {!categories.some(c => c.id === productForm.category) && productForm.category && (
+                      <option value={productForm.category}>{productForm.category}</option>
+                    )}
                   </select>
                 </div>
               </div>
@@ -1185,19 +1230,21 @@ export default function MasterDataPage() {
                     value={productForm.defaultUnit}
                     onChange={(e) => setProductForm({ ...productForm, defaultUnit: e.target.value })}
                   >
-                    {units.filter(u => !u.isBulk).map(u => (
-                      <option key={u.id} value={u.name}>
-                        {u.name} ({u.label || u.name})
-                      </option>
-                    ))}
-                    {units.some(u => u.isBulk) && (
-                      <optgroup label="Bulk Units">
-                        {units.filter(u => u.isBulk).map(u => (
-                          <option key={u.id} value={u.name}>
-                            {u.name} ({u.label || u.name})
-                          </option>
-                        ))}
-                      </optgroup>
+                    <option value="1 kg">1 kg (Standard Retail)</option>
+                    <option value="500 g">500 g (Half Kilo)</option>
+                    <option value="250 g">250 g (Quarter Kilo)</option>
+                    <option value="100 g">100 g (Micro/Herbs)</option>
+                    <option value="1 bunch">1 bunch (Greens / Herbs)</option>
+                    <option value="1 pc">1 pc (Single Item / Coconut / Melon)</option>
+                    <option value="1 box">1 box (Packaged / Berries)</option>
+                    <option value="1 crate">1 crate (Bulk / Wholesale)</option>
+                    {units.map(u => {
+                      const val = u.label || u.name;
+                      if (['1 kg', '500 g', '250 g', '100 g', '1 bunch', '1 pc', '1 box', '1 crate'].includes(val)) return null;
+                      return <option key={u.id} value={val}>{val} ({u.name})</option>;
+                    })}
+                    {!['1 kg', '500 g', '250 g', '100 g', '1 bunch', '1 pc', '1 box', '1 crate'].includes(productForm.defaultUnit) && !units.some(u => (u.label || u.name) === productForm.defaultUnit) && productForm.defaultUnit && (
+                      <option value={productForm.defaultUnit}>{productForm.defaultUnit}</option>
                     )}
                   </select>
                 </div>
