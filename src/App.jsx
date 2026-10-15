@@ -6,6 +6,7 @@ import AdminMobileHeader from './components/layout/AdminMobileHeader';
 import AdminMobileDock from './components/layout/AdminMobileDock';
 import AdminMobileDrawer from './components/layout/AdminMobileDrawer';
 import AdminLogoutConfirmModal from './components/common/AdminLogoutConfirmModal';
+import AdminFloatingPwaWidget from './components/common/AdminFloatingPwaWidget';
 
 import AdminLoginPage from './pages/AdminLoginPage';
 import AdminForgotPasswordPage from './pages/AdminForgotPasswordPage';
@@ -59,11 +60,14 @@ export default function App() {
       return <Navigate to={getHomeRoute()} replace />;
     }
     return (
-      <Routes>
-        <Route path="/login" element={<AdminLoginPage />} />
-        <Route path="/forgot-password" element={<AdminForgotPasswordPage />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
+      <>
+        <Routes>
+          <Route path="/login" element={<AdminLoginPage />} />
+          <Route path="/forgot-password" element={<AdminForgotPasswordPage />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+        <AdminFloatingPwaWidget />
+      </>
     );
   }
 
@@ -177,6 +181,9 @@ export default function App() {
 
         {/* Global Admin Session Logout Confirmation Dialog */}
         <AdminLogoutConfirmModal />
+
+        {/* Floating PWA Install Widget */}
+        <AdminFloatingPwaWidget />
       </div>
     </div>
   );
