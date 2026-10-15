@@ -494,18 +494,11 @@ export default function MasterDataPage() {
       lastEditedById: currentUser?.id || 'emp-101'
     };
 
-    // 1. Immediately update local store for instant UI feedback
-    saveFreshiozStore(prev => ({
-      ...prev,
-      products: editingId
-        ? (prev.products || []).map(p => (p.id === editingId || p.uuid === editingId) ? newProd : p)
-        : [...(prev.products || []), newProd]
-    }));
-
-    // 2. Persist directly to backend database via productService
+    // 1. Persist directly to backend database via productService
     try {
+      let savedProd = null;
       if (editingId) {
-        await productService.update(prodId, {
+        savedProd = await productService.update(prodId, {
           id: prodId,
           name: newProd.name,
           categoryId: newProd.categoryId,
@@ -523,7 +516,7 @@ export default function MasterDataPage() {
           status: newProd.status || 'ACTIVE'
         });
       } else {
-        await productService.create({
+        savedProd = await productService.create({
           id: prodId,
           name: newProd.name,
           categoryId: newProd.categoryId,
@@ -539,14 +532,27 @@ export default function MasterDataPage() {
           status: newProd.status || 'ACTIVE'
         });
       }
-    } catch (apiErr) {
-      console.warn('Backend product API save note:', apiErr?.message || apiErr);
-    }
 
-    setIsConfirmProductModalOpen(false);
-    setIsProductModalOpen(false);
-    setEditingId(null);
-    showToast(`✓ Produce item "${productForm.name}" ${editingId ? 'updated' : 'cataloged'} successfully!`);
+      const canonicalProd = { ...newProd, ...(savedProd || {}) };
+
+      // 2. Update store upon server confirmation
+      saveFreshiozStore(prev => ({
+        ...prev,
+        products: editingId
+          ? (prev.products || []).map(p => (p.id === editingId || p.uuid === editingId) ? canonicalProd : p)
+          : [...(prev.products || []), canonicalProd]
+      }));
+
+      setIsConfirmProductModalOpen(false);
+      setIsProductModalOpen(false);
+      setEditingId(null);
+      showToast(`✓ Produce item "${productForm.name}" ${editingId ? 'updated' : 'cataloged'} successfully!`, 'success');
+    } catch (apiErr) {
+      console.error('Backend product API save failed:', apiErr);
+      showToast(`Failed to save produce item on server: ${apiErr?.message || 'Server error'}`, 'error');
+      // Keep form modal open so the user can fix the issue without losing typed input!
+      setIsConfirmProductModalOpen(false);
+    }
   };
 
   const handleDeleteProduct = async (id, name = 'Produce item') => {
