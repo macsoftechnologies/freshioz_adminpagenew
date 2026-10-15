@@ -37,7 +37,7 @@ export default function AdminSidebar() {
     <aside className="admin-sidebar">
       {/* Sidebar Top Branding */}
       <div className="sidebar-header">
-        <FreshiozLogo height={34} showTagline={false} />
+        <FreshiozLogo height={42} showTagline={false} />
         <div className="sidebar-role-indicator">
           <span>Active Desk:</span>
           <strong>{currentRoleId.replace(/_/g, ' ')}</strong>

@@ -78,8 +78,8 @@ export default function AdminForgotPasswordPage() {
       }}>
         {/* Brand Header */}
         <div style={{ textAlign: 'center', marginBottom: '22px' }}>
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '10px' }}>
-            <FreshiozLogo height={38} showTagline={false} />
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
+            <FreshiozLogo height={58} showTagline={true} />
           </div>
           <h1 style={{ fontSize: '19px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
             Reset Operations Password

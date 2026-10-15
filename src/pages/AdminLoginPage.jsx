@@ -104,8 +104,8 @@ export default function AdminLoginPage() {
       }}>
         {/* Brand Header */}
         <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '10px' }}>
-            <FreshiozLogo height={42} showTagline={false} />
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
+            <FreshiozLogo height={62} showTagline={true} />
           </div>
           <h1 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
             Operations & Admin Portal

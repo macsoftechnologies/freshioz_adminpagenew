@@ -36,7 +36,7 @@ export default function AdminMobileHeader() {
         >
           <Menu size={18} />
         </button>
-        <FreshiozLogo height={28} showTagline={false} />
+        <FreshiozLogo height={38} showTagline={false} />
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

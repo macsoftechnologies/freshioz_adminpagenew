@@ -37,7 +37,7 @@ export default function AdminTopBar({ onMobileMenuClick }) {
   return (
     <header className="admin-topbar">
       <div className="topbar-left" style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-        <FreshiozLogo height={32} showTagline={false} />
+        <FreshiozLogo height={40} showTagline={false} />
         <div style={{ borderLeft: '1.5px solid #CBD5E1', paddingLeft: '12px' }}>
           <div style={{ fontSize: '10px', textTransform: 'uppercase', color: '#64748B', fontWeight: 800, letterSpacing: '0.5px' }}>
             Freshioz Operations Desk
