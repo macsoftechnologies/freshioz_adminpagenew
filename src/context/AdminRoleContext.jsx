@@ -59,16 +59,21 @@ export function AdminRoleProvider({ children }) {
     // Initial server sync
     syncFreshiozStoreFromServer();
 
-    // Sync on window focus
+    // Sync on window focus (throttled to at most once every 10s)
+    let lastFocusSync = 0;
     const handleFocus = () => {
-      syncFreshiozStoreFromServer();
+      const now = Date.now();
+      if (now - lastFocusSync > 10000) {
+        lastFocusSync = now;
+        syncFreshiozStoreFromServer();
+      }
     };
     window.addEventListener('focus', handleFocus);
 
-    // Live polling (5s) for real-time mirroring across multiple tabs and devices
+    // Live polling (25s) for real-time mirroring across multiple tabs and devices
     const interval = setInterval(() => {
       syncFreshiozStoreFromServer();
-    }, 5000);
+    }, 25000);
 
     return () => {
       window.removeEventListener('freshioz_store_updated', handleSync);

@@ -23,7 +23,7 @@ export default function AdminTopBar({ onMobileMenuClick }) {
       }
     };
     checkHealth();
-    const interval = setInterval(checkHealth, 5000);
+    const interval = setInterval(checkHealth, 30000);
     return () => {
       mounted = false;
       clearInterval(interval);
