@@ -26,13 +26,37 @@ import {
 import { useAdminRole, ROLES } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
 import { saveFreshiozStore, generateId, generateUUID } from '../shared/freshiozStore';
+import { employeeService } from '../services/employeeService';
 import { exportToExcel } from '../utils/excelExporter';
 import AdminPagination from '../components/common/AdminPagination';
 
 export default function EmployeeManagementPage() {
   const { store, currentUser } = useAdminRole();
   const { showToast } = useToast();
-  const employees = store.employees || [];
+  const [apiEmployees, setApiEmployees] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadEmployees() {
+      try {
+        setIsLoading(true);
+        const data = await employeeService.getAll();
+        if (isMounted && Array.isArray(data)) {
+          setApiEmployees(data);
+          saveFreshiozStore(prev => ({ ...prev, employees: data }));
+        }
+      } catch (err) {
+        console.warn('Backend employees load note:', err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+    loadEmployees();
+    return () => { isMounted = false; };
+  }, []);
+
+  const employees = apiEmployees.length > 0 ? apiEmployees : (store.employees || []);
   const warehouses = store.warehouses || [];
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('ALL');
@@ -163,7 +187,7 @@ export default function EmployeeManagementPage() {
     setIsConfirmModalOpen(true);
   };
 
-  const handleConfirmCommitEmployee = () => {
+  const handleConfirmCommitEmployee = async () => {
     // Determine location name & type
     let locName = 'All Hubs & Warehouses (Citywide)';
     let locType = 'ALL';
@@ -182,76 +206,109 @@ export default function EmployeeManagementPage() {
       : null;
     const resolvedPassword = formData.authMethod === 'PASSWORD' ? (formData.password || 'admin123') : null;
 
+    const payload = {
+      ...formData,
+      inviteStatus: resolvedInviteStatus,
+      inviteToken: resolvedInviteToken,
+      password: resolvedPassword,
+      assignedLocationType: locType,
+      assignedLocationName: locName,
+    };
+
     if (editingEmployee) {
-      // Update existing
-      saveFreshiozStore(prev => ({
-        ...prev,
-        employees: prev.employees.map(emp => emp.id === editingEmployee.id ? {
-          ...emp,
-          ...formData,
-          inviteStatus: resolvedInviteStatus,
-          inviteToken: resolvedInviteToken,
-          password: resolvedPassword,
-          assignedLocationType: locType,
-          assignedLocationName: locName,
+      try {
+        const updated = await employeeService.update(editingEmployee.id, payload);
+        const canonical = {
+          ...editingEmployee,
+          ...(updated || {}),
+          ...payload,
           lastEditedAt: new Date().toISOString(),
           lastEditedBy: currentUser?.name || 'Super Admin',
           lastEditedById: currentUser?.id || 'emp-101'
-        } : emp)
-      }));
-    } else {
-      // Add new
-      const newEmp = {
-        id: generateId('FRZ_EMP'),
-        uuid: generateUUID(),
-        ...formData,
-        inviteStatus: resolvedInviteStatus,
-        inviteToken: resolvedInviteToken,
-        password: resolvedPassword,
-        assignedLocationType: locType,
-        assignedLocationName: locName,
-        createdAt: new Date().toISOString(),
-        createdBy: currentUser?.name || 'Super Admin',
-        createdById: currentUser?.id || 'emp-101',
-        dateJoined: new Date().toISOString().slice(0, 10)
-      };
+        };
 
+        setApiEmployees(prev => prev.map(e => e.id === editingEmployee.id ? canonical : e));
+        saveFreshiozStore(prev => ({
+          ...prev,
+          employees: prev.employees.map(e => e.id === editingEmployee.id ? canonical : e)
+        }));
+        showToast(`✓ Updated employee "${formData.name}"`, 'success');
+        setIsConfirmModalOpen(false);
+        setIsModalOpen(false);
+      } catch (err) {
+        console.error('Backend employee update failed:', err);
+        showToast(`Failed to update employee on server: ${err?.message || 'Server error'}`, 'error');
+        return;
+      }
+    } else {
+      try {
+        const created = await employeeService.create({
+          ...payload,
+          id: generateId('FRZ_EMP'),
+        });
+
+        const canonical = {
+          ...payload,
+          ...(created || {}),
+          createdAt: new Date().toISOString(),
+          createdBy: currentUser?.name || 'Super Admin',
+          createdById: currentUser?.id || 'emp-101',
+          dateJoined: new Date().toISOString().slice(0, 10)
+        };
+
+        setApiEmployees(prev => [canonical, ...prev.filter(e => e.id !== canonical.id)]);
+        saveFreshiozStore(prev => ({
+          ...prev,
+          employees: [canonical, ...(prev.employees || []).filter(e => e.id !== canonical.id)]
+        }));
+        showToast(`✓ Added new employee "${formData.name}"`, 'success');
+        setIsConfirmModalOpen(false);
+        setIsModalOpen(false);
+      } catch (err) {
+        console.error('Backend employee create failed:', err);
+        showToast(`Failed to create employee on server: ${err?.message || 'Server error'}`, 'error');
+        return;
+      }
+    }
+  };
+
+  const handleToggleStatus = async (empId) => {
+    const target = employees.find(e => e.id === empId);
+    if (!target) return;
+    const newStatus = target.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+
+    try {
+      const updated = await employeeService.update(empId, { status: newStatus });
+      setApiEmployees(prev => prev.map(e => e.id === empId ? { ...e, ...(updated || {}), status: newStatus } : e));
       saveFreshiozStore(prev => ({
         ...prev,
-        employees: [newEmp, ...(prev.employees || [])]
+        employees: prev.employees.map(e => e.id === empId ? { ...e, ...(updated || {}), status: newStatus } : e)
       }));
+      showToast('Employee account status updated on server', 'info');
+    } catch (err) {
+      console.error('Backend employee status update failed:', err);
+      showToast(`Failed to update employee status on server: ${err?.message || 'Server error'}`, 'error');
     }
-
-    showToast(editingEmployee ? `✓ Updated employee "${formData.name}"` : `✓ Added new employee "${formData.name}"`, 'success');
-    setIsConfirmModalOpen(false);
-    setIsModalOpen(false);
   };
 
-  const handleToggleStatus = (empId) => {
-    saveFreshiozStore(prev => ({
-      ...prev,
-      employees: prev.employees.map(e => e.id === empId ? {
-        ...e,
-        status: e.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE',
-        lastStatusUpdateAt: new Date().toISOString(),
-        lastStatusUpdateBy: currentUser?.name || 'Super Admin',
-        lastStatusUpdateById: currentUser?.id || 'emp-101'
-      } : e)
-    }));
-    showToast('Employee account status updated', 'info');
-  };
-
-  const handleDeleteEmployee = (empId) => {
+  const handleDeleteEmployee = async (empId) => {
     if (empId === 'FRZ_EMP_101' || empId === 'emp-101') {
       showToast('Master Super Admin account cannot be removed.', 'error');
       return;
     }
-    if (confirm('Are you sure you want to remove this employee from the directory?')) {
-      saveFreshiozStore(prev => ({
-        ...prev,
-        employees: prev.employees.filter(e => e.id !== empId)
-      }));
-      showToast('Employee removed from directory', 'info');
+    if (confirm('Are you sure you want to deactivate and remove this employee from active duty?')) {
+      try {
+        await employeeService.update(empId, { status: 'INACTIVE' });
+        setApiEmployees(prev => prev.filter(e => e.id !== empId));
+        saveFreshiozStore(prev => ({
+          ...prev,
+          employees: prev.employees.filter(e => e.id !== empId)
+        }));
+        showToast('Employee removed from directory', 'info');
+      } catch (err) {
+        console.error('Backend employee removal failed:', err);
+        showToast(`Failed to remove employee on server: ${err?.message || 'Server error'}`, 'error');
+      }
     }
   };
 

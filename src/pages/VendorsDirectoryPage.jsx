@@ -27,8 +27,30 @@ import AdminWarehouseLocationMapPicker from '../components/common/AdminWarehouse
 export default function VendorsDirectoryPage() {
   const { store, currentUser } = useAdminRole();
   const { showToast } = useToast();
+  const [apiVendors, setApiVendors] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const vendors = store.vendors || [];
+  useEffect(() => {
+    let isMounted = true;
+    async function loadVendors() {
+      try {
+        setIsLoading(true);
+        const data = await vendorService.getAll();
+        if (isMounted && Array.isArray(data)) {
+          setApiVendors(data);
+          saveFreshiozStore(prev => ({ ...prev, vendors: data }));
+        }
+      } catch (err) {
+        console.warn('Backend vendors load note:', err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+    loadVendors();
+    return () => { isMounted = false; };
+  }, []);
+
+  const vendors = apiVendors.length > 0 ? apiVendors : (store.vendors || []);
   const procurementLogs = store.procurementLogs || [];
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -133,44 +155,76 @@ export default function VendorsDirectoryPage() {
       })
     };
 
-    try {
-      if (editingVendor) {
-        await vendorService.update(editingVendor.id, vendorPayload);
-      } else {
-        await vendorService.create(vendorPayload);
+    if (editingVendor) {
+      try {
+        const updated = await vendorService.update(editingVendor.id, vendorPayload);
+        const canonical = {
+          ...editingVendor,
+          ...(updated || {}),
+          ...vendorPayload,
+          updatedAt: new Date().toISOString(),
+          updatedBy: currentUser?.name || 'Super Admin',
+          updatedById: currentUser?.id || 'emp-101'
+        };
+
+        setApiVendors(prev => prev.map(v => v.id === editingVendor.id ? canonical : v));
+        saveFreshiozStore(prev => ({
+          ...prev,
+          vendors: (prev.vendors || []).map(v => v.id === editingVendor.id ? canonical : v)
+        }));
+
+        setIsModalOpen(false);
+        resetForm();
+        showToast('✓ Vendor details updated on server!', 'success');
+      } catch (err) {
+        console.error('Backend vendor update failed:', err);
+        showToast(`Failed to update vendor on server: ${err?.message || 'Server error'}`, 'error');
+        return;
       }
-    } catch (err) {
-      console.warn('Backend vendor persistence note:', err?.message || err);
+    } else {
+      try {
+        const created = await vendorService.create(vendorPayload);
+        const canonical = {
+          ...vendorPayload,
+          ...(created || {}),
+          id: created?.id || vendorPayload.id,
+          createdAt: new Date().toISOString(),
+          createdBy: currentUser?.name || 'Super Admin',
+          createdById: currentUser?.id || 'emp-101'
+        };
+
+        setApiVendors(prev => [canonical, ...prev.filter(v => v.id !== canonical.id)]);
+        saveFreshiozStore(prev => ({
+          ...prev,
+          vendors: [canonical, ...(prev.vendors || []).filter(v => v.id !== canonical.id)]
+        }));
+
+        setIsModalOpen(false);
+        resetForm();
+        showToast('✓ New Vendor registered on server!', 'success');
+      } catch (err) {
+        console.error('Backend vendor creation failed:', err);
+        showToast(`Failed to register vendor on server: ${err?.message || 'Server error'}`, 'error');
+        return;
+      }
     }
-
-    saveFreshiozStore(prev => {
-      const currentVendors = prev.vendors || [];
-      if (editingVendor) {
-        return {
-          ...prev,
-          vendors: currentVendors.map(v => v.id === editingVendor.id ? { ...v, ...vendorPayload } : v)
-        };
-      } else {
-        return {
-          ...prev,
-          vendors: [vendorPayload, ...currentVendors]
-        };
-      }
-    });
-
-    setIsModalOpen(false);
-    resetForm();
-    showToast(editingVendor ? 'Vendor details updated successfully!' : 'New Vendor registered successfully!', 'success');
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!vendorToDelete) return;
-    saveFreshiozStore(prev => ({
-      ...prev,
-      vendors: (prev.vendors || []).filter(v => v.id !== vendorToDelete.id)
-    }));
-    showToast(`Vendor ${vendorToDelete.name} removed.`, 'info');
-    setVendorToDelete(null);
+    try {
+      await vendorService.update(vendorToDelete.id, { status: 'INACTIVE' });
+      setApiVendors(prev => prev.filter(v => v.id !== vendorToDelete.id));
+      saveFreshiozStore(prev => ({
+        ...prev,
+        vendors: (prev.vendors || []).filter(v => v.id !== vendorToDelete.id)
+      }));
+      showToast(`Vendor ${vendorToDelete.name} deactivated on server.`, 'info');
+      setVendorToDelete(null);
+    } catch (err) {
+      console.error('Backend vendor delete failed:', err);
+      showToast(`Failed to remove vendor on server: ${err?.message || 'Server error'}`, 'error');
+    }
   };
 
   const handleCopyText = (text, label) => {

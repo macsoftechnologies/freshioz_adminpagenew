@@ -26,6 +26,7 @@ import {
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
 import { saveFreshiozStore, generateId, generateUUID } from '../shared/freshiozStore';
+import { procurementService } from '../services/procurementService';
 
 // Robust helper to parse weights in kg from packaging units
 const parseUnitWeightInKg = (unitStr) => {
@@ -324,7 +325,7 @@ export default function ProcurementEntryPage() {
     setShowConfirmModal(true);
   };
 
-  const handleFinalConfirm = () => {
+  const handleFinalConfirm = async () => {
     const destWh = warehouses.find(w => w.id === destinationWarehouseId) || selectedWh;
 
     const newProcLog = {
@@ -360,6 +361,35 @@ export default function ProcurementEntryPage() {
       fulfilledOrderIds: unprocuredOrders.map(o => o.id),
       timestamp: new Date().toISOString()
     };
+
+    try {
+      const serverBill = await procurementService.create({
+        billNumber: billNumber,
+        vendorId: selectedVendorId || undefined,
+        vendorName: vendorName,
+        mandiLocation: mandiLocation,
+        destinationWarehouseId: destWh?.id || warehouses[0]?.id || 'FRZ_WH_01',
+        destinationName: destWh ? destWh.name : (warehouses[0]?.name || 'Regional Hub'),
+        paymentMode: paymentMode,
+        totalAmount: Number(totalAmount),
+        receiptPhoto: receiptPhoto || undefined,
+        items: items.map(i => ({
+          name: i.name,
+          qty: Number(i.qty) || 1,
+          rate: Number(i.rate) || 0,
+          unit: i.unit || 'kg',
+          total: Number(i.total) || 0
+        }))
+      });
+
+      if (serverBill?.id) {
+        newProcLog.id = serverBill.id;
+      }
+    } catch (err) {
+      console.error('Backend procurement creation failed:', err);
+      showToast(`Failed to record procurement bill on server: ${err?.message || 'Server error'}`, 'error');
+      return;
+    }
 
     saveFreshiozStore(prev => {
       // Advance only the unprocured orders for the target destination warehouse to PROCURING
@@ -400,7 +430,7 @@ export default function ProcurementEntryPage() {
     });
 
     setShowConfirmModal(false);
-    showToast(`Mandi Bill #${billNumber} recorded! Viewing updated demand checklist...`, 'success');
+    showToast(`✓ Mandi Bill #${billNumber} recorded on server! Viewing updated demand checklist...`, 'success');
     navigate(`/procurement-demand?warehouseId=${destWh?.id || 'ALL'}&slot=${querySlot}&date=${queryDate}`);
   };
 

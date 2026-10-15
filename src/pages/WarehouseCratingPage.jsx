@@ -22,6 +22,7 @@ import {
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
 import { saveFreshiozStore, generateId, generateUUID } from '../shared/freshiozStore';
+import { orderService } from '../services/orderService';
 import AdminPagination from '../components/common/AdminPagination';
 
 // Helper to parse unit weight
@@ -147,7 +148,15 @@ export default function WarehouseCratingPage() {
   }
 
   // 1. Mark individual order packed with customer address tag & deduct inventory
-  const handleMarkPacked = (orderId) => {
+  const handleMarkPacked = async (orderId) => {
+    try {
+      await orderService.updateStatus(orderId, { status: 'PACKED' });
+    } catch (err) {
+      console.error('Backend order packing status failed:', err);
+      showToast(`Failed to pack order on server: ${err?.message || 'Server error'}`, 'error');
+      return;
+    }
+
     saveFreshiozStore(prev => {
       const targetOrder = (prev.orders || []).find(o => o.id === orderId);
       const whId = targetOrder?.warehouseId || warehouses[0]?.id || '';
@@ -185,7 +194,7 @@ export default function WarehouseCratingPage() {
         })
       };
     });
-    showToast(`Order #${orderId} packed & labeled with customer address!`, 'success');
+    showToast(`✓ Order #${orderId} packed & labeled on server!`, 'success');
   };
 
   // Crating station is strictly for warehouse ops; visibleOrders filters by manager warehouse
@@ -305,9 +314,23 @@ export default function WarehouseCratingPage() {
   };
 
   // Submit Handover to Delivery Partner
-  const handleConfirmHandover = (e) => {
+  const handleConfirmHandover = async (e) => {
     e.preventDefault();
     if (!handoverLot) return;
+
+    try {
+      await Promise.all(handoverLot.orders.map(o => orderService.updateStatus(o.id, {
+        status: 'OUT_FOR_DELIVERY',
+        deliveryPartnerId: driverId || (deliveryRiders.find(r => r.name === driverName || r.phone === driverPhone)?.id) || 'FRZ_EMP_105',
+        deliveryPartnerName: driverName,
+        deliveryPartnerPhone: driverPhone,
+        vehicleNumber: vehicleNumber
+      })));
+    } catch (err) {
+      console.error('Backend dispatch status update failed:', err);
+      showToast(`Failed to dispatch orders on server: ${err?.message || 'Server error'}`, 'error');
+      return;
+    }
 
     saveFreshiozStore(prev => {
       const targetOrderIds = new Set(handoverLot.orders.map(o => o.id));
@@ -338,12 +361,22 @@ export default function WarehouseCratingPage() {
       };
     });
 
-    showToast(`Lot #${handoverLot.lotId} dispatched to driver ${driverName} (${vehicleNumber})!`, 'success');
+    showToast(`✓ Lot #${handoverLot.lotId} dispatched to driver ${driverName} (${vehicleNumber}) on server!`, 'success');
     setHandoverLot(null);
   };
 
   // Mark lot delivered at society drop desk with unified commission crediting
-  const handleMarkLotDelivered = (lot) => {
+  const handleMarkLotDelivered = async (lot) => {
+    try {
+      await Promise.all(lot.orders.map(o => orderService.updateStatus(o.id, {
+        status: 'DELIVERED'
+      })));
+    } catch (err) {
+      console.error('Backend delivery confirmation failed:', err);
+      showToast(`Failed to mark orders delivered on server: ${err?.message || 'Server error'}`, 'error');
+      return;
+    }
+
     saveFreshiozStore(prev => {
       const targetOrderIds = new Set(lot.orders.map(o => o.id));
       let newlyDeliveredCount = 0;
@@ -385,7 +418,7 @@ export default function WarehouseCratingPage() {
       };
     });
 
-    showToast(`✓ All orders in Lot #${lot.lotId} marked Delivered at ${lot.societyName} Drop Desk! Commission credited.`, 'success');
+    showToast(`✓ All orders in Lot #${lot.lotId} marked Delivered on server! Commission credited.`, 'success');
   };
 
   const toPackCount = orders.filter(o => o.status === 'CONFIRMED' || o.status === 'PROCURING').length;
