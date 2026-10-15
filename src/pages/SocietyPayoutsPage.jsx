@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Coins, Check, CreditCard, Clock, CheckCircle2, X } from 'lucide-react';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
 import { saveFreshiozStore } from '../shared/freshiozStore';
+import { societyService } from '../services/societyService';
 import AdminPagination from '../components/common/AdminPagination';
 
 export default function SocietyPayoutsPage() {
@@ -10,8 +11,52 @@ export default function SocietyPayoutsPage() {
   const { showToast } = useToast();
 
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(15);
-  const withdrawals = store.withdrawals || [];
+  const [pageSize, _setPageSize] = useState(15);
+  const [apiWithdrawals, setApiWithdrawals] = useState([]);
+  const [_isLoading, setIsLoading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchPayouts() {
+      setIsLoading(true);
+      try {
+        const res = await societyService.listPayouts();
+        if (isMounted && Array.isArray(res)) {
+          const formatted = res.map(p => ({
+            id: p.id,
+            societyId: p.societyId,
+            societyName: p.society?.name || p.societyName || 'Society Partner',
+            amount: p.amount,
+            status: p.status,
+            bankUtr: p.transactionRef || p.bankUtr || '',
+            bankName: p.society?.bankName || p.bankName || 'Bank Account',
+            accountNo: p.society?.bankAccountNumber || p.accountNo || '••••5678',
+            ifsc: p.society?.bankIfsc || p.ifsc || '',
+            requestedAt: p.requestedAt || p.createdAt,
+            disbursedAt: p.disbursedAt,
+            disbursedBy: p.disbursedBy,
+            rejectionReason: p.rejectionReason,
+          }));
+          setApiWithdrawals(formatted);
+        }
+      } catch (err) {
+        console.warn('Payouts fetch note:', err?.message || err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+    fetchPayouts();
+    return () => { isMounted = false; };
+  }, []);
+
+  const combinedMap = new Map();
+  (store.withdrawals || []).forEach(w => combinedMap.set(w.id, w));
+  apiWithdrawals.forEach(w => combinedMap.set(w.id, { ...(combinedMap.get(w.id) || {}), ...w }));
+  const withdrawals = Array.from(combinedMap.values()).sort((a, b) => 
+    new Date(b.requestedAt || 0) - new Date(a.requestedAt || 0)
+  );
+
   const paginatedWithdrawals = withdrawals.slice(
     (currentPage - 1) * pageSize,
     currentPage * pageSize
@@ -22,73 +67,88 @@ export default function SocietyPayoutsPage() {
   const [rejectingWithdrawal, setRejectingWithdrawal] = useState(null);
   const [rejectionReason, setRejectionReason] = useState('Invalid IFSC code or account holder name mismatch');
 
-  const handleProcessDisbursal = (e) => {
+  const handleProcessDisbursal = async (e) => {
     e.preventDefault();
     if (!selectedWithdrawal || !bankUtr.trim()) {
       showToast('Please enter a valid Bank UTR / Transaction Reference number.', 'error');
       return;
     }
 
-    saveFreshiozStore(prev => ({
-      ...prev,
-      withdrawals: prev.withdrawals.map(w => {
-        if (w.id === selectedWithdrawal.id) {
-          return {
-            ...w,
-            status: 'COMPLETED',
-            bankUtr: bankUtr.trim(),
-            disbursedAt: new Date().toISOString(),
-            disbursedBy: currentUser?.name || 'Super Admin',
-            disbursedById: currentUser?.id || 'emp-101'
-          };
-        }
-        return w;
-      })
-    }));
+    try {
+      setIsProcessing(true);
+      const approvedPayout = await societyService.approvePayout(selectedWithdrawal.id, bankUtr.trim());
 
-    showToast(`Payout #${selectedWithdrawal.id} for ₹${selectedWithdrawal.amount.toLocaleString()} marked as Disbursed with Bank UTR ${bankUtr}!`, 'success');
-    setSelectedWithdrawal(null);
-    setBankUtr('');
+      const canonicalPayout = {
+        ...selectedWithdrawal,
+        ...(approvedPayout || {}),
+        status: 'COMPLETED',
+        bankUtr: bankUtr.trim(),
+        disbursedAt: new Date().toISOString(),
+        disbursedBy: currentUser?.name || 'Super Admin',
+      };
+
+      setApiWithdrawals(prev => prev.map(w => w.id === selectedWithdrawal.id ? canonicalPayout : w));
+
+      saveFreshiozStore(prev => ({
+        ...prev,
+        withdrawals: (prev.withdrawals || []).map(w => w.id === selectedWithdrawal.id ? canonicalPayout : w)
+      }));
+
+      showToast(`Payout #${selectedWithdrawal.id} for ₹${selectedWithdrawal.amount.toLocaleString()} marked as Disbursed with Bank UTR ${bankUtr}!`, 'success');
+      setSelectedWithdrawal(null);
+      setBankUtr('');
+    } catch (err) {
+      showToast(err?.message || 'Failed to disburse payout on server.', 'error');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  const handleRejectWithdrawal = (e) => {
+  const handleRejectWithdrawal = async (e) => {
     e.preventDefault();
     if (!rejectingWithdrawal || !rejectionReason.trim()) {
       showToast('Please provide a reason for rejecting the withdrawal.', 'error');
       return;
     }
 
-    const refundAmt = rejectingWithdrawal.amount;
-    saveFreshiozStore(prev => ({
-      ...prev,
-      withdrawals: prev.withdrawals.map(w => {
-        if (w.id === rejectingWithdrawal.id) {
-          return {
-            ...w,
-            status: 'REJECTED',
-            rejectionReason: rejectionReason.trim(),
-            rejectedAt: new Date().toISOString(),
-            rejectedBy: currentUser?.name || 'Super Admin',
-            rejectedById: currentUser?.id || 'emp-101'
-          };
-        }
-        return w;
-      }),
-      // Transactionally refund the withheld balance back to society available balance
-      societies: prev.societies.map(s => {
-        if (s.id === rejectingWithdrawal.societyId || s.name === rejectingWithdrawal.societyName) {
-          return {
-            ...s,
-            balanceEarned: Number(((s.balanceEarned || 0) + refundAmt).toFixed(2))
-          };
-        }
-        return s;
-      })
-    }));
+    try {
+      setIsProcessing(true);
+      const rejectedPayout = await societyService.rejectPayout(rejectingWithdrawal.id, rejectionReason.trim());
 
-    showToast(`Withdrawal #${rejectingWithdrawal.id} rejected. ₹${refundAmt.toLocaleString()} refunded to ${rejectingWithdrawal.societyName} balance.`, 'warning');
-    setRejectingWithdrawal(null);
-    setRejectionReason('');
+      const refundAmt = rejectingWithdrawal.amount;
+      const canonicalPayout = {
+        ...rejectingWithdrawal,
+        ...(rejectedPayout || {}),
+        status: 'REJECTED',
+        rejectionReason: rejectionReason.trim(),
+        rejectedAt: new Date().toISOString(),
+        rejectedBy: currentUser?.name || 'Super Admin',
+      };
+
+      setApiWithdrawals(prev => prev.map(w => w.id === rejectingWithdrawal.id ? canonicalPayout : w));
+
+      saveFreshiozStore(prev => ({
+        ...prev,
+        withdrawals: (prev.withdrawals || []).map(w => w.id === rejectingWithdrawal.id ? canonicalPayout : w),
+        societies: (prev.societies || []).map(s => {
+          if (s.id === rejectingWithdrawal.societyId || s.name === rejectingWithdrawal.societyName) {
+            return {
+              ...s,
+              balanceEarned: Number(((s.balanceEarned || 0) + refundAmt).toFixed(2))
+            };
+          }
+          return s;
+        })
+      }));
+
+      showToast(`Withdrawal #${rejectingWithdrawal.id} rejected. ₹${refundAmt.toLocaleString()} refunded to ${rejectingWithdrawal.societyName} balance.`, 'warning');
+      setRejectingWithdrawal(null);
+      setRejectionReason('');
+    } catch (err) {
+      showToast(err?.message || 'Failed to reject payout on server.', 'error');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -303,8 +363,12 @@ export default function SocietyPayoutsPage() {
                 <button type="button" onClick={() => setSelectedWithdrawal(null)} style={{ flex: 1, padding: '10px', background: '#F1F5F9', border: 'none', borderRadius: '6px', fontWeight: 700, cursor: 'pointer' }}>
                   Cancel
                 </button>
-                <button type="submit" style={{ flex: 2, padding: '10px', background: '#059669', color: '#FFF', border: 'none', borderRadius: '6px', fontWeight: 700, cursor: 'pointer' }}>
-                  Confirm Transfer & Disburse
+                <button 
+                  type="submit" 
+                  disabled={isProcessing}
+                  style={{ flex: 2, padding: '10px', background: isProcessing ? '#94A3B8' : '#059669', color: '#FFF', border: 'none', borderRadius: '6px', fontWeight: 700, cursor: isProcessing ? 'not-allowed' : 'pointer' }}
+                >
+                  {isProcessing ? 'Processing on Server...' : 'Confirm Transfer & Disburse'}
                 </button>
               </div>
             </form>
@@ -349,8 +413,12 @@ export default function SocietyPayoutsPage() {
                 <button type="button" onClick={() => setRejectingWithdrawal(null)} style={{ flex: 1, padding: '10px', background: '#F1F5F9', border: 'none', borderRadius: '6px', fontWeight: 700, cursor: 'pointer' }}>
                   Cancel
                 </button>
-                <button type="submit" style={{ flex: 2, padding: '10px', background: '#DC2626', color: '#FFF', border: 'none', borderRadius: '6px', fontWeight: 700, cursor: 'pointer' }}>
-                  Confirm Rejection & Refund ₹{rejectingWithdrawal.amount.toLocaleString()}
+                <button 
+                  type="submit" 
+                  disabled={isProcessing}
+                  style={{ flex: 2, padding: '10px', background: isProcessing ? '#94A3B8' : '#DC2626', color: '#FFF', border: 'none', borderRadius: '6px', fontWeight: 700, cursor: isProcessing ? 'not-allowed' : 'pointer' }}
+                >
+                  {isProcessing ? 'Processing on Server...' : `Confirm Rejection & Refund ₹${rejectingWithdrawal.amount.toLocaleString()}`}
                 </button>
               </div>
             </form>

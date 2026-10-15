@@ -1,7 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  Database, 
-  FolderPlus, 
   Plus, 
   Scale, 
   Apple, 
@@ -14,7 +12,6 @@ import {
   Package,
   Layers,
   ArrowRight,
-  HelpCircle,
   Upload,
   Sparkles,
   RotateCcw,
@@ -25,6 +22,8 @@ import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
 import { saveFreshiozStore, generateId, generateUUID } from '../shared/freshiozStore';
 import { productService } from '../services/productService';
+import { categoryService } from '../services/categoryService';
+import { unitService } from '../services/unitService';
 import { uploadService } from '../services/uploadService';
 import { exportToExcel } from '../utils/excelExporter';
 import AdminPagination from '../components/common/AdminPagination';
@@ -110,7 +109,31 @@ export default function MasterDataPage() {
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isUnitModalOpen, setIsUnitModalOpen] = useState(false);
-  const [isConfirmProductModalOpen, setIsConfirmProductModalOpen] = useState(false);
+  const [_isConfirmProductModalOpen, _setIsConfirmProductModalOpen] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadTaxonomies() {
+      try {
+        const [catsRes, unitsRes] = await Promise.allSettled([
+          categoryService.getAll(),
+          unitService.getAll(),
+        ]);
+        if (isMounted) {
+          if (catsRes.status === 'fulfilled' && Array.isArray(catsRes.value) && catsRes.value.length > 0) {
+            saveFreshiozStore(prev => ({ ...prev, categories: catsRes.value }));
+          }
+          if (unitsRes.status === 'fulfilled' && Array.isArray(unitsRes.value) && unitsRes.value.length > 0) {
+            saveFreshiozStore(prev => ({ ...prev, units: unitsRes.value }));
+          }
+        }
+      } catch (err) {
+        console.warn('Initial categories/units load note:', err);
+      }
+    }
+    loadTaxonomies();
+    return () => { isMounted = false; };
+  }, []);
 
   // Simplified Form states
   const [categoryForm, setCategoryForm] = useState({ id: '', name: '', slug: '', icon: '🥦', description: '', status: 'ACTIVE' });
@@ -165,34 +188,62 @@ export default function MasterDataPage() {
     exportToExcel('Freshioz_Packaging_Units_Master', headers, rows);
   };
 
-  // Add / Edit Category
-  const handleSaveCategory = (e) => {
+  // Add / Edit Category (Wired to backend REST API with canonical store sync)
+  const handleSaveCategory = async (e) => {
     e.preventDefault();
     if (!categoryForm.name.trim()) return;
 
     const catId = editingId || categoryForm.name.toUpperCase().replace(/\s+/g, '_');
-    const newCat = {
-      ...categoryForm,
-      id: catId,
-      status: categoryForm.status || 'ACTIVE',
-      slug: categoryForm.slug || categoryForm.name.toLowerCase().replace(/\s+/g, '-'),
-      itemCount: products.filter(p => p.category === catId).length
-    };
+    const slug = categoryForm.slug || categoryForm.name.toLowerCase().replace(/\s+/g, '-');
 
-    saveFreshiozStore(prev => ({
-      ...prev,
-      categories: editingId 
-        ? prev.categories.map(c => c.id === editingId ? newCat : c)
-        : [...(prev.categories || []), newCat]
-    }));
+    try {
+      let savedServerCat = null;
+      if (editingId) {
+        savedServerCat = await categoryService.update(editingId, {
+          name: categoryForm.name.trim(),
+          slug,
+          icon: categoryForm.icon,
+          description: categoryForm.description,
+          status: categoryForm.status || 'ACTIVE',
+        });
+      } else {
+        savedServerCat = await categoryService.create({
+          name: categoryForm.name.trim(),
+          slug,
+          icon: categoryForm.icon,
+          description: categoryForm.description,
+        });
+      }
 
-    setIsCategoryModalOpen(false);
-    setEditingId(null);
-    showToast(`✓ Category "${categoryForm.name}" saved!`);
+      // Canonical record from API
+      const canonicalCat = {
+        ...categoryForm,
+        ...(savedServerCat || {}),
+        id: savedServerCat?.id || catId,
+        slug: savedServerCat?.slug || slug,
+        status: savedServerCat?.status || categoryForm.status || 'ACTIVE',
+        itemCount: products.filter(p => p.category === (savedServerCat?.id || catId)).length
+      };
+
+      saveFreshiozStore(prev => ({
+        ...prev,
+        categories: editingId 
+          ? prev.categories.map(c => c.id === editingId ? canonicalCat : c)
+          : [...(prev.categories || []).filter(c => c.id !== canonicalCat.id), canonicalCat]
+      }));
+
+      setIsCategoryModalOpen(false);
+      setEditingId(null);
+      showToast(`✓ Category "${canonicalCat.name}" saved!`, 'success');
+    } catch (err) {
+      console.error('Backend category persistence failed:', err);
+      showToast(`Failed to save category on server: ${err?.message || 'Server error'}`, 'error');
+      return;
+    }
   };
 
   // Soft Delete / Toggle Category Status (Active <-> Inactive)
-  const handleToggleCategoryStatus = (cat) => {
+  const handleToggleCategoryStatus = async (cat) => {
     const isCurrentlyInactive = cat.status === 'INACTIVE';
     const newStatus = isCurrentlyInactive ? 'ACTIVE' : 'INACTIVE';
 
@@ -205,53 +256,93 @@ export default function MasterDataPage() {
       if (!confirm(msg)) return;
     }
 
-    saveFreshiozStore(prev => ({
-      ...prev,
-      categories: (prev.categories || []).map(c => c.id === cat.id ? { ...c, status: newStatus } : c)
-    }));
+    try {
+      const updated = await categoryService.update(cat.id, { status: newStatus });
 
-    showToast(
-      newStatus === 'ACTIVE'
-        ? `✓ Category "${cat.name}" restored to Active!`
-        : `✓ Category "${cat.name}" soft deleted (deactivated).`,
-      newStatus === 'ACTIVE' ? 'success' : 'info'
-    );
+      saveFreshiozStore(prev => ({
+        ...prev,
+        categories: (prev.categories || []).map(c => c.id === cat.id ? { ...c, ...(updated || {}), status: newStatus } : c)
+      }));
+
+      showToast(
+        newStatus === 'ACTIVE'
+          ? `✓ Category "${cat.name}" restored to Active!`
+          : `✓ Category "${cat.name}" soft deleted (deactivated).`,
+        newStatus === 'ACTIVE' ? 'success' : 'info'
+      );
+    } catch (err) {
+      console.error('Backend category status update failed:', err);
+      showToast(`Failed to update category status on server: ${err?.message || 'Server error'}`, 'error');
+      return;
+    }
   };
 
-  // Add / Edit Unit (Simplified to: kg, tones, crate, etc.)
-  const handleSaveUnit = (e) => {
+  // Add / Edit Unit (Wired to backend REST API with canonical store sync)
+  const handleSaveUnit = async (e) => {
     e.preventDefault();
     if (!unitForm.name.trim()) return;
 
     const unitCode = unitForm.name.trim().toLowerCase();
-    const unitId = editingId || `u-${unitCode}`;
-    const newUnit = { 
-      ...unitForm, 
-      id: unitId,
-      name: unitCode,
-      label: unitForm.label.trim() || unitCode,
-      isBulk: Boolean(unitForm.isBulk)
-    };
+    const unitLabel = unitForm.label.trim() || unitCode;
 
-    saveFreshiozStore(prev => ({
-      ...prev,
-      units: editingId
-        ? prev.units.map(u => u.id === editingId ? newUnit : u)
-        : [...(prev.units || []), newUnit]
-    }));
+    try {
+      let savedServerUnit = null;
+      if (editingId) {
+        savedServerUnit = await unitService.update(editingId, {
+          name: unitCode,
+          label: unitLabel,
+          isBulk: Boolean(unitForm.isBulk),
+          description: unitForm.description,
+        });
+      } else {
+        savedServerUnit = await unitService.create({
+          name: unitCode,
+          label: unitLabel,
+          isBulk: Boolean(unitForm.isBulk),
+          description: unitForm.description,
+        });
+      }
 
-    setIsUnitModalOpen(false);
-    setEditingId(null);
-    showToast(`✓ Packaging Unit "${unitCode}" saved!`);
-  };
+      const canonicalUnit = {
+        ...unitForm,
+        ...(savedServerUnit || {}),
+        id: savedServerUnit?.id || editingId || `u-${unitCode}`,
+        name: unitCode,
+        label: unitLabel,
+        isBulk: Boolean(unitForm.isBulk),
+      };
 
-  const handleDeleteUnit = (id) => {
-    if (confirm('Delete this packaging unit?')) {
       saveFreshiozStore(prev => ({
         ...prev,
-        units: prev.units.filter(u => u.id !== id)
+        units: editingId
+          ? prev.units.map(u => u.id === editingId ? canonicalUnit : u)
+          : [...(prev.units || []).filter(u => u.id !== canonicalUnit.id), canonicalUnit]
       }));
-      showToast('Unit deleted.');
+
+      setIsUnitModalOpen(false);
+      setEditingId(null);
+      showToast(`✓ Packaging Unit "${unitCode}" saved!`, 'success');
+    } catch (err) {
+      console.error('Backend unit persistence failed:', err);
+      showToast(`Failed to save packaging unit on server: ${err?.message || 'Server error'}`, 'error');
+      return;
+    }
+  };
+
+  const handleDeleteUnit = async (id) => {
+    if (confirm('Delete this packaging unit?')) {
+      try {
+        await unitService.delete(id);
+        saveFreshiozStore(prev => ({
+          ...prev,
+          units: prev.units.filter(u => u.id !== id)
+        }));
+        showToast('Unit deleted.', 'success');
+      } catch (err) {
+        console.error('Backend unit delete failed:', err);
+        showToast(`Failed to delete unit on server: ${err?.message || 'Server error'}`, 'error');
+        return;
+      }
     }
   };
 

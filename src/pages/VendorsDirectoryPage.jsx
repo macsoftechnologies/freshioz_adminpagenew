@@ -20,6 +20,7 @@ import {
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
 import { saveFreshiozStore, generateId, generateUUID } from '../shared/freshiozStore';
+import { vendorService } from '../services/vendorService';
 import AdminPagination from '../components/common/AdminPagination';
 import AdminWarehouseLocationMapPicker from '../components/common/AdminWarehouseLocationMapPicker';
 
@@ -96,7 +97,7 @@ export default function VendorsDirectoryPage() {
     setIsModalOpen(true);
   };
 
-  const handleSaveVendor = (e) => {
+  const handleSaveVendor = async (e) => {
     e.preventDefault();
     if (!formData.name.trim() || !formData.phone.trim()) {
       showToast('Please enter vendor name and phone number', 'error');
@@ -131,6 +132,16 @@ export default function VendorsDirectoryPage() {
         createdById: currentUser?.id || 'emp-101'
       })
     };
+
+    try {
+      if (editingVendor) {
+        await vendorService.update(editingVendor.id, vendorPayload);
+      } else {
+        await vendorService.create(vendorPayload);
+      }
+    } catch (err) {
+      console.warn('Backend vendor persistence note:', err?.message || err);
+    }
 
     saveFreshiozStore(prev => {
       const currentVendors = prev.vendors || [];

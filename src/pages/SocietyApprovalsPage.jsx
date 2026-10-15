@@ -15,6 +15,7 @@ import {
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
 import { saveFreshiozStore } from '../shared/freshiozStore';
+import { societyService } from '../services/societyService';
 import AdminPagination from '../components/common/AdminPagination';
 
 export default function SocietyApprovalsPage() {
@@ -31,14 +32,40 @@ export default function SocietyApprovalsPage() {
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
 
   // Commission Form on Approval
+  // Commission Form on Approval
   const [commissionType, setCommissionType] = useState('PERCENTAGE'); // 'PERCENTAGE' | 'FLAT'
   const [commissionValue, setCommissionValue] = useState('3.5');
 
   // Rejection Form
   const [rejectionReason, setRejectionReason] = useState('');
   const [successToast, setSuccessToast] = useState('');
+  const [apiSocieties, setApiSocieties] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const societiesList = (store.societies || []).filter(s => {
+  // Load live canonical societies from server
+  useEffect(() => {
+    let isMounted = true;
+    async function loadSocieties() {
+      try {
+        setIsLoading(true);
+        const data = await societyService.getAll();
+        if (isMounted && Array.isArray(data)) {
+          setApiSocieties(data);
+          saveFreshiozStore(prev => ({ ...prev, societies: data }));
+        }
+      } catch (err) {
+        console.warn('Backend societies load note:', err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+    loadSocieties();
+    return () => { isMounted = false; };
+  }, []);
+
+  const effectiveSocieties = apiSocieties.length > 0 ? apiSocieties : (store.societies || []);
+
+  const societiesList = effectiveSocieties.filter(s => {
     if (activeTab === 'PENDING') return s.status === 'PENDING';
     if (activeTab === 'APPROVED') return s.status === 'APPROVED';
     if (activeTab === 'REJECTED') return s.status === 'REJECTED';
@@ -57,33 +84,44 @@ export default function SocietyApprovalsPage() {
     setIsApproveModalOpen(true);
   };
 
-  const handleConfirmApproval = (e) => {
+  const handleConfirmApproval = async (e) => {
     e.preventDefault();
     if (!selectedSociety) return;
 
-    saveFreshiozStore(prev => ({
-      ...prev,
-      societies: prev.societies.map(s => {
-        if (s.id === selectedSociety.id) {
-          return {
-            ...s,
-            status: 'APPROVED',
-            commissionType,
-            commissionValue: Number(commissionValue),
-            balanceEarned: s.balanceEarned || 0,
-            approvedAt: new Date().toISOString(),
-            approvedBy: currentUser?.name || 'Super Admin',
-            approvedById: currentUser?.id || 'emp-101'
-          };
-        }
-        return s;
-      })
-    }));
+    try {
+      const updatedSociety = await societyService.update(selectedSociety.id, {
+        status: 'APPROVED',
+        commissionType,
+        commissionValue: Number(commissionValue),
+      });
 
-    setIsApproveModalOpen(false);
-    showToast(`"${selectedSociety.name}" approved and live in User Storefront!`, 'success');
-    setSuccessToast(`✓ "${selectedSociety.name}" has been approved! It is now live in the User Storefront registration dropdown.`);
-    setTimeout(() => setSuccessToast(''), 6000);
+      // Strictly on confirmed server success, update component state with canonical server record
+      const canonicalRecord = {
+        ...selectedSociety,
+        ...(updatedSociety || {}),
+        status: 'APPROVED',
+        commissionType,
+        commissionValue: Number(commissionValue),
+        approvedAt: new Date().toISOString(),
+        approvedBy: currentUser?.name || 'Super Admin',
+        approvedById: currentUser?.id || 'emp-101'
+      };
+
+      setApiSocieties(prev => prev.map(s => s.id === selectedSociety.id ? canonicalRecord : s));
+
+      saveFreshiozStore(prev => ({
+        ...prev,
+        societies: (prev.societies || []).map(s => s.id === selectedSociety.id ? canonicalRecord : s)
+      }));
+
+      setIsApproveModalOpen(false);
+      showToast(`✓ "${selectedSociety.name}" approved and live in User Storefront!`, 'success');
+      setSuccessToast(`✓ "${selectedSociety.name}" has been approved on the server! It is now live in the User Storefront registration dropdown.`);
+      setTimeout(() => setSuccessToast(''), 6000);
+    } catch (err) {
+      console.error('Society approval failed:', err);
+      showToast(`Failed to approve society on server: ${err?.message || 'Network / Server Error'}`, 'error');
+    }
   };
 
   const handleOpenRejectModal = (soc) => {
@@ -92,35 +130,46 @@ export default function SocietyApprovalsPage() {
     setIsRejectModalOpen(true);
   };
 
-  const handleConfirmRejection = (e) => {
+  const handleConfirmRejection = async (e) => {
     e.preventDefault();
     if (!selectedSociety) return;
     if (!rejectionReason.trim()) {
-      alert('Please provide a mandatory reason for rejecting this society onboarding.');
+      showToast('Please provide a mandatory reason for rejecting this society onboarding.', 'error');
       return;
     }
 
-    saveFreshiozStore(prev => ({
-      ...prev,
-      societies: prev.societies.map(s => {
-        if (s.id === selectedSociety.id) {
-          return {
-            ...s,
-            status: 'REJECTED',
-            rejectionReason: rejectionReason.trim(),
-            rejectedAt: new Date().toISOString(),
-            rejectedBy: currentUser?.name || 'Super Admin',
-            rejectedById: currentUser?.id || 'emp-101'
-          };
-        }
-        return s;
-      })
-    }));
+    try {
+      const updatedSociety = await societyService.update(selectedSociety.id, {
+        status: 'REJECTED',
+        rejectionReason: rejectionReason.trim(),
+      });
 
-    setIsRejectModalOpen(false);
-    showToast(`"${selectedSociety.name}" rejected. Feedback dispatched.`, 'warning');
-    setSuccessToast(`"${selectedSociety.name}" marked as Rejected. Rejection reason dispatched to field sales officer.`);
-    setTimeout(() => setSuccessToast(''), 6000);
+      // Strictly on confirmed server success, update component state with canonical server record
+      const canonicalRecord = {
+        ...selectedSociety,
+        ...(updatedSociety || {}),
+        status: 'REJECTED',
+        rejectionReason: rejectionReason.trim(),
+        rejectedAt: new Date().toISOString(),
+        rejectedBy: currentUser?.name || 'Super Admin',
+        rejectedById: currentUser?.id || 'emp-101'
+      };
+
+      setApiSocieties(prev => prev.map(s => s.id === selectedSociety.id ? canonicalRecord : s));
+
+      saveFreshiozStore(prev => ({
+        ...prev,
+        societies: (prev.societies || []).map(s => s.id === selectedSociety.id ? canonicalRecord : s)
+      }));
+
+      setIsRejectModalOpen(false);
+      showToast(`✓ "${selectedSociety.name}" rejected on server.`, 'warning');
+      setSuccessToast(`"${selectedSociety.name}" marked as Rejected on server. Feedback recorded.`);
+      setTimeout(() => setSuccessToast(''), 6000);
+    } catch (err) {
+      console.error('Society rejection failed:', err);
+      showToast(`Failed to reject society on server: ${err?.message || 'Network / Server Error'}`, 'error');
+    }
   };
 
   return (

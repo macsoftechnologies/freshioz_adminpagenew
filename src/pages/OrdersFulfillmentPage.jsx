@@ -277,6 +277,24 @@ export default function OrdersFulfillmentPage() {
       return;
     }
 
+    try {
+      const token = localStorage.getItem('freshioz_auth_token');
+      fetch(`${API_BASE_URL}/orders/${orderId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          paymentStatus: 'PAID',
+          codCollectedAmount: targetOrder.totalAmount || 0,
+          codCollectedBy: currentUser?.name || 'Delivery Partner'
+        })
+      }).catch(e => console.warn('COD status update background note:', e));
+    } catch (err) {
+      console.warn('COD recording note:', err);
+    }
+
     saveFreshiozStore(prev => ({
       ...prev,
       orders: (prev.orders || []).map(o => o.id === orderId ? {

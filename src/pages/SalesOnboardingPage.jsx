@@ -20,6 +20,7 @@ import {
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
 import { saveFreshiozStore, generateId, generateUUID } from '../shared/freshiozStore';
+import { societyService } from '../services/societyService';
 
 export default function SalesOnboardingPage() {
   const { store, currentUser } = useAdminRole();
@@ -169,7 +170,7 @@ export default function SalesOnboardingPage() {
     setIsConfirmModalOpen(true);
   };
 
-  const handleConfirmCommit = () => {
+  const handleConfirmCommit = async () => {
     const newSocietyRecord = {
       id: generateId('FRZ_SOC'),
       uuid: generateUUID(),
@@ -203,6 +204,12 @@ export default function SalesOnboardingPage() {
         branch: formData.branch
       }
     };
+
+    try {
+      await societyService.create(newSocietyRecord);
+    } catch (err) {
+      console.warn('Backend society onboarding persistence note:', err?.message || err);
+    }
 
     saveFreshiozStore(prev => ({
       ...prev,
