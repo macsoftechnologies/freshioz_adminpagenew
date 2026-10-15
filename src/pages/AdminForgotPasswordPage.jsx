@@ -44,35 +44,47 @@ export default function AdminForgotPasswordPage() {
   return (
     <div style={{
       minHeight: '100vh',
+      width: '100%',
+      maxWidth: '100vw',
+      overflow: 'hidden',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       background: 'linear-gradient(135deg, #0D231A 0%, #173328 60%, #10261E 100%)',
-      padding: '20px',
+      padding: 'clamp(16px, 4vw, 24px)',
       position: 'relative',
-      fontFamily: 'system-ui, -apple-system, sans-serif'
+      fontFamily: 'system-ui, -apple-system, sans-serif',
+      boxSizing: 'border-box'
     }}>
-      {/* Background Decorative Glow */}
+      {/* Background Decorative Glow (Contained) */}
       <div style={{
         position: 'absolute',
-        top: '25%',
-        right: '25%',
-        width: '320px',
-        height: '320px',
-        background: 'rgba(242, 142, 20, 0.12)',
-        borderRadius: '50%',
-        filter: 'blur(90px)',
-        pointerEvents: 'none'
-      }} />
+        inset: 0,
+        overflow: 'hidden',
+        pointerEvents: 'none',
+        zIndex: 1
+      }}>
+        <div style={{
+          position: 'absolute',
+          top: '25%',
+          right: '25%',
+          width: '300px',
+          height: '300px',
+          background: 'rgba(242, 142, 20, 0.12)',
+          borderRadius: '50%',
+          filter: 'blur(80px)',
+        }} />
+      </div>
 
       {/* Main Card */}
       <div style={{
         maxWidth: '440px',
         width: '100%',
+        boxSizing: 'border-box',
         background: '#FFFFFF',
         borderRadius: '20px',
         boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
-        padding: '36px 32px',
+        padding: 'clamp(28px, 6vw, 36px) clamp(18px, 5vw, 32px)',
         position: 'relative',
         zIndex: 10
       }}>

@@ -58,47 +58,57 @@ export default function AdminLoginPage() {
   return (
     <div style={{
       minHeight: '100vh',
+      width: '100%',
+      maxWidth: '100vw',
+      overflow: 'hidden',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       background: 'linear-gradient(135deg, #0D231A 0%, #173328 60%, #10261E 100%)',
-      padding: '20px',
+      padding: 'clamp(16px, 4vw, 24px)',
       position: 'relative',
-      fontFamily: 'system-ui, -apple-system, sans-serif'
+      fontFamily: 'system-ui, -apple-system, sans-serif',
+      boxSizing: 'border-box'
     }}>
-      {/* Background Decorative Glow */}
+      {/* Background Decorative Glow (Contained) */}
       <div style={{
         position: 'absolute',
-        top: '20%',
-        left: '20%',
-        width: '350px',
-        height: '350px',
-        background: 'rgba(5, 150, 105, 0.15)',
-        borderRadius: '50%',
-        filter: 'blur(90px)',
-        pointerEvents: 'none'
-      }} />
-
-      <div style={{
-        position: 'absolute',
-        bottom: '15%',
-        right: '20%',
-        width: '300px',
-        height: '300px',
-        background: 'rgba(242, 142, 20, 0.1)',
-        borderRadius: '50%',
-        filter: 'blur(80px)',
-        pointerEvents: 'none'
-      }} />
+        inset: 0,
+        overflow: 'hidden',
+        pointerEvents: 'none',
+        zIndex: 1
+      }}>
+        <div style={{
+          position: 'absolute',
+          top: '15%',
+          left: '10%',
+          width: '280px',
+          height: '280px',
+          background: 'rgba(5, 150, 105, 0.15)',
+          borderRadius: '50%',
+          filter: 'blur(80px)',
+        }} />
+        <div style={{
+          position: 'absolute',
+          bottom: '10%',
+          right: '10%',
+          width: '260px',
+          height: '260px',
+          background: 'rgba(242, 142, 20, 0.1)',
+          borderRadius: '50%',
+          filter: 'blur(70px)',
+        }} />
+      </div>
 
       {/* Main Login Card */}
       <div style={{
         maxWidth: '440px',
         width: '100%',
+        boxSizing: 'border-box',
         background: '#FFFFFF',
         borderRadius: '20px',
         boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
-        padding: '36px 32px',
+        padding: 'clamp(28px, 6vw, 36px) clamp(18px, 5vw, 32px)',
         position: 'relative',
         zIndex: 10
       }}>
