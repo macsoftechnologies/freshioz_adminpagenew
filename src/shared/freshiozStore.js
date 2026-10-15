@@ -114,30 +114,53 @@ import { API_BASE_URL } from '../api/client';
 export function prepareServerPayload(storeData) {
   if (!storeData || typeof storeData !== 'object') return {};
 
-  const clean = {};
-  const serverKeys = [
-    'warehouses',
-    'societies',
-    'orders',
-    'vendors',
-    'procurementLogs',
-    'warehouseInventory',
-    'societyRequests',
-    'categories',
-    'units',
-    'employees',
-    'withdrawals',
-    'deletedProductIds'
-  ];
+  let role = localStorage.getItem('freshioz_admin_role') || 'SUPER_ADMIN';
+  try {
+    const userStr = localStorage.getItem('freshioz_admin_user');
+    if (userStr) {
+      const u = JSON.parse(userStr);
+      if (u.role) role = u.role;
+    }
+  } catch (e) {}
 
-  for (const key of serverKeys) {
+  const clean = {};
+
+  const ROLE_PERMITTED_KEYS = {
+    SUPER_ADMIN: [
+      'warehouses', 'societies', 'orders', 'vendors', 'procurementLogs',
+      'warehouseInventory', 'societyRequests', 'categories', 'units',
+      'employees', 'withdrawals', 'deletedProductIds', 'products'
+    ],
+    SALES_OFFICER: [
+      'societies', 'societyRequests'
+    ],
+    PRICING_MANAGER: [
+      'products', 'deletedProductIds'
+    ],
+    PROCUREMENT_OFFICER: [
+      'vendors', 'procurementLogs'
+    ],
+    WAREHOUSE_MANAGER: [
+      'warehouses', 'products', 'procurementLogs', 'orders', 'warehouseInventory', 'deletedProductIds'
+    ],
+    WAREHOUSE_STAFF: [
+      'orders'
+    ],
+    DELIVERY_EXECUTIVE: [
+      'orders'
+    ]
+  };
+
+  const allowedKeys = ROLE_PERMITTED_KEYS[role] || ROLE_PERMITTED_KEYS.SUPER_ADMIN;
+
+  for (const key of allowedKeys) {
     if (storeData[key] !== undefined) {
       clean[key] = storeData[key];
     }
   }
 
-  if (Array.isArray(storeData.products)) {
-    clean.products = storeData.products.map(p => {
+  if (clean.products && Array.isArray(clean.products)) {
+    clean.products = clean.products.map(p => {
       let image = p.image || '';
       if (typeof image === 'string' && image.startsWith('data:') && image.length > 40000) {
         image = 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600';
@@ -161,6 +184,11 @@ export async function pushStoreToServer(storeData) {
 
     const cleanPayload = prepareServerPayload(storeData);
 
+    // If this role does not have any keys to push, skip network request
+    if (Object.keys(cleanPayload).length === 0) {
+      return { success: true };
+    }
+
     const res = await fetch(`${API_BASE_URL}/freshioz-store`, {
       method: 'POST',
       headers,
@@ -176,11 +204,14 @@ export async function pushStoreToServer(storeData) {
     }
 
     const resData = await res.json().catch(() => ({}));
-    if (resData.skipped && resData.skipped.length > 0) {
-      const errMsg = `Partial save rejected: Your role does not permit modifying collection(s): ${resData.skipped.join(', ')}`;
+    if (resData.persisted && resData.persisted.length > 0) {
+      return { success: true, data: resData };
+    }
+    if (resData.skipped && resData.skipped.length > 0 && (!resData.persisted || resData.persisted.length === 0)) {
+      const errMsg = `Your role does not permit modifying collection(s): ${resData.skipped.join(', ')}`;
       console.warn(`[Store Sync] ${errMsg}`);
       window.dispatchEvent(new CustomEvent('freshioz_sync_error', { detail: errMsg }));
-      return { success: false, error: errMsg, skipped: resData.skipped, persisted: resData.persisted };
+      return { success: false, error: errMsg, skipped: resData.skipped };
     }
     return { success: true, data: resData };
   } catch (e) {
