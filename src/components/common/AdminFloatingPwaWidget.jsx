@@ -281,95 +281,57 @@ export default function AdminFloatingPwaWidget() {
         )}
       </div>
 
-      {/* iOS Safari Instructions Sheet */}
+      {/* iOS Minimal Micro-Callout (Clean & Frictionless) */}
       {showIosGuide && (
         <div
+          onClick={() => setShowIosGuide(false)}
           style={{
             position: 'fixed',
-            inset: 0,
+            bottom: '24px',
+            left: '50%',
+            transform: 'translateX(-50%)',
             zIndex: 100000,
-            background: 'rgba(0, 0, 0, 0.65)',
-            backdropFilter: 'blur(4px)',
+            background: 'rgba(15, 23, 42, 0.96)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            color: '#FFFFFF',
+            borderRadius: '16px',
+            padding: '12px 18px',
+            boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
+            border: '1.5px solid rgba(52, 211, 153, 0.4)',
             display: 'flex',
-            alignItems: 'flex-end',
-            justifyContent: 'center',
+            alignItems: 'center',
+            gap: '12px',
+            maxWidth: '360px',
+            width: 'calc(100vw - 32px)',
+            animation: 'adminFloatPwaIn 0.25s ease',
           }}
-          onClick={() => setShowIosGuide(false)}
         >
-          <div
-            style={{
-              background: '#FFFFFF',
-              width: '100%',
-              maxWidth: '480px',
-              borderTopLeftRadius: '24px',
-              borderTopRightRadius: '24px',
-              padding: '24px 20px',
-              color: '#0F172A',
-              animation: 'adminFloatPwaIn 0.3s ease',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <img src="/pwa-192.png" alt="Freshioz" style={{ width: '36px', height: '36px', borderRadius: '8px' }} />
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800 }}>Install Admin App on iOS</h3>
-                  <p style={{ margin: 0, fontSize: '12px', color: '#64748B' }}>Quick 2-step setup via Safari</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowIosGuide(false)}
-                style={{
-                  background: '#F1F5F9',
-                  border: 'none',
-                  borderRadius: '50%',
-                  width: '32px',
-                  height: '32px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', background: '#F8FAFC', padding: '16px', borderRadius: '16px', border: '1px solid #E2E8F0' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#E0F2FE', color: '#0369A1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}>1</div>
-                <div style={{ fontSize: '13px', color: '#334155' }}>
-                  Tap the <Share2 size={15} style={{ display: 'inline', verticalAlign: 'middle', margin: '0 2px', color: '#0284C7' }} /> <strong>Share</strong> button on Safari's bottom toolbar.
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#DCFCE7', color: '#15803D', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800 }}>2</div>
-                <div style={{ fontSize: '13px', color: '#334155' }}>
-                  Scroll down and tap <PlusSquare size={15} style={{ display: 'inline', verticalAlign: 'middle', margin: '0 2px', color: '#16A34A' }} /> <strong>'Add to Home Screen'</strong>.
-                </div>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setShowIosGuide(false)}
-              style={{
-                marginTop: '18px',
-                width: '100%',
-                background: '#0F172A',
-                color: '#FFFFFF',
-                border: 'none',
-                borderRadius: '12px',
-                padding: '12px',
-                fontSize: '14px',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              Got It!
-            </button>
+          <div style={{ flex: 1, fontSize: '13px', lineHeight: 1.35, color: '#FFFFFF' }}>
+            Tap <Share2 size={14} style={{ display: 'inline', color: '#38BDF8', verticalAlign: 'middle', margin: '0 2px' }} /> <strong>Share</strong> on Safari, then tap <strong>'Add to Home Screen'</strong>
           </div>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowIosGuide(false);
+            }}
+            style={{
+              background: 'rgba(255,255,255,0.15)',
+              border: 'none',
+              borderRadius: '50%',
+              width: '24px',
+              height: '24px',
+              color: '#FFFFFF',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <X size={14} />
+          </button>
         </div>
       )}
     </>

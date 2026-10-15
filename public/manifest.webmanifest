@@ -1,8 +1,9 @@
 {
+  "id": "https://freshioz.com/admin/",
   "name": "Freshioz Admin",
   "short_name": "Freshioz Admin",
   "description": "Freshioz Operations, Field & Warehouse Management Desk",
-  "start_url": "/admin/",
+  "start_url": "/admin/?source=pwa",
   "scope": "/admin/",
   "display": "standalone",
   "orientation": "portrait",
