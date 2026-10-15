@@ -24,6 +24,8 @@ import { Link } from 'react-router-dom';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
 import { saveFreshiozStore, generateId, generateUUID } from '../shared/freshiozStore';
+import { productService } from '../services/productService';
+import { uploadService } from '../services/uploadService';
 import { exportToExcel } from '../utils/excelExporter';
 import AdminPagination from '../components/common/AdminPagination';
 
@@ -245,8 +247,8 @@ export default function MasterDataPage() {
     }
   };
 
-  // Image File Upload with automatic browser canvas compression (~40KB WebP)
-  const handleImageUpload = (e) => {
+  // Image File Upload with server upload and automatic browser canvas compression fallback
+  const handleImageUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -255,11 +257,22 @@ export default function MasterDataPage() {
       return;
     }
 
+    try {
+      const uploadRes = await uploadService.uploadFile(file);
+      if (uploadRes && uploadRes.url) {
+        setProductForm(prev => ({ ...prev, image: uploadRes.url }));
+        showToast('✓ Photo uploaded and stored on server!');
+        return;
+      }
+    } catch (err) {
+      console.warn('Server upload fallback to canvas image:', err?.message);
+    }
+
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
       img.onload = () => {
-        const maxDim = 600;
+        const maxDim = 500;
         let width = img.width;
         let height = img.height;
 
@@ -277,9 +290,9 @@ export default function MasterDataPage() {
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
 
-        const compressedDataUrl = canvas.toDataURL('image/webp', 0.85);
+        const compressedDataUrl = canvas.toDataURL('image/webp', 0.8);
         setProductForm(prev => ({ ...prev, image: compressedDataUrl }));
-        showToast('✓ Photo uploaded and optimized!');
+        showToast('✓ Photo optimized!');
       };
       img.src = event.target.result;
     };
@@ -328,6 +341,8 @@ export default function MasterDataPage() {
       gstPercent: 0,
       ...existingProd,
       ...productForm,
+      categoryId: productForm.category,
+      category: productForm.category,
       retailPrice: existingProd.retailPrice || 0,
       retailMarketPrice: existingProd.retailMarketPrice || 0,
       id: prodId,
@@ -359,22 +374,37 @@ export default function MasterDataPage() {
     showToast(`✓ Produce item "${productForm.name}" cataloged! Daily rates managed at /daily-pricing.`);
   };
 
-  const handleDeleteProduct = (id) => {
-    if (confirm('Delete this produce item from the master catalog?')) {
-      saveFreshiozStore(prev => ({
-        ...prev,
-        products: prev.products.filter(p => p.id !== id)
-      }));
-      showToast('Item removed from catalog.');
+  const handleDeleteProduct = async (id) => {
+    if (!confirm('Delete this produce item from the master catalog?')) return;
+    try {
+      // 1. Call backend delete endpoint directly
+      await productService.delete(id);
+    } catch (err) {
+      console.warn('Backend product delete notification:', err?.message || err);
     }
+
+    // 2. Remove locally and pass deletedProductIds for PostgreSQL store sync
+    saveFreshiozStore(prev => ({
+      ...prev,
+      products: (prev.products || []).filter(p => p.id !== id && p.uuid !== id),
+      deletedProductIds: Array.from(new Set([...(prev.deletedProductIds || []), id]))
+    }));
+
+    showToast('✓ Produce item removed from catalog.');
   };
 
   // Filtered datasets
-  const filteredProducts = products.filter(p => 
-    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.origin?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredProducts = products.filter(p => {
+    const pName = p.name || '';
+    const pCat = p.category || p.categoryId || '';
+    const pOrigin = p.origin || '';
+    const q = searchQuery.toLowerCase();
+    return (
+      pName.toLowerCase().includes(q) ||
+      pCat.toLowerCase().includes(q) ||
+      pOrigin.toLowerCase().includes(q)
+    );
+  });
 
   const paginatedProducts = filteredProducts.slice(
     (currentPage - 1) * pageSize,
@@ -713,7 +743,7 @@ export default function MasterDataPage() {
                           padding: '2px 7px',
                           borderRadius: '4px'
                         }}>
-                          {prod.category}
+                          {categories.find(c => c.id === (prod.category || prod.categoryId))?.name || prod.category || prod.categoryId || 'Produce'}
                         </span>
                       </td>
 
@@ -792,7 +822,7 @@ export default function MasterDataPage() {
                               setProductForm({
                                 id: prod.id,
                                 name: prod.name,
-                                category: prod.category,
+                                category: prod.category || prod.categoryId || 'VEGETABLES',
                                 defaultUnit: prod.defaultUnit || prod.retailUnit || '1 kg',
                                 retailMarketPrice: prod.retailMarketPrice ?? 55,
                                 retailPrice: prod.retailPrice ?? 40,

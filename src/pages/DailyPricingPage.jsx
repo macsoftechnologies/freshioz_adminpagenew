@@ -26,6 +26,7 @@ import AdminPagination from '../components/common/AdminPagination';
 export default function DailyPricingPage() {
   const { store, currentUser } = useAdminRole();
   const { showToast } = useToast();
+  const categories = store.categories || [];
 
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];
@@ -500,7 +501,7 @@ export default function DailyPricingPage() {
                       {/* Category */}
                       <td>
                         <span style={{ fontSize: '11px', background: '#F1F5F9', padding: '2px 8px', borderRadius: '4px', fontWeight: 700, color: '#334155' }}>
-                          {prod.category}
+                          {categories.find(c => c.id === (prod.category || prod.categoryId))?.name || prod.category || prod.categoryId || 'Produce'}
                         </span>
                       </td>
 
@@ -843,7 +844,9 @@ export default function DailyPricingPage() {
                       )}
                       <div>
                         <span style={{ fontWeight: 700, color: '#1E293B' }}>{p.name}</span>
-                        <span style={{ fontSize: '10px', color: '#64748B', display: 'block' }}>{p.category}</span>
+                        <span style={{ fontSize: '10px', color: '#64748B', display: 'block' }}>
+                          {categories.find(c => c.id === (p.category || p.categoryId))?.name || p.category || p.categoryId || 'Produce'}
+                        </span>
                       </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
