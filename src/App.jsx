@@ -7,6 +7,7 @@ import AdminMobileDock from './components/layout/AdminMobileDock';
 import AdminMobileDrawer from './components/layout/AdminMobileDrawer';
 import AdminLogoutConfirmModal from './components/common/AdminLogoutConfirmModal';
 import AdminFloatingPwaWidget from './components/common/AdminFloatingPwaWidget';
+import AdminAppSplashScreen from './components/common/AdminAppSplashScreen';
 
 import AdminLoginPage from './pages/AdminLoginPage';
 import AdminForgotPasswordPage from './pages/AdminForgotPasswordPage';
@@ -67,6 +68,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
         <AdminFloatingPwaWidget />
+        <AdminAppSplashScreen />
       </>
     );
   }
@@ -184,6 +186,9 @@ export default function App() {
 
         {/* Floating PWA Install Widget */}
         <AdminFloatingPwaWidget />
+
+        {/* Animated App Splash Screen */}
+        <AdminAppSplashScreen />
       </div>
     </div>
   );

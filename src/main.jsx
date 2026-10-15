@@ -4,8 +4,12 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
 import { AdminRoleProvider } from './context/AdminRoleContext.jsx';
 import { ToastProvider } from './context/ToastContext.jsx';
+import { registerServiceWorker } from './registerServiceWorker.js';
 import './styles/admin.css';
 import 'leaflet/dist/leaflet.css';
+
+// Register Admin PWA Service Worker
+registerServiceWorker();
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
