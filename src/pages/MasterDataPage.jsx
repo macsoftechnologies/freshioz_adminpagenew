@@ -17,7 +17,7 @@ import {
   RotateCcw,
   Image as ImageIcon
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
 import { saveFreshiozStore, generateId, generateUUID } from '../shared/freshiozStore';
@@ -97,45 +97,46 @@ const PRODUCE_PRESETS = [
 export default function MasterDataPage() {
   const { store, currentUser } = useAdminRole();
   const { showToast } = useToast();
+  const location = useLocation();
+  const navigate = useNavigate();
   const categories = store.categories || [];
   const products = store.products || [];
   const units = store.units || [];
 
-  const getTabFromHash = () => {
-    if (typeof window === 'undefined') return 'PRODUCTS';
-    const hash = window.location.hash.toLowerCase().replace('#', '').trim();
-    if (hash === 'categories') return 'CATEGORIES';
-    if (hash === 'units') return 'UNITS';
-    if (hash === 'produce' || hash === 'products') return 'PRODUCTS';
+  const getTabFromHash = (hashStr) => {
+    const raw = (hashStr || '').toLowerCase().replace('#', '').trim();
+    if (raw === 'categories') return 'CATEGORIES';
+    if (raw === 'units') return 'UNITS';
+    if (raw === 'produce' || raw === 'products') return 'PRODUCTS';
     return null;
   };
 
-  const [activeTab, setActiveTab] = useState(() => getTabFromHash() || 'PRODUCTS');
+  const [activeTab, setActiveTab] = useState(() => getTabFromHash(location.hash) || 'PRODUCTS');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
+
+  // Sync hash to URL bar on mount and on route changes
+  useEffect(() => {
+    const currentTab = getTabFromHash(location.hash);
+    if (currentTab) {
+      if (activeTab !== currentTab) {
+        setActiveTab(currentTab);
+        setCurrentPage(1);
+      }
+    } else {
+      // If URL has no hash (e.g. /admin/master-data), explicitly set #produce
+      navigate({ hash: '#produce' }, { replace: true });
+    }
+  }, [location.hash]);
 
   const handleTabSwitch = (tabKey) => {
     setActiveTab(tabKey);
     setSearchQuery('');
     setCurrentPage(1);
     const hash = tabKey === 'CATEGORIES' ? '#categories' : tabKey === 'UNITS' ? '#units' : '#produce';
-    if (window.location.hash !== hash) {
-      window.location.hash = hash;
-    }
+    navigate({ hash }, { replace: true });
   };
-
-  useEffect(() => {
-    const onHashChange = () => {
-      const tab = getTabFromHash();
-      if (tab) {
-        setActiveTab(tab);
-        setCurrentPage(1);
-      }
-    };
-    window.addEventListener('hashchange', onHashChange);
-    return () => window.removeEventListener('hashchange', onHashChange);
-  }, []);
 
   // Modals
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);

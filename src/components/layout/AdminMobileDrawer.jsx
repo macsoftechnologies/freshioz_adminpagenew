@@ -143,7 +143,7 @@ export default function AdminMobileDrawer() {
                 </span>
               </NavLink>
 
-              <NavLink to="/master-data" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
+              <NavLink to="/master-data#produce" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
                 <Database size={17} />
                 <span>Master Data Catalog</span>
               </NavLink>

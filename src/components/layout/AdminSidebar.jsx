@@ -68,7 +68,7 @@ export default function AdminSidebar() {
               </span>
             </NavLink>
 
-            <NavLink to="/master-data" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
+            <NavLink to="/master-data#produce" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
               <Database size={18} />
               <span>Master Data Catalog</span>
             </NavLink>
