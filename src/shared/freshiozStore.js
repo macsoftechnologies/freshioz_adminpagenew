@@ -88,6 +88,16 @@ export function getFreshiozStore() {
       }
     });
 
+    // Clean up any bloated historical base64 images from localStorage
+    if (Array.isArray(parsed.products)) {
+      parsed.products.forEach(p => {
+        if (typeof p.image === 'string' && p.image.startsWith('data:') && p.image.length > 50000) {
+          p.image = 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600';
+          hasUpdates = true;
+        }
+      });
+    }
+
     if (hasUpdates) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
     }
@@ -101,6 +111,47 @@ export function getFreshiozStore() {
 
 import { API_BASE_URL } from '../api/client';
 
+export function prepareServerPayload(storeData) {
+  if (!storeData || typeof storeData !== 'object') return {};
+
+  const clean = {};
+  const serverKeys = [
+    'warehouses',
+    'societies',
+    'orders',
+    'vendors',
+    'procurementLogs',
+    'warehouseInventory',
+    'societyRequests',
+    'categories',
+    'units',
+    'employees',
+    'withdrawals',
+    'deletedProductIds'
+  ];
+
+  for (const key of serverKeys) {
+    if (storeData[key] !== undefined) {
+      clean[key] = storeData[key];
+    }
+  }
+
+  if (Array.isArray(storeData.products)) {
+    clean.products = storeData.products.map(p => {
+      let image = p.image || '';
+      if (typeof image === 'string' && image.startsWith('data:') && image.length > 40000) {
+        image = 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600';
+      }
+      return {
+        ...p,
+        image
+      };
+    });
+  }
+
+  return clean;
+}
+
 // Cross-process server persistence directly to NestJS backend & PostgreSQL
 export async function pushStoreToServer(storeData) {
   try {
@@ -108,10 +159,12 @@ export async function pushStoreToServer(storeData) {
     const headers = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
+    const cleanPayload = prepareServerPayload(storeData);
+
     const res = await fetch(`${API_BASE_URL}/freshioz-store`, {
       method: 'POST',
       headers,
-      body: JSON.stringify(storeData)
+      body: JSON.stringify(cleanPayload)
     });
 
     if (!res.ok) {
