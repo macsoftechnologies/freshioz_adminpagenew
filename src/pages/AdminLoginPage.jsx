@@ -16,8 +16,8 @@ export default function AdminLoginPage() {
   const { login } = useAdminRole();
   const { showToast } = useToast();
 
-  const [emailOrPhone, setEmailOrPhone] = useState('superadmin@gmail.com');
-  const [password, setPassword] = useState('123456');
+  const [emailOrPhone, setEmailOrPhone] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
@@ -156,7 +156,7 @@ export default function AdminLoginPage() {
                 type="text"
                 value={emailOrPhone}
                 onChange={(e) => setEmailOrPhone(e.target.value)}
-                placeholder="superadmin@gmail.com"
+                placeholder="Enter work email or phone number"
                 style={{
                   width: '100%',
                   height: '42px',
@@ -186,7 +186,7 @@ export default function AdminLoginPage() {
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••••••"
+                placeholder="Enter password"
                 style={{
                   width: '100%',
                   height: '42px',
