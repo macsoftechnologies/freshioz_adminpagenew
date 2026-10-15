@@ -29,6 +29,14 @@ import { uploadService } from '../services/uploadService';
 import { exportToExcel } from '../utils/excelExporter';
 import AdminPagination from '../components/common/AdminPagination';
 
+export const resolveImageUrl = (img) => {
+  if (!img) return 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600&auto=format&fit=crop&q=80';
+  if (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('data:')) return img;
+  if (img.startsWith('/uploads/')) return `https://api.freshioz.com${img}`;
+  if (img.startsWith('uploads/')) return `https://api.freshioz.com/${img}`;
+  return `https://api.freshioz.com/uploads/${img}`;
+};
+
 const PRODUCE_PRESETS = [
   {
     name: 'Royal Gala Apple',
@@ -260,7 +268,8 @@ export default function MasterDataPage() {
     try {
       const uploadRes = await uploadService.uploadFile(file);
       if (uploadRes && uploadRes.url) {
-        setProductForm(prev => ({ ...prev, image: uploadRes.url }));
+        const fullUrl = resolveImageUrl(uploadRes.url);
+        setProductForm(prev => ({ ...prev, image: fullUrl }));
         showToast('✓ Photo uploaded and stored on server!');
         return;
       }
@@ -416,23 +425,24 @@ export default function MasterDataPage() {
     showToast(`✓ Produce item "${productForm.name}" ${editingId ? 'updated' : 'cataloged'} successfully!`);
   };
 
-  const handleDeleteProduct = async (id) => {
-    if (!confirm('Delete this produce item from the master catalog?')) return;
-    try {
-      // 1. Call backend delete endpoint directly
-      await productService.delete(id);
-    } catch (err) {
-      console.warn('Backend product delete notification:', err?.message || err);
-    }
+  const handleDeleteProduct = async (id, name = 'Produce item') => {
+    if (!window.confirm(`Are you sure you want to delete "${name}" from the master produce catalog?`)) return;
 
-    // 2. Remove locally and pass deletedProductIds for PostgreSQL store sync
+    // 1. Immediately remove locally and pass deletedProductIds for PostgreSQL store sync
     saveFreshiozStore(prev => ({
       ...prev,
       products: (prev.products || []).filter(p => p.id !== id && p.uuid !== id),
       deletedProductIds: Array.from(new Set([...(prev.deletedProductIds || []), id]))
     }));
 
-    showToast('✓ Produce item removed from catalog.');
+    showToast(`✓ "${name}" removed from catalog.`);
+
+    // 2. Persist deletion directly to backend PostgreSQL
+    try {
+      await productService.delete(id);
+    } catch (err) {
+      console.warn('Backend product delete notification:', err?.message || err);
+    }
   };
 
   // Filtered datasets
@@ -749,8 +759,9 @@ export default function MasterDataPage() {
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                           <img
-                            src={prod.image}
+                            src={resolveImageUrl(prod.image)}
                             alt={prod.name}
+                            onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600&auto=format&fit=crop&q=80'; }}
                             style={{ width: '36px', height: '36px', borderRadius: '6px', objectFit: 'cover', flexShrink: 0 }}
                           />
                           <div>
@@ -779,13 +790,26 @@ export default function MasterDataPage() {
                       <td>
                         <span style={{
                           background: '#F1F5F9',
-                          color: '#334155',
+                          color: '#1E293B',
                           fontSize: '11px',
                           fontWeight: 700,
-                          padding: '2px 7px',
-                          borderRadius: '4px'
+                          padding: '3px 8px',
+                          borderRadius: '5px',
+                          display: 'inline-block'
                         }}>
-                          {categories.find(c => c.id === (prod.category || prod.categoryId))?.name || prod.category || prod.categoryId || 'Produce'}
+                          {(() => {
+                            const catKey = prod.category || prod.categoryId || '';
+                            const matchedCat = categories.find(c => 
+                              c.id === catKey || 
+                              c.id?.toLowerCase() === catKey.toLowerCase() ||
+                              c.name?.toLowerCase() === catKey.toLowerCase()
+                            );
+                            if (matchedCat?.name) return matchedCat.name;
+                            if (catKey) {
+                              return catKey.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                            }
+                            return 'Produce';
+                          })()}
                         </span>
                       </td>
 
@@ -896,7 +920,7 @@ export default function MasterDataPage() {
 
                           <button
                             type="button"
-                            onClick={() => handleDeleteProduct(prod.id)}
+                            onClick={() => handleDeleteProduct(prod.id || prod.uuid, prod.name)}
                             style={{
                               background: '#FFF1F2',
                               border: '1px solid #FECDD3',
@@ -1173,595 +1197,502 @@ export default function MasterDataPage() {
 
       {/* MODAL: ADD / EDIT PRODUCE ITEM (Taxonomy Specs ONLY, NO Pricing Fields) */}
       {isProductModalOpen && (
-        <div className="admin-modal-overlay">
-          <div className="admin-modal-card" style={{ maxWidth: '580px' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Apple size={20} color="#234B3C" />
-                <h3 style={{ fontSize: '17px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                  {editingId ? 'Edit Produce Item Specs' : 'Register New Produce Item'}
-                </h3>
+        <div 
+          className="admin-modal-overlay" 
+          onClick={() => setIsProductModalOpen(false)}
+          style={{ zIndex: 1050, background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
+        >
+          <div 
+            className="admin-modal-card" 
+            style={{ 
+              maxWidth: '620px', 
+              width: '100%', 
+              maxHeight: '92vh', 
+              display: 'flex', 
+              flexDirection: 'column', 
+              padding: 0, 
+              borderRadius: '16px', 
+              overflow: 'hidden',
+              boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.35)',
+              border: '1px solid #E2E8F0',
+              background: '#FFFFFF'
+            }} 
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div style={{ 
+              padding: '18px 24px', 
+              borderBottom: '1px solid #E2E8F0', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between',
+              background: '#F8FAFC'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#ECFDF5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Apple size={20} color="#059669" />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                    {editingId ? 'Edit Produce Item Specs' : 'Register New Produce Item'}
+                  </h3>
+                  {editingId && (
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>
+                      Item Code: <code style={{ color: '#059669', background: '#E2E8F0', padding: '1px 5px', borderRadius: '4px' }}>{editingId}</code>
+                    </span>
+                  )}
+                </div>
               </div>
-              <button type="button" onClick={() => setIsProductModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}>
+              <button 
+                type="button" 
+                onClick={() => setIsProductModalOpen(false)} 
+                style={{ background: '#F1F5F9', border: 'none', cursor: 'pointer', color: '#64748B', width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
                 <X size={18} />
               </button>
             </div>
 
-            <div style={{ background: '#FEF3C7', border: '1px solid #FDE68A', padding: '8px 12px', borderRadius: '6px', fontSize: '11.5px', color: '#92400E', marginBottom: '14px' }}>
-              ℹ️ <strong>Daily Pricing Separation:</strong> Market buying rates, consumer retail selling prices, wholesale crate rates, and GST % are managed daily at <strong>/daily-pricing</strong> based on morning APMC arrivals.
-            </div>
-
-            <form onSubmit={handlePreSaveProduct} onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault(); }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '12px', marginBottom: '12px' }}>
-                <div>
-                  <label className="form-label-title" style={{ fontSize: '11px' }}>Produce Name *</label>
-                  <input
-                    type="text"
-                    className="form-input-control"
-                    placeholder="e.g. Crisp Green Capsicum (Shimla Mirch)"
-                    value={productForm.name}
-                    onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
-                    required
-                  />
+            {/* Modal Body & Form */}
+            <form 
+              noValidate
+              onSubmit={handlePreSaveProduct} 
+              onKeyDown={(e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault(); }}
+              style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, margin: 0 }}
+            >
+              <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1 }}>
+                <div style={{ background: '#FEF3C7', border: '1px solid #FDE68A', padding: '10px 12px', borderRadius: '8px', fontSize: '12px', color: '#92400E', marginBottom: '16px' }}>
+                  ℹ️ <strong>Daily Pricing Separation:</strong> Market buying rates, consumer retail selling prices, wholesale crate rates, and GST % are managed daily at <strong>/daily-pricing</strong> based on morning APMC arrivals.
                 </div>
 
-                <div>
-                  <label className="form-label-title" style={{ fontSize: '11px' }}>Category *</label>
-                  <select
-                    className="form-input-control"
-                    value={productForm.category}
-                    onChange={(e) => setProductForm({ ...productForm, category: e.target.value })}
-                  >
-                    {categories.map(c => (
-                      <option key={c.id} value={c.id}>{c.icon || '🥦'} {c.name}</option>
-                    ))}
-                    {!categories.some(c => c.id === productForm.category) && productForm.category && (
-                      <option value={productForm.category}>{productForm.category}</option>
-                    )}
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-                <div>
-                  <label className="form-label-title" style={{ fontSize: '11px' }}>Consumer Retail Unit *</label>
-                  <select
-                    className="form-input-control"
-                    value={productForm.defaultUnit}
-                    onChange={(e) => setProductForm({ ...productForm, defaultUnit: e.target.value })}
-                  >
-                    <option value="1 kg">1 kg (Standard Retail)</option>
-                    <option value="500 g">500 g (Half Kilo)</option>
-                    <option value="250 g">250 g (Quarter Kilo)</option>
-                    <option value="100 g">100 g (Micro/Herbs)</option>
-                    <option value="1 bunch">1 bunch (Greens / Herbs)</option>
-                    <option value="1 pc">1 pc (Single Item / Coconut / Melon)</option>
-                    <option value="1 box">1 box (Packaged / Berries)</option>
-                    <option value="1 crate">1 crate (Bulk / Wholesale)</option>
-                    {units.map(u => {
-                      const val = u.label || u.name;
-                      if (['1 kg', '500 g', '250 g', '100 g', '1 bunch', '1 pc', '1 box', '1 crate'].includes(val)) return null;
-                      return <option key={u.id} value={val}>{val} ({u.name})</option>;
-                    })}
-                    {!['1 kg', '500 g', '250 g', '100 g', '1 bunch', '1 pc', '1 box', '1 crate'].includes(productForm.defaultUnit) && !units.some(u => (u.label || u.name) === productForm.defaultUnit) && productForm.defaultUnit && (
-                      <option value={productForm.defaultUnit}>{productForm.defaultUnit}</option>
-                    )}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="form-label-title" style={{ fontSize: '11px' }}>Shelf Life</label>
-                  <input
-                    type="text"
-                    className="form-input-control"
-                    placeholder="e.g. 4-5 Days"
-                    value={productForm.shelfLife}
-                    onChange={(e) => setProductForm({ ...productForm, shelfLife: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              {/* Wholesale / Bulk Crates Packaging Option */}
-              <div style={{
-                background: productForm.hasWholesale ? '#F8FAFC' : '#F1F5F9',
-                border: productForm.hasWholesale ? '1.5px solid #CBD5E1' : '1px dashed #CBD5E1',
-                borderRadius: '8px',
-                padding: '12px 14px',
-                marginBottom: '14px'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '12px', marginBottom: '14px' }}>
                   <div>
-                    <label style={{ fontSize: '12px', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                      <Package size={15} color={productForm.hasWholesale ? '#4338CA' : '#64748B'} />
-                      <span>Available for Wholesale / Bulk Crates?</span>
-                    </label>
-                    <p style={{ fontSize: '10.5px', color: '#64748B', margin: '2px 0 0 0' }}>
-                      Enable if this produce item is sold in mandi crates, sacks, or bulk boxes.
-                    </p>
+                    <label className="form-label-title" style={{ fontSize: '11px', fontWeight: 700 }}>Produce Name *</label>
+                    <input
+                      type="text"
+                      className="form-input-control"
+                      placeholder="e.g. Crisp Green Capsicum (Shimla Mirch)"
+                      value={productForm.name}
+                      onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
+                      required
+                    />
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setProductForm(prev => ({ 
-                      ...prev, 
-                      hasWholesale: !prev.hasWholesale,
-                      wholesaleUnit: !prev.hasWholesale ? (prev.wholesaleUnit || '20 kg Mandi Crate') : ''
-                    }))}
-                    style={{
-                      padding: '5px 12px',
-                      borderRadius: '20px',
-                      border: 'none',
-                      background: productForm.hasWholesale ? '#234B3C' : '#E2E8F0',
-                      color: productForm.hasWholesale ? '#FFF' : '#64748B',
-                      fontWeight: 800,
-                      fontSize: '11px',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    {productForm.hasWholesale ? '✓ Enabled' : 'Off (Retail Only)'}
-                  </button>
-                </div>
 
-                {productForm.hasWholesale && (
-                  <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed #E2E8F0' }}>
-                    <label className="form-label-title" style={{ fontSize: '11px', color: '#334155' }}>
-                      Wholesale Packaging Unit *
-                    </label>
+                  <div>
+                    <label className="form-label-title" style={{ fontSize: '11px', fontWeight: 700 }}>Category *</label>
                     <select
                       className="form-input-control"
-                      value={productForm.wholesaleUnit || '20 kg Mandi Crate'}
-                      onChange={(e) => setProductForm({ ...productForm, wholesaleUnit: e.target.value })}
-                      style={{ fontWeight: 700, color: '#0F172A' }}
+                      value={productForm.category}
+                      onChange={(e) => setProductForm({ ...productForm, category: e.target.value })}
                     >
-                      <option value="20 kg Mandi Crate">Standard APMC Crate (20 kg)</option>
-                      <option value="10 kg Corrugated Box">Corrugated Master Box (10 kg)</option>
-                      <option value="25 kg Gunny Sack">Mandi Gunny Sack (25 kg)</option>
-                      <option value="50 kg Mandi Sack">Mandi Gunny Sack (50 kg)</option>
-                      <option value="1 Metric Ton (tones)">Metric Ton (tones - Mandi Truckload)</option>
-                      {units.filter(u => u.isBulk && !['20 kg Mandi Crate', '10 kg Corrugated Box', '25 kg Gunny Sack', '50 kg Mandi Sack', '1 Metric Ton (tones)'].includes(u.label || u.name)).map(u => (
-                        <option key={u.id} value={u.label || u.name}>{u.label || u.name}</option>
+                      {categories.map(c => (
+                        <option key={c.id} value={c.id}>{c.icon || '🥦'} {c.name}</option>
                       ))}
+                      {!categories.some(c => c.id === productForm.category) && productForm.category && (
+                        <option value={productForm.category}>{productForm.category}</option>
+                      )}
                     </select>
-                    <span style={{ fontSize: '10px', color: '#64748B', marginTop: '3px', display: 'block' }}>
-                      Wholesale crate pricing and margin savings are managed at /daily-pricing.
-                    </span>
                   </div>
-                )}
-              </div>
+                </div>
 
-              <div style={{ marginBottom: '12px' }}>
-                <label className="form-label-title" style={{ fontSize: '11px' }}>Mandi Origin / Source</label>
-                <input
-                  type="text"
-                  className="form-input-control"
-                  placeholder="e.g. Kolar Agro Mandi, Karnataka"
-                  value={productForm.origin}
-                  onChange={(e) => setProductForm({ ...productForm, origin: e.target.value })}
-                />
-              </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+                  <div>
+                    <label className="form-label-title" style={{ fontSize: '11px', fontWeight: 700 }}>Consumer Retail Unit *</label>
+                    <select
+                      className="form-input-control"
+                      value={productForm.defaultUnit}
+                      onChange={(e) => setProductForm({ ...productForm, defaultUnit: e.target.value })}
+                    >
+                      <option value="1 kg">1 kg (Standard Retail)</option>
+                      <option value="500 g">500 g (Half Kilo)</option>
+                      <option value="250 g">250 g (Quarter Kilo)</option>
+                      <option value="100 g">100 g (Micro/Herbs)</option>
+                      <option value="1 bunch">1 bunch (Greens / Herbs)</option>
+                      <option value="1 pc">1 pc (Single Item / Coconut / Melon)</option>
+                      <option value="1 box">1 box (Packaged / Berries)</option>
+                      <option value="1 crate">1 crate (Bulk / Wholesale)</option>
+                      {units.map(u => {
+                        const val = u.label || u.name;
+                        if (['1 kg', '500 g', '250 g', '100 g', '1 bunch', '1 pc', '1 box', '1 crate'].includes(val)) return null;
+                        return <option key={u.id} value={val}>{val} ({u.name})</option>;
+                      })}
+                      {!['1 kg', '500 g', '250 g', '100 g', '1 bunch', '1 pc', '1 box', '1 crate'].includes(productForm.defaultUnit) && !units.some(u => (u.label || u.name) === productForm.defaultUnit) && productForm.defaultUnit && (
+                        <option value={productForm.defaultUnit}>{productForm.defaultUnit}</option>
+                      )}
+                    </select>
+                  </div>
 
-              {/* Freshness Badge / Status */}
-              <div style={{ marginBottom: '12px' }}>
-                <label className="form-label-title" style={{ fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Sparkles size={12} color="#059669" />
-                  <span>Freshness Badge / Status *</span>
-                </label>
-                <select
-                  className="form-input-control"
-                  value={productForm.badge}
-                  onChange={(e) => setProductForm({ ...productForm, badge: e.target.value })}
-                >
-                  <option value="Harvested Today at Dawn">🌿 Harvested Today at Dawn (Daily Greens & Country)</option>
-                  <option value="Harvested Today">✨ Harvested Today (Daily Farm Picked)</option>
-                  <option value="Mandi Arrival Today">🚛 Mandi Arrival Today (APMC Direct)</option>
-                  <option value="Orchard Fresh">🍎 Orchard Fresh (Apples, Pears, Citrus)</option>
-                  <option value="Cold Chain Fresh">❄️ Cold Chain Fresh (Berries & Exotics)</option>
-                  <option value="100% Certified Organic">🌱 100% Certified Organic</option>
-                  <option value="Hydroponic Fresh">💧 Hydroponic Fresh</option>
-                  <option value="NONE">🚫 No Badge (Clean display)</option>
-                  <option value="CUSTOM">✏️ Custom Badge...</option>
-                </select>
-              </div>
+                  <div>
+                    <label className="form-label-title" style={{ fontSize: '11px', fontWeight: 700 }}>Shelf Life</label>
+                    <input
+                      type="text"
+                      className="form-input-control"
+                      placeholder="e.g. 4-5 Days"
+                      value={productForm.shelfLife}
+                      onChange={(e) => setProductForm({ ...productForm, shelfLife: e.target.value })}
+                    />
+                  </div>
+                </div>
 
-              {productForm.badge === 'CUSTOM' && (
-                <div style={{ marginBottom: '12px' }}>
-                  <label className="form-label-title" style={{ fontSize: '11px' }}>Custom Badge Text</label>
+                {/* Wholesale / Bulk Crates Packaging Option */}
+                <div style={{
+                  background: productForm.hasWholesale ? '#F8FAFC' : '#F1F5F9',
+                  border: productForm.hasWholesale ? '1.5px solid #CBD5E1' : '1px dashed #CBD5E1',
+                  borderRadius: '10px',
+                  padding: '12px 14px',
+                  marginBottom: '14px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <label style={{ fontSize: '12px', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                        <Package size={15} color={productForm.hasWholesale ? '#4338CA' : '#64748B'} />
+                        <span>Available for Wholesale / Bulk Crates?</span>
+                      </label>
+                      <p style={{ fontSize: '10.5px', color: '#64748B', margin: '2px 0 0 0' }}>
+                        Enable if this produce item is sold in mandi crates, sacks, or bulk boxes.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setProductForm(prev => ({ 
+                        ...prev, 
+                        hasWholesale: !prev.hasWholesale,
+                        wholesaleUnit: !prev.hasWholesale ? (prev.wholesaleUnit || '20 kg Mandi Crate') : ''
+                      }))}
+                      style={{
+                        padding: '5px 12px',
+                        borderRadius: '20px',
+                        border: 'none',
+                        background: productForm.hasWholesale ? '#234B3C' : '#E2E8F0',
+                        color: productForm.hasWholesale ? '#FFF' : '#64748B',
+                        fontWeight: 800,
+                        fontSize: '11px',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {productForm.hasWholesale ? '✓ Enabled' : 'Off (Retail Only)'}
+                    </button>
+                  </div>
+
+                  {productForm.hasWholesale && (
+                    <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed #E2E8F0' }}>
+                      <label className="form-label-title" style={{ fontSize: '11px', color: '#334155' }}>
+                        Wholesale Packaging Unit *
+                      </label>
+                      <select
+                        className="form-input-control"
+                        value={productForm.wholesaleUnit || '20 kg Mandi Crate'}
+                        onChange={(e) => setProductForm({ ...productForm, wholesaleUnit: e.target.value })}
+                        style={{ fontWeight: 700, color: '#0F172A' }}
+                      >
+                        <option value="20 kg Mandi Crate">Standard APMC Crate (20 kg)</option>
+                        <option value="10 kg Corrugated Box">Corrugated Master Box (10 kg)</option>
+                        <option value="25 kg Gunny Sack">Mandi Gunny Sack (25 kg)</option>
+                        <option value="50 kg Mandi Sack">Mandi Gunny Sack (50 kg)</option>
+                        <option value="1 Metric Ton (tones)">Metric Ton (tones - Mandi Truckload)</option>
+                        {units.filter(u => u.isBulk && !['20 kg Mandi Crate', '10 kg Corrugated Box', '25 kg Gunny Sack', '50 kg Mandi Sack', '1 Metric Ton (tones)'].includes(u.label || u.name)).map(u => (
+                          <option key={u.id} value={u.label || u.name}>{u.label || u.name}</option>
+                        ))}
+                      </select>
+                      <span style={{ fontSize: '10px', color: '#64748B', marginTop: '3px', display: 'block' }}>
+                        Wholesale crate pricing and margin savings are managed at /daily-pricing.
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ marginBottom: '14px' }}>
+                  <label className="form-label-title" style={{ fontSize: '11px', fontWeight: 700 }}>Mandi Origin / Source</label>
                   <input
                     type="text"
                     className="form-input-control"
-                    placeholder="e.g. Direct from Shimla Orchards"
-                    value={productForm.customBadge || ''}
-                    onChange={(e) => setProductForm({ ...productForm, customBadge: e.target.value })}
+                    placeholder="e.g. Kolar Agro Mandi, Karnataka"
+                    value={productForm.origin}
+                    onChange={(e) => setProductForm({ ...productForm, origin: e.target.value })}
                   />
                 </div>
-              )}
 
-              {/* Image Upload Area */}
-              <div style={{ marginBottom: '14px' }}>
-                <label className="form-label-title" style={{ fontSize: '11px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <ImageIcon size={12} color="#2563EB" />
-                    <span>Produce Photo *</span>
-                  </span>
-                  <span style={{ fontSize: '10px', color: '#64748B', fontWeight: 500 }}>Upload file (auto compressed)</span>
-                </label>
+                {/* Freshness Badge / Status */}
+                <div style={{ marginBottom: '14px' }}>
+                  <label className="form-label-title" style={{ fontSize: '11px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Sparkles size={12} color="#059669" />
+                    <span>Freshness Badge / Status *</span>
+                  </label>
+                  <select
+                    className="form-input-control"
+                    value={productForm.badge}
+                    onChange={(e) => setProductForm({ ...productForm, badge: e.target.value })}
+                  >
+                    <option value="Harvested Today at Dawn">🌿 Harvested Today at Dawn (Daily Greens & Country)</option>
+                    <option value="Harvested Today">✨ Harvested Today (Daily Farm Picked)</option>
+                    <option value="Mandi Arrival Today">🚛 Mandi Arrival Today (APMC Direct)</option>
+                    <option value="Orchard Fresh">🍎 Orchard Fresh (Apples, Pears, Citrus)</option>
+                    <option value="Cold Chain Fresh">❄️ Cold Chain Fresh (Berries & Exotics)</option>
+                    <option value="100% Certified Organic">🌱 100% Certified Organic</option>
+                    <option value="Hydroponic Fresh">💧 Hydroponic Fresh</option>
+                    <option value="NONE">🚫 No Badge (Clean display)</option>
+                    <option value="CUSTOM">✏️ Custom Badge...</option>
+                  </select>
+                </div>
 
-                {productForm.image ? (
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    padding: '10px 12px',
-                    borderRadius: '8px',
-                    background: '#F8FAFC',
-                    border: '1.5px solid #CBD5E1'
-                  }}>
-                    <div style={{ position: 'relative', width: '60px', height: '60px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E2E8F0', flexShrink: 0, background: '#FFF' }}>
-                      <img 
-                        src={productForm.image} 
-                        alt="Preview" 
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                      />
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: '12px', fontWeight: 700, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <CheckCircle2 size={13} color="#059669" />
-                        <span>Produce Photo Attached</span>
+                {productForm.badge === 'CUSTOM' && (
+                  <div style={{ marginBottom: '14px' }}>
+                    <label className="form-label-title" style={{ fontSize: '11px', fontWeight: 700 }}>Custom Badge Text</label>
+                    <input
+                      type="text"
+                      className="form-input-control"
+                      placeholder="e.g. Direct from Shimla Orchards"
+                      value={productForm.customBadge || ''}
+                      onChange={(e) => setProductForm({ ...productForm, customBadge: e.target.value })}
+                    />
+                  </div>
+                )}
+
+                {/* Image Upload Area */}
+                <div style={{ marginBottom: '16px' }}>
+                  <label className="form-label-title" style={{ fontSize: '11px', fontWeight: 700, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <ImageIcon size={12} color="#2563EB" />
+                      <span>Produce Photo *</span>
+                    </span>
+                    <span style={{ fontSize: '10px', color: '#64748B', fontWeight: 500 }}>Supports JPG, PNG, WebP</span>
+                  </label>
+
+                  {productForm.image ? (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '10px 12px',
+                      borderRadius: '10px',
+                      background: '#F8FAFC',
+                      border: '1.5px solid #CBD5E1'
+                    }}>
+                      <div style={{ position: 'relative', width: '64px', height: '64px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #CBD5E1', flexShrink: 0, background: '#FFF' }}>
+                        <img 
+                          src={resolveImageUrl(productForm.image)} 
+                          alt="Preview" 
+                          onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600&auto=format&fit=crop&q=80'; }}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                        />
                       </div>
-                      <p style={{ fontSize: '10.5px', color: '#64748B', margin: '2px 0 6px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {productForm.image.startsWith('data:') ? 'Local file uploaded & optimized' : 'Online produce photo linked'}
-                      </p>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <label style={{
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          color: '#2563EB',
-                          cursor: 'pointer',
-                          padding: '3px 8px',
-                          background: '#EFF6FF',
-                          borderRadius: '4px',
-                          border: '1px solid #DBEAFE',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}>
-                          <Upload size={11} />
-                          <span>Change Photo</span>
-                          <input 
-                            type="file" 
-                            accept="image/*" 
-                            style={{ display: 'none' }} 
-                            onChange={handleImageUpload} 
-                          />
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => setProductForm(prev => ({ ...prev, image: '' }))}
-                          style={{
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <CheckCircle2 size={13} color="#059669" />
+                          <span>Produce Photo Attached</span>
+                        </div>
+                        <p style={{ fontSize: '10.5px', color: '#64748B', margin: '2px 0 6px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {productForm.image.startsWith('data:') ? 'Local file optimized' : 'Server/Online photo linked'}
+                        </p>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <label style={{
                             fontSize: '11px',
                             fontWeight: 700,
-                            color: '#DC2626',
+                            color: '#2563EB',
                             cursor: 'pointer',
                             padding: '3px 8px',
-                            background: '#FEF2F2',
+                            background: '#EFF6FF',
                             borderRadius: '4px',
-                            border: '1px solid #FEE2E2',
+                            border: '1px solid #DBEAFE',
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '4px'
-                          }}
-                        >
-                          <Trash2 size={11} />
-                          <span>Remove</span>
-                        </button>
+                          }}>
+                            <Upload size={11} />
+                            <span>Replace</span>
+                            <input 
+                              type="file" 
+                              accept="image/*" 
+                              style={{ display: 'none' }} 
+                              onChange={handleImageUpload} 
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setProductForm(prev => ({ ...prev, image: '' }))}
+                            style={{
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              color: '#DC2626',
+                              cursor: 'pointer',
+                              padding: '3px 8px',
+                              background: '#FEF2F2',
+                              borderRadius: '4px',
+                              border: '1px solid #FEE2E2',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            <Trash2 size={11} />
+                            <span>Remove</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ) : (
-                  <label style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: '16px',
-                    border: '2px dashed #94A3B8',
-                    borderRadius: '8px',
-                    background: '#F8FAFC',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                    textAlign: 'center'
-                  }}>
-                    <div style={{
-                      width: '38px',
-                      height: '38px',
-                      borderRadius: '50%',
-                      background: '#ECFDF5',
+                  ) : (
+                    <label style={{
                       display: 'flex',
+                      flexDirection: 'column',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      marginBottom: '6px',
-                      color: '#059669'
+                      padding: '16px',
+                      border: '2px dashed #94A3B8',
+                      borderRadius: '10px',
+                      background: '#F8FAFC',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      textAlign: 'center'
                     }}>
-                      <Upload size={18} />
+                      <div style={{
+                        width: '38px',
+                        height: '38px',
+                        borderRadius: '50%',
+                        background: '#ECFDF5',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginBottom: '6px',
+                        color: '#059669'
+                      }}>
+                        <Upload size={18} />
+                      </div>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#0F172A' }}>
+                        Click to Upload Produce Photo
+                      </span>
+                      <span style={{ fontSize: '10.5px', color: '#64748B', marginTop: '2px' }}>
+                        Supports JPG, PNG, WEBP • Automatically compressed
+                      </span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        style={{ display: 'none' }} 
+                        onChange={handleImageUpload} 
+                      />
+                    </label>
+                  )}
+
+                  {/* Quick Produce Stock Presets */}
+                  <div style={{ marginTop: '10px' }}>
+                    <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 600, marginBottom: '5px' }}>
+                      Or select a Quick Produce Photo preset:
                     </div>
-                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#0F172A' }}>
-                      Click or Drag to Upload Produce Photo
-                    </span>
-                    <span style={{ fontSize: '10.5px', color: '#64748B', marginTop: '2px' }}>
-                      Supports JPG, PNG, WEBP • Automatically compressed
-                    </span>
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      style={{ display: 'none' }} 
-                      onChange={handleImageUpload} 
-                    />
-                  </label>
-                )}
-
-                {/* Quick 1-Click Produce Stock Presets */}
-                <div style={{ marginTop: '8px' }}>
-                  <div style={{ fontSize: '10px', color: '#64748B', fontWeight: 600, marginBottom: '5px' }}>
-                    Or select a Quick Produce Photo preset:
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      {PRODUCE_PRESETS.map((preset, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setProductForm(prev => ({
+                              ...prev,
+                              name: prev.name || preset.name,
+                              category: preset.category,
+                              origin: prev.origin || preset.origin,
+                              shelfLife: prev.shelfLife || preset.shelfLife,
+                              badge: preset.badge,
+                              image: preset.image
+                            }));
+                            showToast(`Applied ${preset.name} photo!`);
+                          }}
+                          style={{
+                            fontSize: '11px',
+                            padding: '3px 8px',
+                            borderRadius: '12px',
+                            border: productForm.image === preset.image ? '1.5px solid #059669' : '1px solid #CBD5E1',
+                            background: productForm.image === preset.image ? '#ECFDF5' : '#FFFFFF',
+                            color: productForm.image === preset.image ? '#059669' : '#334155',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '3px'
+                          }}
+                        >
+                          <span>{preset.icon}</span>
+                          <span>{preset.name.split(' ')[0]}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                    {PRODUCE_PRESETS.map((preset, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => {
-                          setProductForm(prev => ({
-                            ...prev,
-                            name: prev.name || preset.name,
-                            category: preset.category,
-                            origin: prev.origin || preset.origin,
-                            shelfLife: prev.shelfLife || preset.shelfLife,
-                            badge: preset.badge,
-                            image: preset.image
-                          }));
-                          showToast(`Applied ${preset.name} photo!`);
-                        }}
-                        style={{
-                          fontSize: '11px',
-                          padding: '3px 8px',
-                          borderRadius: '12px',
-                          border: productForm.image === preset.image ? '1.5px solid #059669' : '1px solid #CBD5E1',
-                          background: productForm.image === preset.image ? '#ECFDF5' : '#FFFFFF',
-                          color: productForm.image === preset.image ? '#059669' : '#334155',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '3px'
-                        }}
-                      >
-                        <span>{preset.icon}</span>
-                        <span>{preset.name.split(' ')[0]}</span>
-                      </button>
-                    ))}
+
+                  {/* Optional direct URL fallback */}
+                  <div style={{ marginTop: '8px' }}>
+                    <details style={{ fontSize: '11px', color: '#64748B' }}>
+                      <summary style={{ cursor: 'pointer', userSelect: 'none', color: '#475569', fontWeight: 600 }}>
+                        Paste direct web URL instead
+                      </summary>
+                      <input
+                        type="text"
+                        name="produceDirectImageUrl"
+                        className="form-input-control"
+                        style={{ marginTop: '6px', fontSize: '11.5px' }}
+                        placeholder="https://... or /uploads/..."
+                        value={productForm.image}
+                        onChange={(e) => setProductForm({ ...productForm, image: e.target.value })}
+                      />
+                    </details>
                   </div>
                 </div>
 
-                {/* Optional direct URL fallback */}
-                <div style={{ marginTop: '6px' }}>
-                  <details style={{ fontSize: '11px', color: '#64748B' }}>
-                    <summary style={{ cursor: 'pointer', userSelect: 'none', color: '#475569', fontWeight: 600 }}>
-                      Paste direct web URL instead
-                    </summary>
-                    <input
-                      type="url"
-                      className="form-input-control"
-                      style={{ marginTop: '6px', fontSize: '11.5px' }}
-                      placeholder="https://..."
-                      value={productForm.image}
-                      onChange={(e) => setProductForm({ ...productForm, image: e.target.value })}
-                    />
-                  </details>
+                <div style={{ marginBottom: '8px' }}>
+                  <label className="form-label-title" style={{ fontSize: '11px', fontWeight: 700 }}>Freshness Description & Tags</label>
+                  <input
+                    type="text"
+                    className="form-input-control"
+                    placeholder="e.g. Farm picked, hydroponic, crisp"
+                    value={productForm.desc}
+                    onChange={(e) => setProductForm({ ...productForm, desc: e.target.value })}
+                  />
                 </div>
               </div>
 
-              <div style={{ marginBottom: '16px' }}>
-                <label className="form-label-title" style={{ fontSize: '11px' }}>Freshness Description & Tags</label>
-                <input
-                  type="text"
-                  className="form-input-control"
-                  placeholder="e.g. Farm picked, hydroponic, crisp"
-                  value={productForm.desc}
-                  onChange={(e) => setProductForm({ ...productForm, desc: e.target.value })}
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              {/* Fixed Modal Footer Action Bar */}
+              <div style={{ 
+                padding: '14px 24px', 
+                borderTop: '1px solid #E2E8F0', 
+                background: '#F8FAFC', 
+                display: 'flex', 
+                justifyContent: 'flex-end', 
+                gap: '10px' 
+              }}>
                 <button
                   type="button"
                   onClick={() => setIsProductModalOpen(false)}
-                  style={{ padding: '7px 14px', borderRadius: '6px', border: '1px solid #CBD5E1', background: '#FFF', fontSize: '12px' }}
+                  style={{ 
+                    padding: '8px 16px', 
+                    borderRadius: '8px', 
+                    border: '1px solid #CBD5E1', 
+                    background: '#FFFFFF', 
+                    color: '#475569',
+                    fontSize: '12.5px',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  style={{ padding: '7px 18px', borderRadius: '6px', border: 'none', background: '#234B3C', color: '#FFF', fontWeight: 800, fontSize: '12px' }}
+                  style={{ 
+                    padding: '8px 22px', 
+                    borderRadius: '8px', 
+                    border: 'none', 
+                    background: '#234B3C', 
+                    color: '#FFFFFF', 
+                    fontWeight: 800, 
+                    fontSize: '12.5px',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 12px rgba(35, 75, 60, 0.25)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
                 >
-                  Save Item Specs
+                  <CheckCircle2 size={15} />
+                  <span>Save Item Specs</span>
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* ================= CONFIRMATION POPUP MODAL (YES / NO) ================= */}
-      {isConfirmProductModalOpen && (
-        <div 
-          className="admin-modal-overlay" 
-          style={{ zIndex: 1100, background: 'rgba(15, 23, 42, 0.72)' }}
-        >
-          <div 
-            className="admin-modal-card" 
-            onClick={(e) => e.stopPropagation()}
-            style={{ 
-              maxWidth: '480px', 
-              border: '2px solid #E2E8F0',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
-              padding: '24px 26px',
-              animation: 'adminModalEnter 0.2s ease-out'
-            }}
-          >
-            {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', marginBottom: '18px' }}>
-              <div style={{ 
-                width: '42px', 
-                height: '42px', 
-                borderRadius: '10px', 
-                background: '#FEF3C7', 
-                color: '#D97706', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center',
-                flexShrink: 0
-              }}>
-                <HelpCircle size={22} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <h3 style={{ fontSize: '17px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                  {editingId ? 'Confirm Produce Updates?' : 'Confirm Produce Registration?'}
-                </h3>
-                <p style={{ fontSize: '12.5px', color: '#64748B', marginTop: '4px', marginBottom: 0, lineHeight: 1.4 }}>
-                  Please review the produce taxonomy & harvesting origin before saving:
-                </p>
-              </div>
-            </div>
-
-            {/* Summary Review Card */}
-            <div style={{ 
-              background: '#F8FAFC', 
-              borderRadius: '10px', 
-              border: '1.5px solid #E2E8F0', 
-              padding: '14px 16px', 
-              marginBottom: '20px',
-              fontSize: '12.5px'
-            }}>
-              {/* Produce Header with Photo Thumbnail */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px', paddingBottom: '10px', borderBottom: '1px dashed #CBD5E1' }}>
-                {productForm.image ? (
-                  <img
-                    src={productForm.image}
-                    alt={productForm.name}
-                    style={{ width: '46px', height: '46px', borderRadius: '8px', objectFit: 'cover', border: '1px solid #CBD5E1', flexShrink: 0 }}
-                  />
-                ) : (
-                  <div style={{ width: '46px', height: '46px', borderRadius: '8px', background: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Apple size={22} color="#94A3B8" />
-                  </div>
-                )}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>
-                    {productForm.name || 'Unnamed Produce'}
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px', flexWrap: 'wrap' }}>
-                    <span style={{
-                      fontSize: '10.5px',
-                      background: '#ECFDF5',
-                      color: '#047857',
-                      padding: '1px 6px',
-                      borderRadius: '4px',
-                      fontWeight: 700
-                    }}>
-                      {productForm.badge === 'CUSTOM' ? (productForm.customBadge || 'Fresh') : productForm.badge}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px dashed #CBD5E1' }}>
-                <div>
-                  <span style={{ color: '#64748B', fontWeight: 600, display: 'block', fontSize: '11px' }}>Category:</span>
-                  <span style={{ color: '#059669', fontWeight: 800 }}>
-                    {categories.find(c => c.id === productForm.category)?.name || productForm.category}
-                  </span>
-                </div>
-                <div>
-                  <span style={{ color: '#64748B', fontWeight: 600, display: 'block', fontSize: '11px' }}>Retail Unit:</span>
-                  <span style={{ color: '#0F172A', fontWeight: 800 }}>{productForm.defaultUnit}</span>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '8px', marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px dashed #CBD5E1' }}>
-                <div>
-                  <span style={{ color: '#64748B', fontWeight: 600, display: 'block', fontSize: '11px' }}>Wholesale Packaging:</span>
-                  <span style={{ color: productForm.hasWholesale ? '#4338CA' : '#64748B', fontWeight: 800 }}>
-                    {productForm.hasWholesale ? `📦 ${productForm.wholesaleUnit || '20 kg Mandi Crate'}` : '🛒 Retail Only'}
-                  </span>
-                </div>
-                <div>
-                  <span style={{ color: '#64748B', fontWeight: 600, display: 'block', fontSize: '11px' }}>Shelf Life:</span>
-                  <span style={{ color: '#334155', fontWeight: 700 }}>{productForm.shelfLife}</span>
-                </div>
-              </div>
-
-              <div style={{ marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px dashed #CBD5E1' }}>
-                <span style={{ color: '#64748B', fontWeight: 600, display: 'block', fontSize: '11px' }}>Mandi Origin:</span>
-                <span style={{ color: '#334155', fontWeight: 700 }}>{productForm.origin || 'APMC Yard'}</span>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#64748B', fontWeight: 600 }}>Pricing Notice:</span>
-                <span style={{ color: '#B45309', fontWeight: 700, fontSize: '11.5px' }}>
-                  Live price managed at /daily-pricing
-                </span>
-              </div>
-            </div>
-
-            {/* Action Buttons: No vs Yes */}
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-              <button
-                type="button"
-                onClick={() => setIsConfirmProductModalOpen(false)}
-                style={{
-                  flex: 1,
-                  padding: '11px 16px',
-                  borderRadius: '8px',
-                  border: '1.5px solid #CBD5E1',
-                  background: '#FFFFFF',
-                  color: '#475569',
-                  fontWeight: 700,
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px'
-                }}
-              >
-                <X size={15} />
-                <span>No, Keep Editing</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleConfirmCommitProduct}
-                style={{
-                  flex: 1,
-                  padding: '11px 18px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  background: '#234B3C',
-                  color: '#FFFFFF',
-                  fontWeight: 800,
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 12px rgba(35, 75, 60, 0.3)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px'
-                }}
-              >
-                <CheckCircle2 size={16} />
-                <span>Yes, Confirm & Catalog</span>
-              </button>
-            </div>
           </div>
         </div>
       )}

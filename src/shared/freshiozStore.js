@@ -178,7 +178,7 @@ export function prepareServerPayload(storeData) {
 // Cross-process server persistence directly to NestJS backend & PostgreSQL
 export async function pushStoreToServer(storeData) {
   try {
-    const token = localStorage.getItem('freshioz_auth_token');
+    const token = localStorage.getItem('freshioz_auth_token') || localStorage.getItem('freshioz_admin_token');
     const headers = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
@@ -238,7 +238,7 @@ export function areEntityCollectionsEqual(localData, serverData) {
 
 export async function syncFreshiozStoreFromServer() {
   try {
-    const token = localStorage.getItem('freshioz_auth_token');
+    const token = localStorage.getItem('freshioz_auth_token') || localStorage.getItem('freshioz_admin_token');
     const headers = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
 

@@ -514,8 +514,20 @@ export default function DailyPricingPage() {
 
                       {/* Category */}
                       <td>
-                        <span style={{ fontSize: '11px', background: '#F1F5F9', padding: '2px 8px', borderRadius: '4px', fontWeight: 700, color: '#334155' }}>
-                          {categories.find(c => c.id === (prod.category || prod.categoryId))?.name || prod.category || prod.categoryId || 'Produce'}
+                        <span style={{ fontSize: '11px', background: '#F1F5F9', padding: '3px 8px', borderRadius: '5px', fontWeight: 700, color: '#1E293B' }}>
+                          {(() => {
+                            const catKey = prod.category || prod.categoryId || '';
+                            const matchedCat = categories.find(c => 
+                              c.id === catKey || 
+                              c.id?.toLowerCase() === catKey.toLowerCase() ||
+                              c.name?.toLowerCase() === catKey.toLowerCase()
+                            );
+                            if (matchedCat?.name) return matchedCat.name;
+                            if (catKey) {
+                              return catKey.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                            }
+                            return 'Produce';
+                          })()}
                         </span>
                       </td>
 
