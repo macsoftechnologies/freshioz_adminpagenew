@@ -192,7 +192,7 @@ export default function SalesOnboardingPage() {
       createdAt: new Date().toISOString(),
       createdById: currentUser?.id || 'emp-103',
       salesRepName: currentUser?.name || 'Field Sales Rep',
-      salesRepPhone: currentUser?.phone || '9845011000',
+      salesRepPhone: currentUser?.phone || '9999999999',
       convertedLeadId: leadId || null,
       balanceEarned: 0,
       totalOrdersDelivered: 0,
