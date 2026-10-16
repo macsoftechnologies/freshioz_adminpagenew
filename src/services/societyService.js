@@ -16,7 +16,7 @@ export const societyService = {
   async update(id, data) {
     return apiClient(`/societies/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(data),
+      body: JSON.stringify({ id, ...data }),
     });
   },
   async requestPayout(id, amount) {

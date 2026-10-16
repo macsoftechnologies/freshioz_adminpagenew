@@ -16,7 +16,7 @@ export const warehouseService = {
   async update(id, data) {
     return apiClient(`/warehouses/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(data),
+      body: JSON.stringify({ id, ...data }),
     });
   },
   async delete(id) {
