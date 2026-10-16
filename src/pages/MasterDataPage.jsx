@@ -142,7 +142,7 @@ export default function MasterDataPage() {
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isUnitModalOpen, setIsUnitModalOpen] = useState(false);
-  const [_isConfirmProductModalOpen, _setIsConfirmProductModalOpen] = useState(false);
+  const [isConfirmProductModalOpen, setIsConfirmProductModalOpen] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -577,10 +577,13 @@ export default function MasterDataPage() {
 
   // Filtered datasets
   const filteredProducts = products.filter(p => {
-    const pName = p.name || '';
-    const pCat = p.category || p.categoryId || '';
-    const pOrigin = p.origin || '';
-    const q = searchQuery.toLowerCase();
+    const pName = String(p.name || '');
+    const rawCat = p.category;
+    const pCat = typeof rawCat === 'object' && rawCat !== null 
+      ? String(rawCat.name || rawCat.id || '') 
+      : String(p.categoryId || rawCat || '');
+    const pOrigin = String(p.origin || '');
+    const q = (searchQuery || '').toLowerCase();
     return (
       pName.toLowerCase().includes(q) ||
       pCat.toLowerCase().includes(q) ||
@@ -594,13 +597,13 @@ export default function MasterDataPage() {
   );
 
   const filteredCategories = categories.filter(c => 
-    c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.id.toLowerCase().includes(searchQuery.toLowerCase())
+    String(c?.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    String(c?.id || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const filteredUnits = units.filter(u => 
-    u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (u.label && u.label.toLowerCase().includes(searchQuery.toLowerCase()))
+    String(u?.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    String(u?.label || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -928,12 +931,16 @@ export default function MasterDataPage() {
                           display: 'inline-block'
                         }}>
                           {(() => {
-                            const catKey = prod.category || prod.categoryId || '';
-                            const matchedCat = categories.find(c => 
-                              c.id === catKey || 
-                              c.id?.toLowerCase() === catKey.toLowerCase() ||
-                              c.name?.toLowerCase() === catKey.toLowerCase()
-                            );
+                            const rawCat = prod.category;
+                            const catKey = typeof rawCat === 'object' && rawCat !== null 
+                              ? String(rawCat.id || rawCat.name || '')
+                              : String(prod.categoryId || rawCat || '');
+                            const target = catKey.toLowerCase();
+                            const matchedCat = categories.find(c => {
+                              const cId = String(c?.id || '').toLowerCase();
+                              const cName = String(c?.name || '').toLowerCase();
+                              return c?.id === catKey || cId === target || cName === target;
+                            });
                             if (matchedCat?.name) return matchedCat.name;
                             if (catKey) {
                               return catKey.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
@@ -1015,10 +1022,14 @@ export default function MasterDataPage() {
                             onClick={() => {
                               setEditingId(prod.id);
                               const isStandardBadge = ['Harvested Today', 'Harvested Today at Dawn', 'Mandi Arrival Today', 'Orchard Fresh', 'Cold Chain Fresh', '100% Certified Organic', 'Hydroponic Fresh', 'NONE'].includes(prod.badge);
+                              const rawCat = prod.category;
+                              const resolvedCatId = typeof rawCat === 'object' && rawCat !== null 
+                                ? (rawCat.id || rawCat.slug || 'VEGETABLES') 
+                                : (prod.categoryId || rawCat || 'VEGETABLES');
                               setProductForm({
                                 id: prod.id,
                                 name: prod.name,
-                                category: prod.category || prod.categoryId || 'VEGETABLES',
+                                category: resolvedCatId,
                                 defaultUnit: prod.defaultUnit || prod.retailUnit || '1 kg',
                                 retailMarketPrice: prod.retailMarketPrice ?? 55,
                                 retailPrice: prod.retailPrice ?? 40,
