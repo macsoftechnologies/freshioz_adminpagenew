@@ -1,5 +1,5 @@
 // Freshioz Admin Progressive Web App Service Worker
-const CACHE_NAME = 'freshioz-admin-pwa-v2';
+const CACHE_NAME = 'freshioz-admin-pwa-v5';
 const CORE_ASSETS = [
   '/admin/',
   '/admin/index.html',
@@ -27,6 +27,7 @@ self.addEventListener('activate', (event) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
+            console.log('[PWA Admin] Deleting outdated cache:', key);
             return caches.delete(key);
           }
         })
@@ -40,7 +41,6 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
 
   // 1. Strictly bypass non-GET requests (POST, PUT, DELETE, PATCH, etc.)
-  // Never intercept data synchronization or API submissions
   if (req.method !== 'GET') return;
 
   const url = new URL(req.url);
@@ -70,9 +70,25 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 4. Static assets (images, scripts, styles): Stale-while-revalidate
+  // 4. JS & CSS Bundles: Strictly Network First so app updates are immediately received
+  if (url.pathname.match(/\.(js|css)$/i)) {
+    event.respondWith(
+      fetch(req)
+        .then((networkRes) => {
+          if (networkRes && networkRes.status === 200) {
+            const clone = networkRes.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(req, clone));
+          }
+          return networkRes;
+        })
+        .catch(() => caches.match(req))
+    );
+    return;
+  }
+
+  // 5. Static media (images, fonts): Stale-while-revalidate
   if (
-    url.pathname.match(/\.(js|css|png|jpg|jpeg|svg|webp|woff2?|ico)$/i) ||
+    url.pathname.match(/\.(png|jpg|jpeg|svg|webp|woff2?|ico)$/i) ||
     url.origin === 'https://fonts.googleapis.com' ||
     url.origin === 'https://fonts.gstatic.com'
   ) {
