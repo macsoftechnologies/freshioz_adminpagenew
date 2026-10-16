@@ -54,7 +54,13 @@ export function AdminRoleProvider({ children }) {
   useEffect(() => {
     const handleSync = (e) => setStore(e.detail || getFreshiozStore());
     window.addEventListener('freshioz_store_updated', handleSync);
-    window.addEventListener('storage', () => setStore(getFreshiozStore()));
+
+    const handleStorage = (e) => {
+      if (!e.key || e.key === 'freshioz_ops_store_v1') {
+        setStore(getFreshiozStore());
+      }
+    };
+    window.addEventListener('storage', handleStorage);
 
     // Initial server sync
     syncFreshiozStoreFromServer();
@@ -77,6 +83,7 @@ export function AdminRoleProvider({ children }) {
 
     return () => {
       window.removeEventListener('freshioz_store_updated', handleSync);
+      window.removeEventListener('storage', handleStorage);
       window.removeEventListener('focus', handleFocus);
       clearInterval(interval);
     };

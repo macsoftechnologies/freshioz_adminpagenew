@@ -31,6 +31,8 @@ export default function WarehousesPage() {
   const warehouses = store.warehouses || [];
   const societies = store.societies || [];
 
+  const [isLoading, setIsLoading] = useState(!store.warehouses || store.warehouses.length === 0);
+
   useEffect(() => {
     let isMounted = true;
     async function loadWarehouses() {
@@ -41,6 +43,8 @@ export default function WarehousesPage() {
         }
       } catch (err) {
         console.warn('Initial warehouses load note:', err);
+      } finally {
+        if (isMounted) setIsLoading(false);
       }
     }
     loadWarehouses();
@@ -339,7 +343,16 @@ export default function WarehousesPage() {
               </tr>
             </thead>
             <tbody>
-              {warehouses.length === 0 ? (
+              {isLoading ? (
+                <tr>
+                  <td colSpan="9" style={{ textAlign: 'center', padding: '48px 16px', color: '#64748B' }}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', fontSize: '13px', fontWeight: 600 }}>
+                      <span style={{ width: '16px', height: '16px', border: '2.5px solid #CBD5E1', borderTopColor: '#234B3C', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />
+                      <span>Synchronizing live fulfillment hubs...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : warehouses.length === 0 ? (
                 <tr>
                   <td colSpan="9">
                     <div className="admin-empty-state">

@@ -34,9 +34,10 @@ export {
   DEFAULT_STORE
 };
 
-// Storage key with clean slate versioning
-const STORAGE_KEY = 'freshioz_master_store_clean_v6';
+// Isolated Operations Storage Key for Admin Portal (independent of shopper web)
+const STORAGE_KEY = 'freshioz_ops_store_v1';
 const LEGACY_STORAGE_KEYS = [
+  'freshioz_master_store_clean_v6',
   'freshioz_master_store_clean_v5',
   'freshioz_master_store_clean_v4',
   'freshioz_master_store_clean_v3',
@@ -324,17 +325,21 @@ export async function syncFreshiozStoreFromServer() {
       const serverData = await res.json();
       if (serverData && typeof serverData === 'object' && Array.isArray(serverData.categories)) {
         const currentLocal = getFreshiozStore();
-        // Only update storage and dispatch re-render if data collections ACTUALLY changed.
-        // This prevents aggressive re-renders from interrupting user operations.
         if (!areEntityCollectionsEqual(currentLocal, serverData)) {
-          const mergedOrders = Array.isArray(serverData.orders) ? serverData.orders : [];
-          const mergedProcurement = Array.isArray(serverData.procurementLogs) ? serverData.procurementLogs : [];
-          const mergedVendors = Array.isArray(serverData.vendors) ? serverData.vendors : [];
-          const mergedWarehouses = Array.isArray(serverData.warehouses) ? serverData.warehouses : [];
-          const mergedSocieties = Array.isArray(serverData.societies) ? serverData.societies : [];
-          const mergedWithdrawals = Array.isArray(serverData.withdrawals) ? serverData.withdrawals : [];
-          const mergedSocietyRequests = Array.isArray(serverData.societyRequests) ? serverData.societyRequests : [];
-          const mergedInventory = serverData.warehouseInventory || {};
+          // Guard: If token was absent, backend returned guest view (omitted internal staff collections).
+          // Retain local operational data so screens do not flicker or wipe out.
+          const hasStaffData = Boolean(token) || (Array.isArray(serverData.orders) && serverData.orders.length > 0);
+
+          const mergedOrders = hasStaffData && Array.isArray(serverData.orders) ? serverData.orders : (currentLocal.orders || []);
+          const mergedProcurement = hasStaffData && Array.isArray(serverData.procurementLogs) ? serverData.procurementLogs : (currentLocal.procurementLogs || []);
+          const mergedVendors = hasStaffData && Array.isArray(serverData.vendors) ? serverData.vendors : (currentLocal.vendors || []);
+          const mergedWarehouses = Array.isArray(serverData.warehouses) && serverData.warehouses.length > 0 ? serverData.warehouses : (currentLocal.warehouses || []);
+          const mergedSocieties = Array.isArray(serverData.societies) && serverData.societies.length > 0 ? serverData.societies : (currentLocal.societies || []);
+          const mergedWithdrawals = hasStaffData && Array.isArray(serverData.withdrawals) ? serverData.withdrawals : (currentLocal.withdrawals || []);
+          const mergedSocietyRequests = hasStaffData && Array.isArray(serverData.societyRequests) ? serverData.societyRequests : (currentLocal.societyRequests || []);
+          const mergedInventory = (serverData.warehouseInventory && Object.keys(serverData.warehouseInventory).length > 0)
+            ? serverData.warehouseInventory 
+            : (currentLocal.warehouseInventory || {});
 
           const mergedData = {
             ...currentLocal,
