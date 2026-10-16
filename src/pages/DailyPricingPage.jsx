@@ -74,12 +74,20 @@ export default function DailyPricingPage() {
     const discountPercent = Number(prod.bulkDiscountPercent) || 0;
     const retailPrice = Number(prod.retailPrice) || 0;
 
-    if (minQty > 0 && discountPercent > 0 && retailPrice > 0) {
-      const effectiveRate = Math.round(retailPrice * (1 - discountPercent / 100));
-      const savingsPerUnit = Math.round(retailPrice - effectiveRate);
+    if (minQty > 0 && retailPrice > 0) {
+      const effectiveRate = prod.bulkPrice !== undefined && prod.bulkPrice !== ''
+        ? Number(prod.bulkPrice)
+        : (discountPercent > 0 ? Math.round(retailPrice * (1 - discountPercent / 100)) : retailPrice);
+
+      const calculatedPercent = (retailPrice > effectiveRate && retailPrice > 0)
+        ? Math.round(((retailPrice - effectiveRate) / retailPrice) * 100)
+        : discountPercent;
+
+      const savingsPerUnit = Math.max(0, Math.round(retailPrice - effectiveRate));
+
       return {
         minQty,
-        discountPercent,
+        discountPercent: calculatedPercent,
         effectiveRate,
         savingsPerUnit,
         unit: prod.retailUnit || prod.defaultUnit || 'kg'
@@ -93,7 +101,42 @@ export default function DailyPricingPage() {
     isEditingRef.current = true;
     setProducts(prev => prev.map(p => {
       if (p.id === id) {
-        return { ...p, [field]: value === '' ? '' : Number(value) };
+        const updated = { ...p, [field]: value === '' ? '' : Number(value) };
+        if (field === 'retailPrice') {
+          const rPrice = Number(value) || 0;
+          const bPrice = updated.bulkPrice !== undefined && updated.bulkPrice !== ''
+            ? Number(updated.bulkPrice)
+            : (updated.bulkDiscountPercent > 0 ? Math.round(rPrice * (1 - updated.bulkDiscountPercent / 100)) : rPrice);
+          if (rPrice > 0 && bPrice < rPrice) {
+            updated.bulkDiscountPercent = Math.round(((rPrice - bPrice) / rPrice) * 100);
+            updated.bulkPrice = bPrice;
+          }
+        }
+        return updated;
+      }
+      return p;
+    }));
+  };
+
+  const handleBulkPriceChange = (id, newBulkPriceStr) => {
+    if (isPastDate) return;
+    isEditingRef.current = true;
+    setProducts(prev => prev.map(p => {
+      if (p.id === id) {
+        if (newBulkPriceStr === '') {
+          return { ...p, bulkPrice: '', bulkDiscountPercent: 0 };
+        }
+        const bPrice = Number(newBulkPriceStr);
+        const rPrice = Number(p.retailPrice) || 0;
+        let pct = 0;
+        if (rPrice > 0 && bPrice >= 0 && bPrice < rPrice) {
+          pct = Math.round(((rPrice - bPrice) / rPrice) * 100);
+        }
+        return {
+          ...p,
+          bulkPrice: bPrice,
+          bulkDiscountPercent: pct
+        };
       }
       return p;
     }));
@@ -458,8 +501,13 @@ export default function DailyPricingPage() {
                     (Active Selling Rate)
                   </span>
                 </th>
-                <th style={{ minWidth: '220px' }}>Bulk Quantity Tier (Min Qty)</th>
-                <th style={{ minWidth: '200px' }}>Bulk Discount % & Live Rate</th>
+                <th style={{ minWidth: '160px' }}>Bulk Quantity Tier (Min Qty)</th>
+                <th style={{ minWidth: '200px' }}>
+                  Bulk Selling Rate (₹)
+                  <span style={{ fontSize: '10px', color: '#D97706', display: 'block', fontWeight: 700 }}>
+                    (Auto-Calculates % Discount)
+                  </span>
+                </th>
                 <th style={{ minWidth: '120px' }}>GST % (Editable)</th>
               </tr>
             </thead>
@@ -603,128 +651,87 @@ export default function DailyPricingPage() {
                         </div>
                       </td>
 
-                      {/* Bulk Quantity Tier (Min Qty) */}
+                      {/* Bulk Quantity Tier (Min Qty) - Clean Input */}
                       <td>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>Above:</span>
-                            <input
-                              type="number"
-                              min="0"
-                              placeholder="0"
-                              disabled={isPastDate}
-                              value={prod.bulkMinQty ?? ''}
-                              onChange={(e) => handlePriceChange(prod.id, 'bulkMinQty', e.target.value)}
-                              style={{
-                                width: '64px',
-                                height: '32px',
-                                padding: '0 6px',
-                                borderRadius: '6px',
-                                border: '1.5px solid #CBD5E1',
-                                fontWeight: 800,
-                                fontSize: '12.5px',
-                                textAlign: 'center',
-                                background: isPastDate ? '#F1F5F9' : '#FFFFFF',
-                                cursor: isPastDate ? 'not-allowed' : 'text',
-                                outline: 'none'
-                              }}
-                            />
-                            <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#334155' }}>
-                              {prod.retailUnit || prod.defaultUnit || 'kg'}
-                            </span>
-                          </div>
-                          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                            {[5, 10].map(q => (
-                              <button
-                                key={q}
-                                type="button"
-                                disabled={isPastDate}
-                                onClick={() => {
-                                  handlePriceChange(prod.id, 'bulkMinQty', q);
-                                  if (!prod.bulkDiscountPercent) {
-                                    handlePriceChange(prod.id, 'bulkDiscountPercent', q === 5 ? 10 : 15);
-                                  }
-                                }}
-                                style={{
-                                  fontSize: '10.5px',
-                                  padding: '2px 8px',
-                                  borderRadius: '4px',
-                                  border: minQty === q ? '1px solid #234B3C' : '1px solid #CBD5E1',
-                                  background: minQty === q ? '#234B3C' : '#FFFFFF',
-                                  color: minQty === q ? '#FFFFFF' : '#475569',
-                                  fontWeight: 700,
-                                  cursor: isPastDate ? 'not-allowed' : 'pointer',
-                                  opacity: isPastDate ? 0.7 : 1
-                                }}
-                              >
-                                {q}+ {prod.retailUnit || 'kg'}
-                              </button>
-                            ))}
-                            {minQty > 0 && !isPastDate && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  handlePriceChange(prod.id, 'bulkMinQty', 0);
-                                  handlePriceChange(prod.id, 'bulkDiscountPercent', 0);
-                                }}
-                                style={{
-                                  fontSize: '10.5px',
-                                  padding: '2px 6px',
-                                  borderRadius: '4px',
-                                  border: '1px solid #FECDD3',
-                                  background: '#FFF1F2',
-                                  color: '#E11D48',
-                                  fontWeight: 700,
-                                  cursor: 'pointer'
-                                }}
-                                title="Disable bulk discount tier"
-                              >
-                                ✕ Clear
-                              </button>
-                            )}
-                          </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>Above:</span>
+                          <input
+                            type="number"
+                            min="0"
+                            placeholder="0"
+                            disabled={isPastDate}
+                            value={prod.bulkMinQty ?? ''}
+                            onChange={(e) => handlePriceChange(prod.id, 'bulkMinQty', e.target.value)}
+                            style={{
+                              width: '64px',
+                              height: '34px',
+                              padding: '0 8px',
+                              borderRadius: '6px',
+                              border: '1.5px solid #CBD5E1',
+                              fontWeight: 800,
+                              fontSize: '13px',
+                              textAlign: 'center',
+                              background: isPastDate ? '#F1F5F9' : '#FFFFFF',
+                              cursor: isPastDate ? 'not-allowed' : 'text',
+                              outline: 'none'
+                            }}
+                          />
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>
+                            {prod.retailUnit || prod.defaultUnit || 'kg'}
+                          </span>
                         </div>
                       </td>
 
-                      {/* Bulk Discount % & Live Rate Calculation */}
+                      {/* Direct Bulk Selling Price (₹) & Live % Calculation */}
                       <td>
                         {minQty > 0 ? (
-                          <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                              <span style={{ fontSize: '13px', fontWeight: 800, color: isPastDate ? '#64748B' : '#059669' }}>₹</span>
                               <input
                                 type="number"
                                 min="0"
-                                max="90"
-                                placeholder="10"
+                                placeholder={rate ? String(rate) : '36'}
                                 disabled={isPastDate}
-                                value={prod.bulkDiscountPercent ?? 10}
-                                onChange={(e) => handlePriceChange(prod.id, 'bulkDiscountPercent', e.target.value)}
+                                value={
+                                  prod.bulkPrice !== undefined && prod.bulkPrice !== ''
+                                    ? prod.bulkPrice
+                                    : (discount > 0 && rate > 0 ? Math.round(rate * (1 - discount / 100)) : '')
+                                }
+                                onChange={(e) => handleBulkPriceChange(prod.id, e.target.value)}
                                 style={{
-                                  width: '64px',
-                                  height: '32px',
-                                  padding: '0 6px',
+                                  width: '74px',
+                                  height: '34px',
+                                  padding: '0 8px',
                                   borderRadius: '6px',
-                                  border: '1.5px solid #CBD5E1',
+                                  border: isPastDate ? '1.5px solid #CBD5E1' : '1.5px solid #059669',
                                   fontWeight: 800,
-                                  color: isPastDate ? '#64748B' : '#D97706',
-                                  fontSize: '13px',
+                                  color: isPastDate ? '#475569' : '#166534',
+                                  fontSize: '13.5px',
                                   textAlign: 'center',
-                                  background: isPastDate ? '#F1F5F9' : '#FFFFFF',
+                                  background: isPastDate ? '#F1F5F9' : '#F0FDF4',
                                   cursor: isPastDate ? 'not-allowed' : 'text',
                                   outline: 'none'
                                 }}
                               />
-                              <span style={{ fontSize: '12px', fontWeight: 700, color: '#B45309' }}>% OFF</span>
+                              <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748B' }}>
+                                / {prod.retailUnit || prod.defaultUnit || 'kg'}
+                              </span>
                             </div>
-                            {stats && (
-                              <div style={{ marginTop: '4px', fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                <span style={{ color: isPastDate ? '#475569' : '#059669', fontWeight: 800 }}>
-                                  🏷️ ₹{stats.effectiveRate} / {stats.unit}
+
+                            {stats && stats.savingsPerUnit > 0 ? (
+                              <div style={{ fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                                <span style={{ color: '#D97706', fontWeight: 800 }}>
+                                  🏷️ {stats.discountPercent}% OFF
                                 </span>
                                 <span style={{ fontSize: '10px', color: '#64748B' }}>
                                   Save ₹{stats.savingsPerUnit}/{stats.unit} on &ge;{stats.minQty} {stats.unit}
                                 </span>
                               </div>
+                            ) : (
+                              <span style={{ fontSize: '10.5px', color: '#94A3B8' }}>
+                                {rate > 0 ? `Enter rate < ₹${rate}` : 'Same as retail rate'}
+                              </span>
                             )}
                           </div>
                         ) : (
@@ -881,7 +888,7 @@ export default function DailyPricingPage() {
                       </div>
                       <div style={{ fontSize: '11px', color: p.bulkMinQty > 0 ? '#B45309' : '#64748B', fontWeight: 600 }}>
                         {p.bulkMinQty > 0 && p.bulkDiscountPercent > 0 
-                          ? `Bulk: ${p.bulkDiscountPercent}% OFF for ${p.bulkMinQty}+ ${p.retailUnit || 'kg'}` 
+                          ? `Bulk: ₹${p.bulkPrice !== undefined && p.bulkPrice !== '' ? p.bulkPrice : Math.round(p.retailPrice * (1 - p.bulkDiscountPercent / 100))}/${p.retailUnit || 'kg'} (${p.bulkDiscountPercent}% OFF on ${p.bulkMinQty}+ ${p.retailUnit || 'kg'})` 
                           : 'Standard Retail Only'}
                       </div>
                     </div>

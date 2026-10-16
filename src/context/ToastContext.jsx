@@ -1,10 +1,11 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { CheckCircle2, AlertCircle, Info, AlertTriangle, X } from 'lucide-react';
 
 const ToastContext = createContext(null);
 
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
+  const syncErrorToastId = useRef(null);
 
   const hideToast = useCallback((id) => {
     setToasts(prev => prev.filter(t => t.id !== id));
@@ -26,12 +27,18 @@ export function ToastProvider({ children }) {
 
   useEffect(() => {
     const handleSyncError = (e) => {
-      const errMsg = e.detail || 'Database synchronization failed.';
-      showToast(`Database Sync Error: ${errMsg}`, 'error', 6000);
+      if (syncErrorToastId.current) {
+        hideToast(syncErrorToastId.current);
+      }
+      syncErrorToastId.current = showToast(
+        'Database synchronization failed. Please try again shortly.',
+        'error',
+        6000
+      );
     };
     window.addEventListener('freshioz_sync_error', handleSyncError);
     return () => window.removeEventListener('freshioz_sync_error', handleSyncError);
-  }, [showToast]);
+  }, [hideToast, showToast]);
 
   return (
     <ToastContext.Provider value={{ showToast, hideToast, toasts }}>
