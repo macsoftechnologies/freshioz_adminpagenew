@@ -221,6 +221,23 @@ export async function pushStoreToServer(storeData) {
   }
 }
 
+function areInventoriesEqual(invA = {}, invB = {}) {
+  if (invA === invB) return true;
+  if (!invA || !invB || typeof invA !== 'object' || typeof invB !== 'object') return false;
+  const whIdsA = Object.keys(invA);
+  const whIdsB = Object.keys(invB);
+  const allWhIds = new Set([...whIdsA, ...whIdsB]);
+  for (const whId of allWhIds) {
+    const mapA = invA[whId] || {};
+    const mapB = invB[whId] || {};
+    const allKeys = new Set([...Object.keys(mapA), ...Object.keys(mapB)]);
+    for (const k of allKeys) {
+      if (Number(mapA[k] || 0) !== Number(mapB[k] || 0)) return false;
+    }
+  }
+  return true;
+}
+
 export function areEntityCollectionsEqual(localData, serverData) {
   if (!localData || !serverData) return false;
   const collections = [
@@ -229,19 +246,46 @@ export function areEntityCollectionsEqual(localData, serverData) {
     'societyRequests', 'withdrawals', 'employees'
   ];
   for (const key of collections) {
-    const localArr = localData[key] || [];
-    const serverArr = serverData[key] || [];
+    const localVal = localData[key];
+    const serverVal = serverData[key];
+
+    if (key === 'warehouseInventory') {
+      if (!areInventoriesEqual(localVal, serverVal)) return false;
+      continue;
+    }
+
+    const localArr = localVal || [];
+    const serverArr = serverVal || [];
     if (!Array.isArray(localArr) || !Array.isArray(serverArr)) {
       if (JSON.stringify(localArr) !== JSON.stringify(serverArr)) return false;
       continue;
     }
+
+    // Safeguard: If server returned 0 items for operational tables (unauthenticated/guest polling),
+    // do not treat it as an active change that clears existing local data
+    if (serverArr.length === 0 && localArr.length > 0 && ['orders', 'procurementLogs', 'vendors', 'employees'].includes(key)) {
+      continue;
+    }
+
     if (localArr.length !== serverArr.length) return false;
-    for (let i = 0; i < localArr.length; i++) {
-      const l = localArr[i];
-      const s = serverArr[i];
-      if (!l || !s) return false;
-      if (l.id !== s.id || l.status !== s.status || l.updatedAt !== s.updatedAt || l.name !== s.name) {
-        return false;
+
+    // Map-based lookup by ID to ignore array sorting order differences between server & client
+    const localMap = new Map();
+    for (const item of localArr) {
+      if (item && item.id) localMap.set(String(item.id), item);
+    }
+
+    for (const s of serverArr) {
+      if (!s || !s.id) continue;
+      const l = localMap.get(String(s.id));
+      if (!l) return false;
+      if (l.status !== s.status || l.name !== s.name) return false;
+      if (key === 'orders') {
+        if ((l.items?.length || 0) !== (s.items?.length || 0)) return false;
+        if (l.deliverySlot !== s.deliverySlot || l.deliveryDate !== s.deliveryDate) return false;
+      }
+      if (key === 'products') {
+        if (l.retailPrice !== s.retailPrice || l.wholesalePrice !== s.wholesalePrice) return false;
       }
     }
   }
@@ -273,11 +317,34 @@ export async function syncFreshiozStoreFromServer() {
       if (serverData && typeof serverData === 'object' && Array.isArray(serverData.categories)) {
         const currentLocal = getFreshiozStore();
         // Only update storage and dispatch re-render if data collections ACTUALLY changed.
-        // This prevents aggressive re-renders every 5s from interrupting user typing or closing open modals.
+        // This prevents aggressive re-renders from interrupting user operations.
         if (!areEntityCollectionsEqual(currentLocal, serverData)) {
+          // Safeguard: Never overwrite operational collections (orders, procurementLogs, warehouseInventory, vendors)
+          // with empty data if server returned empty due to unauthenticated / guest / public store response.
+          const mergedOrders = (Array.isArray(serverData.orders) && serverData.orders.length > 0)
+            ? serverData.orders
+            : (currentLocal.orders || []);
+
+          const mergedProcurement = (Array.isArray(serverData.procurementLogs) && serverData.procurementLogs.length > 0)
+            ? serverData.procurementLogs
+            : (currentLocal.procurementLogs || []);
+
+          const serverInv = serverData.warehouseInventory || {};
+          const localInv = currentLocal.warehouseInventory || {};
+          const hasServerInv = Object.keys(serverInv).some(wh => Object.keys(serverInv[wh] || {}).length > 0);
+          const mergedInventory = hasServerInv ? serverInv : localInv;
+
+          const mergedVendors = (Array.isArray(serverData.vendors) && serverData.vendors.length > 0)
+            ? serverData.vendors
+            : (currentLocal.vendors || []);
+
           const mergedData = {
             ...currentLocal,
             ...serverData,
+            orders: mergedOrders,
+            procurementLogs: mergedProcurement,
+            warehouseInventory: mergedInventory,
+            vendors: mergedVendors,
             dailyPricingHistory: currentLocal.dailyPricingHistory || serverData.dailyPricingHistory || {}
           };
           localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedData));

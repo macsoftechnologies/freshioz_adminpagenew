@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   ClipboardList, 
@@ -108,12 +108,23 @@ export default function ProcurementDemandPage() {
   }, [selectedSlot, selectedWarehouseId, activeTab, selectedDate]);
 
   // Helper to query warehouse stock (single warehouse or summed citywide across all hubs)
-  const getCropStockInWarehouse = (cropName) => {
+  const getCropStockInWarehouse = (cropName, prodId) => {
+    const getWhQty = (whInv) => {
+      if (!whInv) return 0;
+      if (cropName && whInv[cropName] !== undefined) return Number(whInv[cropName]) || 0;
+      if (prodId && whInv[prodId] !== undefined) return Number(whInv[prodId]) || 0;
+      const lower = (cropName || '').toLowerCase();
+      for (const [k, v] of Object.entries(whInv)) {
+        if (k.toLowerCase() === lower) return Number(v) || 0;
+      }
+      return 0;
+    };
+
     if (selectedWarehouseId !== 'ALL') {
-      return Number(store.warehouseInventory?.[selectedWarehouseId]?.[cropName] || 0);
+      return getWhQty(store.warehouseInventory?.[selectedWarehouseId]);
     }
     return (warehouses || []).reduce((sum, w) => {
-      return sum + Number(store.warehouseInventory?.[w.id]?.[cropName] || 0);
+      return sum + getWhQty(store.warehouseInventory?.[w.id]);
     }, 0);
   };
 
@@ -129,213 +140,272 @@ export default function ProcurementDemandPage() {
 
   // Discover all available delivery dates and slots from orders
   const allOrders = store.orders || [];
-  const availableDeliveryDates = Array.from(new Set(allOrders.map(o => o.deliveryDate).filter(Boolean)));
+  const availableDeliveryDates = useMemo(() => {
+    return Array.from(new Set(allOrders.map(o => o.deliveryDate).filter(Boolean)));
+  }, [allOrders]);
   const availableSlots = ['Morning Fresh Slot', 'Evening Fresh Slot'];
 
   // Active customer orders that require fulfillment (not delivered or cancelled)
-  const activeOrders = allOrders.filter(order => {
-    if (order.status === 'CANCELLED' || order.status === 'DELIVERED') return false;
-    if (!matchesWarehouse(order)) return false;
-    if (selectedSlot !== 'ALL') {
-      const orderSlot = order.deliverySlot || 'Morning Fresh Slot';
-      if (!orderSlot.toLowerCase().includes(selectedSlot.toLowerCase())) return false;
-    }
-    if (selectedDate !== 'ALL' && order.deliveryDate !== selectedDate) return false;
-    return true;
-  });
-
-  // Calculate gross customer demand by produce item
-  const cropDemandMap = {};
-  activeOrders.forEach(order => {
-    (order.items || []).forEach(item => {
-      const itemName = item.name || item.productName || 'Fresh Item';
-      // Flexible product match (id, exact name, or partial match)
-      const prod = (store.products || []).find(p => 
-        (item.id && p.id === item.id) ||
-        p.name.toLowerCase() === itemName.toLowerCase() ||
-        p.name.toLowerCase().includes(itemName.toLowerCase()) ||
-        itemName.toLowerCase().includes(p.name.toLowerCase())
-      ) || {};
-
-      const unit = item.unit || prod.retailUnit || 'kg';
-      const qty = Number(item.qty || item.quantity) || 1;
-      const weightPerUnitKg = parseUnitWeightInKg(unit);
-      const itemTotalKg = Number((weightPerUnitKg * qty).toFixed(2));
-
-      if (!cropDemandMap[itemName]) {
-        cropDemandMap[itemName] = {
-          name: itemName,
-          category: prod.category || 'VEGETABLES',
-          origin: prod.origin || 'APMC Mandi Auction Yard',
-          grossDemandKg: 0,
-          packages: {},
-          benchmarkRate: prod.wholesalePrice 
-            ? Math.round(prod.wholesalePrice / 20) 
-            : Math.round((prod.retailPrice || 40) * 0.65),
-          retailPrice: prod.retailPrice || 40,
-          ordersCount: 0,
-          orderIds: new Set(),
-          societies: new Set(),
-          slotBreakdown: { 'Morning Fresh Slot': 0, 'Evening Fresh Slot': 0 }
-        };
+  const activeOrders = useMemo(() => {
+    return allOrders.filter(order => {
+      if (order.status === 'CANCELLED' || order.status === 'DELIVERED') return false;
+      if (!matchesWarehouse(order)) return false;
+      if (selectedSlot !== 'ALL') {
+        const orderSlot = order.deliverySlot || 'Morning Fresh Slot';
+        if (!orderSlot.toLowerCase().includes(selectedSlot.toLowerCase())) return false;
       }
-
-      cropDemandMap[itemName].grossDemandKg = Number((cropDemandMap[itemName].grossDemandKg + itemTotalKg).toFixed(2));
-      cropDemandMap[itemName].packages[unit] = (cropDemandMap[itemName].packages[unit] || 0) + qty;
-      cropDemandMap[itemName].ordersCount += 1;
-      cropDemandMap[itemName].orderIds.add(order.id);
-      if (order.societyName) cropDemandMap[itemName].societies.add(order.societyName);
-
-      const isEvening = (order.deliverySlot || '').toLowerCase().includes('evening');
-      const sKey = isEvening ? 'Evening Fresh Slot' : 'Morning Fresh Slot';
-      cropDemandMap[itemName].slotBreakdown[sKey] = Number((cropDemandMap[itemName].slotBreakdown[sKey] + itemTotalKg).toFixed(2));
+      if (selectedDate !== 'ALL' && order.deliveryDate !== selectedDate) return false;
+      return true;
     });
-  });
+  }, [allOrders, selectedWarehouseId, selectedSlot, selectedDate, warehouses]);
+
+  // Calculate gross customer demand by produce item (grouped deterministically by canonical produce name)
+  const cropDemandMap = useMemo(() => {
+    const map = {};
+    const productsList = store.products || [];
+
+    activeOrders.forEach(order => {
+      (order.items || []).forEach(item => {
+        const rawName = item.name || item.productName || 'Fresh Item';
+        // Flexible product match (id, exact name, or partial match)
+        const prod = productsList.find(p => 
+          (item.id && p.id === item.id) ||
+          p.name.toLowerCase() === rawName.toLowerCase() ||
+          p.name.toLowerCase().includes(rawName.toLowerCase()) ||
+          rawName.toLowerCase().includes(p.name.toLowerCase())
+        ) || {};
+
+        // Canonical name from catalog prevents splitting the same produce into different rows
+        const itemName = prod.name || rawName;
+        const unit = item.unit || prod.retailUnit || 'kg';
+        const qty = Number(item.qty || item.quantity) || 1;
+        const weightPerUnitKg = parseUnitWeightInKg(unit);
+        const itemTotalKg = Number((weightPerUnitKg * qty).toFixed(2));
+
+        if (!map[itemName]) {
+          map[itemName] = {
+            name: itemName,
+            productId: prod.id || item.id || '',
+            category: prod.category || 'VEGETABLES',
+            origin: prod.origin || 'APMC Mandi Auction Yard',
+            grossDemandKg: 0,
+            packages: {},
+            benchmarkRate: prod.wholesalePrice 
+              ? Math.round(prod.wholesalePrice / 20) 
+              : Math.round((prod.retailPrice || 40) * 0.65),
+            retailPrice: prod.retailPrice || 40,
+            ordersCount: 0,
+            orderIds: new Set(),
+            societies: new Set(),
+            slotBreakdown: { 'Morning Fresh Slot': 0, 'Evening Fresh Slot': 0 }
+          };
+        }
+
+        map[itemName].grossDemandKg = Number((map[itemName].grossDemandKg + itemTotalKg).toFixed(2));
+        map[itemName].packages[unit] = (map[itemName].packages[unit] || 0) + qty;
+        map[itemName].ordersCount += 1;
+        map[itemName].orderIds.add(order.id);
+        if (order.societyName) map[itemName].societies.add(order.societyName);
+
+        const isEvening = (order.deliverySlot || '').toLowerCase().includes('evening');
+        const sKey = isEvening ? 'Evening Fresh Slot' : 'Morning Fresh Slot';
+        map[itemName].slotBreakdown[sKey] = Number((map[itemName].slotBreakdown[sKey] + itemTotalKg).toFixed(2));
+      });
+    });
+
+    return map;
+  }, [activeOrders, store.products]);
 
   // Calculate already procured quantities directly from matching store.procurementLogs
-  const matchingProcurementLogs = (store.procurementLogs || []).filter(log => {
-    if (selectedWarehouseId !== 'ALL' && log.destinationWarehouseId && log.destinationWarehouseId !== selectedWarehouseId) {
-      return false;
-    }
-    if (selectedSlot !== 'ALL' && log.slot) {
-      if (!log.slot.toLowerCase().includes(selectedSlot.toLowerCase())) return false;
-    }
-    if (selectedDate !== 'ALL' && log.deliveryDate) {
-      if (log.deliveryDate !== selectedDate) return false;
-    }
-    return true;
-  });
-
-  const alreadyProcuredMap = {};
-  matchingProcurementLogs.forEach(log => {
-    (log.items || []).forEach(it => {
-      const cropName = it.name;
-      if (!cropName) return;
-      const unitWeight = parseUnitWeightInKg(it.unit);
-      let numQty = 0;
-      if (typeof it.qty === 'string') {
-        const match = it.qty.match(/(\d+(?:\.\d+)?)/);
-        numQty = match ? parseFloat(match[1]) : 0;
-      } else {
-        numQty = Number(it.qty) || 0;
+  const matchingProcurementLogs = useMemo(() => {
+    return (store.procurementLogs || []).filter(log => {
+      if (selectedWarehouseId !== 'ALL' && log.destinationWarehouseId && log.destinationWarehouseId !== selectedWarehouseId) {
+        return false;
       }
-      const itemKg = Number((unitWeight * numQty).toFixed(2));
-      
-      const matchedKey = Object.keys(cropDemandMap).find(k => 
-        k.toLowerCase() === cropName.toLowerCase() ||
-        k.toLowerCase().includes(cropName.toLowerCase()) ||
-        cropName.toLowerCase().includes(k.toLowerCase())
-      ) || cropName;
-
-      alreadyProcuredMap[matchedKey] = Number(((alreadyProcuredMap[matchedKey] || 0) + itemKg).toFixed(2));
+      if (selectedSlot !== 'ALL' && log.slot) {
+        if (!log.slot.toLowerCase().includes(selectedSlot.toLowerCase())) return false;
+      }
+      if (selectedDate !== 'ALL' && log.deliveryDate) {
+        if (log.deliveryDate !== selectedDate) return false;
+      }
+      return true;
     });
-  });
+  }, [store.procurementLogs, selectedWarehouseId, selectedSlot, selectedDate]);
+
+  const alreadyProcuredMap = useMemo(() => {
+    const map = {};
+    const demandKeys = Object.keys(cropDemandMap);
+    const productsList = store.products || [];
+
+    matchingProcurementLogs.forEach(log => {
+      (log.items || []).forEach(it => {
+        const cropName = it.name;
+        if (!cropName) return;
+        const unitWeight = parseUnitWeightInKg(it.unit);
+        let numQty = 0;
+        if (typeof it.qty === 'string') {
+          const match = it.qty.match(/(\d+(?:\.\d+)?)/);
+          numQty = match ? parseFloat(match[1]) : 0;
+        } else {
+          numQty = Number(it.qty) || 0;
+        }
+        const itemKg = Number((unitWeight * numQty).toFixed(2));
+        
+        // Exact match first to avoid false substring collisions between produce varieties
+        let matchedKey = demandKeys.find(k => k.toLowerCase() === cropName.toLowerCase());
+        if (!matchedKey) {
+          const prod = productsList.find(p => p.name.toLowerCase() === cropName.toLowerCase());
+          if (prod && cropDemandMap[prod.name]) {
+            matchedKey = prod.name;
+          }
+        }
+        if (!matchedKey) {
+          matchedKey = demandKeys.find(k => 
+            k.toLowerCase().startsWith(cropName.toLowerCase()) ||
+            cropName.toLowerCase().startsWith(k.toLowerCase())
+          );
+        }
+        if (!matchedKey) {
+          matchedKey = demandKeys.find(k => 
+            k.toLowerCase().includes(cropName.toLowerCase()) ||
+            cropName.toLowerCase().includes(k.toLowerCase())
+          );
+        }
+        matchedKey = matchedKey || cropName;
+
+        map[matchedKey] = Number(((map[matchedKey] || 0) + itemKg).toFixed(2));
+      });
+    });
+
+    return map;
+  }, [matchingProcurementLogs, cropDemandMap, store.products]);
 
   // Combine into complete Demand Sheet with Rigorous Inventory Reconciliation:
   // Gross Customer Demand minus Total Available Supply (Warehouse Buffer Stock + Mandi Procured Today) = Net Mandi Remaining
-  const allDemandItems = Object.values(cropDemandMap).map(d => {
-    const rawStockKg = getCropStockInWarehouse(d.name);
-    const alreadyProcuredKg = Number(alreadyProcuredMap[d.name] || 0);
+  const allDemandItems = useMemo(() => {
+    const items = Object.values(cropDemandMap).map(d => {
+      const rawStockKg = getCropStockInWarehouse(d.name, d.productId);
+      const alreadyProcuredKg = Number(alreadyProcuredMap[d.name] || 0);
 
-    // Opening / Reserve stock in warehouse prior to today's Mandi purchase
-    // (If warehouse inventory was already incremented upon logging the procurement bill, opening buffer is rawStock - alreadyProcured)
-    const openingStockKg = Math.max(0, Number((rawStockKg - alreadyProcuredKg).toFixed(2)));
+      // Opening / Reserve stock in warehouse prior to today's Mandi purchase
+      const openingStockKg = Math.max(0, Number((rawStockKg - alreadyProcuredKg).toFixed(2)));
 
-    // Total available supply to cover customer demand
-    const totalSupplyCoveredKg = Number((openingStockKg + alreadyProcuredKg).toFixed(2));
+      // Total available supply to cover customer demand
+      const totalSupplyCoveredKg = Number((openingStockKg + alreadyProcuredKg).toFixed(2));
 
-    // Net Mandi Requirement: What is still missing and must be purchased at APMC Mandi
-    const netRequiredKg = Math.max(0, Number((d.grossDemandKg - totalSupplyCoveredKg).toFixed(2)));
-    const estSpend = Math.round(netRequiredKg * d.benchmarkRate);
-    const isFullyCovered = netRequiredKg === 0;
+      // Net Mandi Requirement: What is still missing and must be purchased at APMC Mandi
+      const netRequiredKg = Math.max(0, Number((d.grossDemandKg - totalSupplyCoveredKg).toFixed(2)));
+      const estSpend = Math.round(netRequiredKg * d.benchmarkRate);
+      const isFullyCovered = netRequiredKg === 0;
 
-    return {
-      ...d,
-      rawStockKg,
-      openingStockKg,
-      alreadyProcuredKg,
-      totalSupplyCoveredKg,
-      netRequiredKg,
-      isFullyCovered,
-      estSpend,
-      societiesList: Array.from(d.societies),
-      orderIdsList: Array.from(d.orderIds)
-    };
-  });
+      return {
+        ...d,
+        rawStockKg,
+        openingStockKg,
+        alreadyProcuredKg,
+        totalSupplyCoveredKg,
+        netRequiredKg,
+        isFullyCovered,
+        estSpend,
+        societiesList: Array.from(d.societies),
+        orderIdsList: Array.from(d.orderIds)
+      };
+    });
+
+    // Deterministic sorting: Pending items first (largest requirement first), then fully procured alphabetically
+    items.sort((a, b) => {
+      if (a.isFullyCovered !== b.isFullyCovered) {
+        return a.isFullyCovered ? 1 : -1;
+      }
+      if (!a.isFullyCovered && !b.isFullyCovered) {
+        return b.netRequiredKg - a.netRequiredKg;
+      }
+      return a.name.localeCompare(b.name);
+    });
+
+    return items;
+  }, [cropDemandMap, alreadyProcuredMap, store.warehouseInventory, selectedWarehouseId, warehouses]);
 
   // Pending items that still have net required > 0
-  const pendingDemandList = allDemandItems.filter(d => !d.isFullyCovered);
-  const fullyProcuredItems = allDemandItems.filter(d => d.isFullyCovered);
+  const pendingDemandList = useMemo(() => allDemandItems.filter(d => !d.isFullyCovered), [allDemandItems]);
+  const fullyProcuredItems = useMemo(() => allDemandItems.filter(d => d.isFullyCovered), [allDemandItems]);
 
   // Overall KPIs
-  const totalGrossDemandKg = Number(allDemandItems.reduce((acc, d) => acc + d.grossDemandKg, 0).toFixed(2));
-  const totalOpeningStockKg = Number(allDemandItems.reduce((acc, d) => acc + d.openingStockKg, 0).toFixed(2));
-  const totalAlreadyProcuredKg = Number(allDemandItems.reduce((acc, d) => acc + d.alreadyProcuredKg, 0).toFixed(2));
-  const totalCoveredKg = Number((totalOpeningStockKg + totalAlreadyProcuredKg).toFixed(2));
-  const totalNetRequiredKg = Number(allDemandItems.reduce((acc, d) => acc + d.netRequiredKg, 0).toFixed(2));
-  const totalPendingEstimatedCost = pendingDemandList.reduce((acc, d) => acc + d.estSpend, 0);
+  const totalGrossDemandKg = useMemo(() => Number(allDemandItems.reduce((acc, d) => acc + d.grossDemandKg, 0).toFixed(2)), [allDemandItems]);
+  const totalOpeningStockKg = useMemo(() => Number(allDemandItems.reduce((acc, d) => acc + d.openingStockKg, 0).toFixed(2)), [allDemandItems]);
+  const totalAlreadyProcuredKg = useMemo(() => Number(allDemandItems.reduce((acc, d) => acc + d.alreadyProcuredKg, 0).toFixed(2)), [allDemandItems]);
+  const totalCoveredKg = useMemo(() => Number((totalOpeningStockKg + totalAlreadyProcuredKg).toFixed(2)), [totalOpeningStockKg, totalAlreadyProcuredKg]);
+  const totalNetRequiredKg = useMemo(() => Number(allDemandItems.reduce((acc, d) => acc + d.netRequiredKg, 0).toFixed(2)), [allDemandItems]);
+  const totalPendingEstimatedCost = useMemo(() => pendingDemandList.reduce((acc, d) => acc + d.estSpend, 0), [pendingDemandList]);
 
   // Slot-specific gross demand totals for quick toggle pills
-  const morningGrossKg = Number(allOrders.filter(o => 
-    !['CANCELLED', 'DELIVERED'].includes(o.status) && 
-    matchesWarehouse(o) && 
-    (o.deliverySlot || 'Morning Fresh Slot').includes('Morning')
-  ).reduce((sum, o) => {
-    return sum + (o.items || []).reduce((iSum, it) => iSum + (parseUnitWeightInKg(it.unit) * (Number(it.qty) || 1)), 0);
-  }, 0).toFixed(2));
+  const morningGrossKg = useMemo(() => {
+    return Number(allOrders.filter(o => 
+      !['CANCELLED', 'DELIVERED'].includes(o.status) && 
+      matchesWarehouse(o) && 
+      (o.deliverySlot || 'Morning Fresh Slot').includes('Morning')
+    ).reduce((sum, o) => {
+      return sum + (o.items || []).reduce((iSum, it) => iSum + (parseUnitWeightInKg(it.unit) * (Number(it.qty) || 1)), 0);
+    }, 0).toFixed(2));
+  }, [allOrders, selectedWarehouseId, warehouses]);
 
-  const eveningGrossKg = Number(allOrders.filter(o => 
-    !['CANCELLED', 'DELIVERED'].includes(o.status) && 
-    matchesWarehouse(o) && 
-    (o.deliverySlot || '').includes('Evening')
-  ).reduce((sum, o) => {
-    return sum + (o.items || []).reduce((iSum, it) => iSum + (parseUnitWeightInKg(it.unit) * (Number(it.qty) || 1)), 0);
-  }, 0).toFixed(2));
+  const eveningGrossKg = useMemo(() => {
+    return Number(allOrders.filter(o => 
+      !['CANCELLED', 'DELIVERED'].includes(o.status) && 
+      matchesWarehouse(o) && 
+      (o.deliverySlot || '').includes('Evening')
+    ).reduce((sum, o) => {
+      return sum + (o.items || []).reduce((iSum, it) => iSum + (parseUnitWeightInKg(it.unit) * (Number(it.qty) || 1)), 0);
+    }, 0).toFixed(2));
+  }, [allOrders, selectedWarehouseId, warehouses]);
 
   // Procured produce breakdown for TAB 2 (Already Procured Today)
   const procuredLogs = matchingProcurementLogs;
-  const totalProcuredSpend = procuredLogs.reduce((acc, l) => acc + (l.totalAmountPaid || 0), 0);
-  const totalProcuredKg = procuredLogs.reduce((acc, l) => acc + (l.totalWeightKg || 0), 0);
+  const totalProcuredSpend = useMemo(() => procuredLogs.reduce((acc, l) => acc + (l.totalAmountPaid || 0), 0), [procuredLogs]);
+  const totalProcuredKg = useMemo(() => procuredLogs.reduce((acc, l) => acc + (l.totalWeightKg || 0), 0), [procuredLogs]);
 
   // Group procured produce across logs
-  const procuredProduceMap = {};
-  procuredLogs.forEach(log => {
-    (log.items || []).forEach(it => {
-      const name = it.name || 'Produce Item';
-      if (!procuredProduceMap[name]) {
-        procuredProduceMap[name] = {
-          name,
-          category: 'FARM_PRODUCE',
-          origin: log.mandiName || 'APMC Mandi',
-          totalWeightKg: 0,
-          totalSpend: 0,
-          packages: {},
-          mandiBillNumbers: new Set(),
-          vendors: new Set(),
-          societies: new Set(log.contributingSocieties || []),
-          ordersCount: (log.fulfilledOrderIds || []).length
-        };
-      }
-      const unitWeight = parseUnitWeightInKg(it.unit);
-      let numQty = 0;
-      if (typeof it.qty === 'string') {
-        const match = it.qty.match(/(\d+(?:\.\d+)?)/);
-        numQty = match ? parseFloat(match[1]) : 0;
-      } else {
-        numQty = Number(it.qty) || 0;
-      }
-      const itemKg = Number((unitWeight * numQty).toFixed(2));
-      procuredProduceMap[name].totalWeightKg = Number((procuredProduceMap[name].totalWeightKg + itemKg).toFixed(2));
-      procuredProduceMap[name].totalSpend += Number(it.total) || 0;
-      if (log.billNumber) procuredProduceMap[name].mandiBillNumbers.add(log.billNumber);
-      if (log.vendorName) procuredProduceMap[name].vendors.add(log.vendorName);
+  const procuredProduceList = useMemo(() => {
+    const procuredProduceMap = {};
+    procuredLogs.forEach(log => {
+      (log.items || []).forEach(it => {
+        const name = it.name || 'Produce Item';
+        if (!procuredProduceMap[name]) {
+          procuredProduceMap[name] = {
+            name,
+            category: 'FARM_PRODUCE',
+            origin: log.mandiName || 'APMC Mandi',
+            totalWeightKg: 0,
+            totalSpend: 0,
+            packages: {},
+            mandiBillNumbers: new Set(),
+            vendors: new Set(),
+            societies: new Set(log.contributingSocieties || []),
+            ordersCount: (log.fulfilledOrderIds || []).length
+          };
+        }
+        const unitWeight = parseUnitWeightInKg(it.unit);
+        let numQty = 0;
+        if (typeof it.qty === 'string') {
+          const match = it.qty.match(/(\d+(?:\.\d+)?)/);
+          numQty = match ? parseFloat(match[1]) : 0;
+        } else {
+          numQty = Number(it.qty) || 0;
+        }
+        const itemKg = Number((unitWeight * numQty).toFixed(2));
+        procuredProduceMap[name].totalWeightKg = Number((procuredProduceMap[name].totalWeightKg + itemKg).toFixed(2));
+        procuredProduceMap[name].totalSpend += Number(it.total) || 0;
+        if (log.billNumber) procuredProduceMap[name].mandiBillNumbers.add(log.billNumber);
+        if (log.vendorName) procuredProduceMap[name].vendors.add(log.vendorName);
+      });
     });
-  });
-
-  const procuredProduceList = Object.values(procuredProduceMap);
+    return Object.values(procuredProduceMap);
+  }, [procuredLogs]);
 
   // Contributing Societies for Open Orders
-  const contributingSocieties = Array.from(new Set(activeOrders.map(o => o.societyName || 'Prestige Falcon City')));
+  const contributingSocieties = useMemo(() => {
+    return Array.from(new Set(activeOrders.map(o => o.societyName || 'Prestige Falcon City')));
+  }, [activeOrders]);
 
   // Save updated stock count
   const handleSaveStock = (e) => {
@@ -766,7 +836,7 @@ export default function ProcurementDemandPage() {
                   </thead>
                   <tbody>
                     {allDemandItems.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((d, idx) => (
-                      <tr key={idx} style={{ background: d.isFullyCovered ? '#F8FAFC' : '#FFFFFF' }}>
+                      <tr key={d.name || d.productId || idx} style={{ background: d.isFullyCovered ? '#F8FAFC' : '#FFFFFF' }}>
                         <td>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <strong style={{ fontSize: '14px', color: '#0F172A' }}>{d.name}</strong>
@@ -953,7 +1023,7 @@ export default function ProcurementDemandPage() {
                   </tr>
                 ) : (
                   procuredProduceList.map((p, idx) => (
-                    <tr key={idx}>
+                    <tr key={p.name || idx}>
                       <td>
                         <strong style={{ fontSize: '14px', color: '#0F172A' }}>{p.name}</strong>
                         <div style={{ fontSize: '11px', color: '#64748B' }}>Origin: {p.origin}</div>
