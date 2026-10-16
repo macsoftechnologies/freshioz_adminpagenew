@@ -216,6 +216,44 @@ export default function AdminSidebar() {
           </>
         )}
 
+        {/* ================= PROCUREMENT OFFICER ONLY ================= */}
+        {currentRoleId === 'PROCUREMENT_OFFICER' && (
+          <>
+            <div style={{ fontSize: '10.5px', textTransform: 'uppercase', color: '#94A3B8', fontWeight: 800, padding: '8px 14px', letterSpacing: '0.6px' }}>
+              Mandi Sourcing & Procurement Desk
+            </div>
+            <NavLink to="/procurement-demand" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
+              <ClipboardList size={18} />
+              <span>Mandi Demand (Stock Net)</span>
+            </NavLink>
+
+            <NavLink to="/procurement-entry" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
+              <FilePlus size={18} />
+              <span>Log Mandi Bill & Transport</span>
+            </NavLink>
+
+            <NavLink to="/procurement-logs" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
+              <FileText size={18} />
+              <span>Mandi Purchases Ledger</span>
+            </NavLink>
+
+            <NavLink to="/vendors" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
+              <Store size={18} />
+              <span>Vendors & Farmers Directory</span>
+            </NavLink>
+
+            <NavLink to="/daily-pricing" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
+              <Coins size={18} />
+              <span>Daily Pricing & GST Master</span>
+            </NavLink>
+
+            <NavLink to="/transactions" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
+              <Receipt size={18} />
+              <span>Payment & Spent Ledger</span>
+            </NavLink>
+          </>
+        )}
+
         {/* ================= WAREHOUSE MANAGER ONLY ================= */}
         {currentRoleId === 'WAREHOUSE_MANAGER' && (
           <>
@@ -230,6 +268,11 @@ export default function AdminSidebar() {
             <NavLink to="/procurement-entry" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
               <FilePlus size={18} />
               <span>Log Mandi Bill & Transport</span>
+            </NavLink>
+
+            <NavLink to="/procurement-logs" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
+              <FileText size={18} />
+              <span>Mandi Purchases Ledger</span>
             </NavLink>
 
             <NavLink to="/warehouse-crating" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>

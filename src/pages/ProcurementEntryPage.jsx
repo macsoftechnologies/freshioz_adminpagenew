@@ -371,7 +371,11 @@ export default function ProcurementEntryPage() {
         destinationWarehouseId: destWh?.id || warehouses[0]?.id || 'FRZ_WH_01',
         destinationName: destWh ? destWh.name : (warehouses[0]?.name || 'Regional Hub'),
         paymentMode: paymentMode,
-        totalAmount: Number(totalAmount),
+        totalWeightKg: Number(totalWeight) || 0,
+        produceAmount: Number(produceAmount) || 0,
+        transportAmount: Number(transportCharge) || 0,
+        totalAmountPaid: Number(totalAmount) || 0,
+        totalAmount: Number(totalAmount) || 0,
         receiptPhoto: receiptPhoto || undefined,
         items: items.map(i => ({
           name: i.name,

@@ -92,7 +92,8 @@ export default function EmployeeManagementPage() {
   // Available operational roles in Direct-to-Society Model
   const AVAILABLE_ROLES = [
     { id: 'SUPER_ADMIN', label: 'Super Admin', desc: 'Full Master Platform Control & Executive Financial Reports', badgeColor: '#234B3C', isMain: true },
-    { id: 'WAREHOUSE_MANAGER', label: 'Warehouse & Procurement Manager', desc: 'Mandi sourcing, stock receiving, packing lines, and central hub dispatch', badgeColor: '#059669' },
+    { id: 'PROCUREMENT_OFFICER', label: 'Procurement Officer (Mandi Buyer)', desc: 'APMC Mandi sourcing, vendor relations, price bidding, weighing slips & procurement bills', badgeColor: '#047857' },
+    { id: 'WAREHOUSE_MANAGER', label: 'Warehouse Manager', desc: 'Central hub inventory, stock receiving, grading/packing assembly lines & dispatch', badgeColor: '#059669' },
     { id: 'WAREHOUSE_STAFF', label: 'Warehouse Staff / Packer', desc: 'Produce grading, weighing, bagging, and attaching society order tags', badgeColor: '#0D9488' },
     { id: 'DELIVERY_EXECUTIVE', label: 'Delivery Executive / Rider', desc: 'Morning society drop desk last-mile dispatch rider', badgeColor: '#EA580C' },
     { id: 'SALES_OFFICER', label: 'Field Sales Officer', desc: 'Society & hostel onboarding and GPS tagging', badgeColor: '#2563EB' }
@@ -518,7 +519,8 @@ export default function EmployeeManagementPage() {
             >
               <option value="ALL">All Roles</option>
               <option value="SUPER_ADMIN">👑 Super Admin (Main)</option>
-              <option value="WAREHOUSE_MANAGER">🏢 Warehouse & Procurement</option>
+              <option value="PROCUREMENT_OFFICER">🌾 Procurement Officers</option>
+              <option value="WAREHOUSE_MANAGER">🏢 Warehouse Managers</option>
               <option value="WAREHOUSE_STAFF">📦 Warehouse Staff / Packers</option>
               <option value="DELIVERY_EXECUTIVE">🚚 Delivery Executives</option>
               <option value="SALES_OFFICER">📋 Field Sales</option>

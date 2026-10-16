@@ -104,17 +104,17 @@ export default function VendorsDirectoryPage() {
     setEditingVendor(v);
     setFormData({
       name: v.name || '',
-      contactPerson: v.contactPerson || '',
+      contactPerson: v.contactPerson || v.accountHolder || '',
       phone: v.phone || '',
       mandiLocation: v.mandiLocation || '',
       lat: Number(v.lat) || 17.7231,
       lng: Number(v.lng) || 83.3013,
       category: v.category || 'VEGETABLES',
-      bankName: v.bankDetails?.bankName || '',
-      accountNumber: v.bankDetails?.accountNumber || '',
-      ifscCode: v.bankDetails?.ifscCode || '',
-      branch: v.bankDetails?.branch || '',
-      upiId: v.bankDetails?.upiId || ''
+      bankName: v.bankName || v.bankDetails?.bankName || '',
+      accountNumber: v.accountNumber || v.bankDetails?.accountNumber || '',
+      ifscCode: v.ifscCode || v.bankDetails?.ifscCode || '',
+      branch: v.branch || v.bankDetails?.branch || '',
+      upiId: v.upiId || v.bankDetails?.upiId || ''
     });
     setIsModalOpen(true);
   };
@@ -131,13 +131,20 @@ export default function VendorsDirectoryPage() {
       uuid: editingVendor?.uuid || generateUUID(),
       name: formData.name.trim(),
       contactPerson: formData.contactPerson.trim(),
+      accountHolder: formData.contactPerson.trim(),
       phone: formData.phone.trim(),
       mandiLocation: formData.mandiLocation.trim(),
       lat: Number(formData.lat) || 17.7231,
       lng: Number(formData.lng) || 83.3013,
       category: formData.category,
+      bankName: formData.bankName.trim(),
+      accountNumber: formData.accountNumber.trim(),
+      ifscCode: formData.ifscCode.trim().toUpperCase(),
+      branch: formData.branch.trim(),
+      upiId: formData.upiId.trim(),
       bankDetails: {
         bankName: formData.bankName.trim(),
+        accountHolder: formData.contactPerson.trim(),
         accountNumber: formData.accountNumber.trim(),
         ifscCode: formData.ifscCode.trim().toUpperCase(),
         branch: formData.branch.trim(),
@@ -414,7 +421,7 @@ export default function VendorsDirectoryPage() {
                     </td>
 
                     <td>
-                      <div style={{ fontSize: '13px', fontWeight: 600, color: '#0F172A' }}>{vendor.contactPerson || 'Proprietor'}</div>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: '#0F172A' }}>{vendor.contactPerson || vendor.accountHolder || 'Proprietor'}</div>
                       <a href={`tel:${vendor.phone}`} style={{ fontSize: '12px', color: '#0284C7', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
                         <Phone size={11} />
                         <span>+91 {vendor.phone}</span>
@@ -435,26 +442,28 @@ export default function VendorsDirectoryPage() {
                     </td>
 
                     <td>
-                      {vendor.bankDetails?.accountNumber ? (
+                      {(vendor.bankDetails?.accountNumber || vendor.accountNumber) ? (
                         <div style={{ fontSize: '12px', background: '#F8FAFC', border: '1px solid #E2E8F0', padding: '6px 10px', borderRadius: '6px', maxWidth: '240px' }}>
-                          <div style={{ fontWeight: 700, color: '#0F172A' }}>{vendor.bankDetails.bankName || 'Direct Bank'}</div>
+                          <div style={{ fontWeight: 700, color: '#0F172A' }}>{vendor.bankName || vendor.bankDetails?.bankName || 'Direct Bank'}</div>
                           <div style={{ color: '#475569', fontFamily: 'monospace', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <span>A/C: {vendor.bankDetails.accountNumber}</span>
+                            <span>A/C: {vendor.accountNumber || vendor.bankDetails?.accountNumber}</span>
                             <button
                               type="button"
-                              onClick={() => handleCopyText(vendor.bankDetails.accountNumber, 'Account Number')}
+                              onClick={() => handleCopyText(vendor.accountNumber || vendor.bankDetails?.accountNumber, 'Account Number')}
                               style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', padding: '2px' }}
                               title="Copy Account Number"
                             >
                               <Copy size={11} />
                             </button>
                           </div>
-                          <div style={{ fontSize: '11px', color: '#64748B' }}>
-                            IFSC: <strong>{vendor.bankDetails.ifscCode}</strong>
-                          </div>
-                          {vendor.bankDetails.upiId && (
+                          {(vendor.ifscCode || vendor.bankDetails?.ifscCode) && (
+                            <div style={{ fontSize: '11px', color: '#64748B' }}>
+                              IFSC: <strong>{vendor.ifscCode || vendor.bankDetails?.ifscCode}</strong>
+                            </div>
+                          )}
+                          {(vendor.upiId || vendor.bankDetails?.upiId) && (
                             <div style={{ fontSize: '11px', color: '#059669', fontWeight: 600, marginTop: '2px' }}>
-                              UPI: {vendor.bankDetails.upiId}
+                              UPI: {vendor.upiId || vendor.bankDetails?.upiId}
                             </div>
                           )}
                         </div>

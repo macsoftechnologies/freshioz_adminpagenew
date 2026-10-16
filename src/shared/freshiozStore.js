@@ -138,10 +138,10 @@ export function prepareServerPayload(storeData) {
       'products', 'deletedProductIds'
     ],
     PROCUREMENT_OFFICER: [
-      'vendors', 'procurementLogs'
+      'vendors', 'procurementLogs', 'products', 'warehouses', 'orders'
     ],
     WAREHOUSE_MANAGER: [
-      'warehouses', 'products', 'procurementLogs', 'orders', 'warehouseInventory', 'deletedProductIds'
+      'warehouses', 'products', 'procurementLogs', 'orders', 'warehouseInventory', 'deletedProductIds', 'vendors'
     ],
     WAREHOUSE_STAFF: [
       'orders'
