@@ -19,7 +19,8 @@ import {
   LogOut,
   ShieldCheck,
   Receipt,
-  PackageCheck
+  PackageCheck,
+  FileText
 } from 'lucide-react';
 import FreshiozLogo from '../common/FreshiozLogo';
 import { useAdminRole, ROLES } from '../../context/AdminRoleContext';

@@ -17,7 +17,8 @@ import {
   Store, 
   Layers,
   PackageCheck,
-  Receipt
+  Receipt,
+  FileText
 } from 'lucide-react';
 import FreshiozLogo from '../common/FreshiozLogo';
 import { useAdminRole } from '../../context/AdminRoleContext';
