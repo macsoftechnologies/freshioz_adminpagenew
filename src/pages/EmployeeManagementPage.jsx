@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { useAdminRole, ROLES } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
-import { saveFreshiozStore, generateId, generateUUID } from '../shared/freshiozStore';
+import { updateLocalFreshiozStore, generateId, generateUUID } from '../shared/freshiozStore';
 import { employeeService } from '../services/employeeService';
 import { exportToExcel } from '../utils/excelExporter';
 import AdminPagination from '../components/common/AdminPagination';
@@ -44,7 +44,7 @@ export default function EmployeeManagementPage() {
         const data = await employeeService.getAll();
         if (isMounted && Array.isArray(data)) {
           setApiEmployees(data);
-          saveFreshiozStore(prev => ({ ...prev, employees: data }));
+          updateLocalFreshiozStore(prev => ({ ...prev, employees: data }));
         }
       } catch (err) {
         console.warn('Backend employees load note:', err);
@@ -228,7 +228,7 @@ export default function EmployeeManagementPage() {
         };
 
         setApiEmployees(prev => prev.map(e => e.id === editingEmployee.id ? canonical : e));
-        saveFreshiozStore(prev => ({
+        updateLocalFreshiozStore(prev => ({
           ...prev,
           employees: prev.employees.map(e => e.id === editingEmployee.id ? canonical : e)
         }));
@@ -257,7 +257,7 @@ export default function EmployeeManagementPage() {
         };
 
         setApiEmployees(prev => [canonical, ...prev.filter(e => e.id !== canonical.id)]);
-        saveFreshiozStore(prev => ({
+        updateLocalFreshiozStore(prev => ({
           ...prev,
           employees: [canonical, ...(prev.employees || []).filter(e => e.id !== canonical.id)]
         }));
@@ -280,7 +280,7 @@ export default function EmployeeManagementPage() {
     try {
       const updated = await employeeService.update(empId, { status: newStatus });
       setApiEmployees(prev => prev.map(e => e.id === empId ? { ...e, ...(updated || {}), status: newStatus } : e));
-      saveFreshiozStore(prev => ({
+      updateLocalFreshiozStore(prev => ({
         ...prev,
         employees: prev.employees.map(e => e.id === empId ? { ...e, ...(updated || {}), status: newStatus } : e)
       }));
@@ -300,7 +300,7 @@ export default function EmployeeManagementPage() {
       try {
         await employeeService.update(empId, { status: 'INACTIVE' });
         setApiEmployees(prev => prev.filter(e => e.id !== empId));
-        saveFreshiozStore(prev => ({
+        updateLocalFreshiozStore(prev => ({
           ...prev,
           employees: prev.employees.filter(e => e.id !== empId)
         }));

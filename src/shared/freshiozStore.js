@@ -129,7 +129,7 @@ export function prepareServerPayload(storeData) {
     SUPER_ADMIN: [
       'warehouses', 'societies', 'orders', 'vendors', 'procurementLogs',
       'warehouseInventory', 'societyRequests', 'categories', 'units',
-      'employees', 'withdrawals', 'deletedProductIds', 'products'
+      'withdrawals', 'deletedProductIds', 'products'
     ],
     SALES_OFFICER: [
       'societies', 'societyRequests'
@@ -306,6 +306,14 @@ export function saveFreshiozStore(updater) {
       window.dispatchEvent(new CustomEvent('freshioz_store_updated', { detail: current }));
     }
   });
+  return next;
+}
+
+export function updateLocalFreshiozStore(updater) {
+  const current = getFreshiozStore();
+  const next = typeof updater === 'function' ? updater(current) : { ...current, ...updater };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  window.dispatchEvent(new CustomEvent('freshioz_store_updated', { detail: next }));
   return next;
 }
 
