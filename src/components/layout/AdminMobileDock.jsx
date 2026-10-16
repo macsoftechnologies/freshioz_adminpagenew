@@ -11,7 +11,8 @@ import {
   Truck,
   Users,
   Store,
-  Menu
+  Menu,
+  PackageCheck
 } from 'lucide-react';
 import { useAdminRole } from '../../context/AdminRoleContext';
 
