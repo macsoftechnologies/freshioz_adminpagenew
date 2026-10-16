@@ -194,13 +194,12 @@ export default function MasterDataPage() {
 
   // Export handlers
   const handleExportProductsExcel = () => {
-    const headers = ['Produce ID', 'Item Name', 'Category', 'Retail Unit', 'Wholesale Packaging', 'Origin Mandi', 'Shelf Life', 'Description', 'Status'];
+    const headers = ['Produce ID', 'Item Name', 'Category', 'Retail Unit', 'Origin Mandi', 'Shelf Life', 'Description', 'Status'];
     const rows = products.map(p => [
       p.id,
       p.name,
       p.category,
       p.defaultUnit || p.retailUnit || 'kg',
-      p.hasWholesale !== false && p.wholesaleUnit ? p.wholesaleUnit : 'Retail Pack Only',
       p.origin || 'APMC Mandi',
       p.shelfLife || '3-5 Days',
       p.desc || '',
@@ -863,7 +862,6 @@ export default function MasterDataPage() {
                   <th>Produce Item & Code</th>
                   <th>Category</th>
                   <th>Retail Unit</th>
-                  <th>Wholesale Packaging</th>
                   <th>Mandi Origin</th>
                   <th>Shelf Life</th>
                   <th>Daily Pricing</th>
@@ -874,7 +872,7 @@ export default function MasterDataPage() {
               <tbody>
                 {filteredProducts.length === 0 ? (
                   <tr>
-                    <td colSpan="9">
+                    <td colSpan="8">
                       <div className="admin-empty-state">
                         <div className="admin-empty-state-icon">
                           <Apple size={22} />
@@ -954,19 +952,6 @@ export default function MasterDataPage() {
                         <strong style={{ fontSize: '12px', color: '#234B3C' }}>
                           {prod.defaultUnit || prod.retailUnit || 'kg'}
                         </strong>
-                      </td>
-
-                      <td>
-                        {prod.hasWholesale !== false && prod.wholesaleUnit ? (
-                          <span style={{ fontSize: '11px', background: '#EEF2FF', color: '#4338CA', padding: '2px 7px', borderRadius: '4px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                            <Package size={11} />
-                            <span>{prod.wholesaleUnit}</span>
-                          </span>
-                        ) : (
-                          <span style={{ fontSize: '11px', background: '#F1F5F9', color: '#64748B', padding: '2px 7px', borderRadius: '4px', fontWeight: 600 }}>
-                            🛒 Retail Only
-                          </span>
-                        )}
                       </td>
 
                       <td>
