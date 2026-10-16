@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Truck, MapPin, FileText, CheckCircle2, Eye, X, Image as ImageIcon, Trash2, Users, Building2 } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Truck, MapPin, FileText, CheckCircle2, Eye, X, Image as ImageIcon, Trash2, Users, Building2, Calendar, Search } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
@@ -11,20 +11,89 @@ export default function ProcurementLogsPage() {
   const { showToast } = useToast();
 
   const [scopeFilter, setScopeFilter] = useState('ALL'); // 'ALL' | 'MY'
+  const [datePreset, setDatePreset] = useState('ALL'); // 'ALL' | 'TODAY' | 'YESTERDAY' | 'WEEK' | 'MONTH' | 'CUSTOM'
+  const [customDate, setCustomDate] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
-  const allLogs = store.procurementLogs || [];
-  const logs = allLogs.filter(log => {
-    if (scopeFilter === 'MY' && currentUser) {
-      return log.loggedByOfficerId === currentUser.id || log.loggedByOfficerName === currentUser.name;
-    }
-    return true;
-  });
 
-  const paginatedLogs = logs.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize
-  );
+  const allLogs = store.procurementLogs || [];
+
+  // Filter logs by scope, date, and search query
+  const filteredLogs = useMemo(() => {
+    return allLogs.filter(log => {
+      // 1. Scope filter (All vs My bills)
+      if (scopeFilter === 'MY' && currentUser) {
+        if (log.loggedByOfficerId !== currentUser.id && log.loggedByOfficerName !== currentUser.name) {
+          return false;
+        }
+      }
+
+      // 2. Date filter
+      const rawDate = log.timestamp || log.createdAt || log.date || '';
+      const logDateStr = rawDate ? new Date(rawDate).toISOString().slice(0, 10) : '';
+      const todayStr = new Date().toISOString().slice(0, 10);
+
+      if (datePreset === 'TODAY' && logDateStr !== todayStr) return false;
+      if (datePreset === 'YESTERDAY') {
+        const y = new Date();
+        y.setDate(y.getDate() - 1);
+        if (logDateStr !== y.toISOString().slice(0, 10)) return false;
+      }
+      if (datePreset === 'WEEK') {
+        const weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        if (new Date(rawDate || 0).getTime() < weekAgo.getTime()) return false;
+      }
+      if (datePreset === 'MONTH') {
+        if (!logDateStr.startsWith(todayStr.slice(0, 7))) return false;
+      }
+      if (datePreset === 'CUSTOM' && customDate) {
+        if (logDateStr !== customDate) return false;
+      }
+
+      // 3. Search query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchesBill = String(log.billNumber || '').toLowerCase().includes(q);
+        const matchesVendor = String(log.vendorName || '').toLowerCase().includes(q);
+        const matchesMandi = String(log.mandiName || '').toLowerCase().includes(q);
+        const matchesBuyer = String(log.loggedByOfficerName || '').toLowerCase().includes(q);
+        const matchesItems = (log.items || []).some(i => String(i.name || '').toLowerCase().includes(q));
+        if (!matchesBill && !matchesVendor && !matchesMandi && !matchesBuyer && !matchesItems) return false;
+      }
+
+      return true;
+    });
+  }, [allLogs, scopeFilter, currentUser, datePreset, customDate, searchQuery]);
+
+  // Reset pagination on filter change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [scopeFilter, datePreset, customDate, searchQuery]);
+
+  const paginatedLogs = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredLogs.slice(start, start + pageSize);
+  }, [filteredLogs, currentPage, pageSize]);
+
+  // Period totals
+  const periodTotalPaid = useMemo(() => {
+    return filteredLogs.reduce((acc, l) => acc + (Number(l.totalAmountPaid) || 0), 0);
+  }, [filteredLogs]);
+
+  const periodTotalWeight = useMemo(() => {
+    return filteredLogs.reduce((acc, l) => acc + (Number(l.totalWeightKg) || (l.items || []).reduce((sum, it) => sum + (parseFloat(it.qty) || 0), 0)), 0);
+  }, [filteredLogs]);
+
+  const datePresetLabel = useMemo(() => {
+    if (datePreset === 'TODAY') return 'Today';
+    if (datePreset === 'YESTERDAY') return 'Yesterday';
+    if (datePreset === 'WEEK') return 'This Week (Past 7 Days)';
+    if (datePreset === 'MONTH') return 'This Month';
+    if (datePreset === 'CUSTOM') return customDate ? `Date: ${customDate}` : 'Custom Date';
+    return 'All Time';
+  }, [datePreset, customDate]);
 
   const [activePhotoModal, setActivePhotoModal] = useState(null); // URL or null
   const [deleteLogModal, setDeleteLogModal] = useState(null); // log or null
@@ -58,10 +127,7 @@ export default function ProcurementLogsPage() {
               <div style={{ display: 'flex', gap: '4px', background: '#F1F5F9', border: '1px solid #CBD5E1', padding: '2px', borderRadius: '8px' }}>
                 <button
                   type="button"
-                  onClick={() => {
-                    setScopeFilter('ALL');
-                    setCurrentPage(1);
-                  }}
+                  onClick={() => setScopeFilter('ALL')}
                   style={{
                     padding: '3px 9px',
                     borderRadius: '6px',
@@ -77,10 +143,7 @@ export default function ProcurementLogsPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setScopeFilter('MY');
-                    setCurrentPage(1);
-                  }}
+                  onClick={() => setScopeFilter('MY')}
                   style={{
                     padding: '3px 9px',
                     borderRadius: '6px',
@@ -97,10 +160,10 @@ export default function ProcurementLogsPage() {
               </div>
             )}
             <span style={{ fontSize: '11.5px', background: '#E2E8F0', color: '#334155', padding: '3px 10px', borderRadius: '6px', fontWeight: 700 }}>
-              Bills: {logs.length}
+              Bills: {filteredLogs.length}
             </span>
             <span style={{ fontSize: '11.5px', background: '#EBF2EE', color: '#234B3C', padding: '3px 10px', borderRadius: '6px', fontWeight: 700 }}>
-              Total Paid: ₹{logs.reduce((acc, l) => acc + (l.totalAmountPaid || 0), 0).toLocaleString()}
+              Period Spend: ₹{periodTotalPaid.toLocaleString()}
             </span>
           </div>
         </div>
@@ -114,10 +177,185 @@ export default function ProcurementLogsPage() {
         </Link>
       </div>
 
+      {/* Date & Filter Control Bar */}
+      <div style={{
+        background: '#FFFFFF',
+        border: '1px solid #E2E8F0',
+        borderRadius: '12px',
+        padding: '12px 16px',
+        marginBottom: '16px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '10px'
+      }}>
+        {/* Row 1: Date Range Pills & Calendar Picker + Search */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => { setDatePreset('TODAY'); setCustomDate(''); }}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '20px',
+                border: datePreset === 'TODAY' ? '1.5px solid #059669' : '1px solid #CBD5E1',
+                background: datePreset === 'TODAY' ? '#ECFDF5' : '#FFFFFF',
+                color: datePreset === 'TODAY' ? '#065F46' : '#475569',
+                fontWeight: 800,
+                fontSize: '12px',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+            >
+              <span>Today</span>
+              {datePreset === 'TODAY' && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#059669' }} />}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setDatePreset('YESTERDAY'); setCustomDate(''); }}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '20px',
+                border: datePreset === 'YESTERDAY' ? '1.5px solid #059669' : '1px solid #CBD5E1',
+                background: datePreset === 'YESTERDAY' ? '#ECFDF5' : '#FFFFFF',
+                color: datePreset === 'YESTERDAY' ? '#065F46' : '#475569',
+                fontWeight: 800,
+                fontSize: '12px',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+            >
+              <span>Yesterday</span>
+              {datePreset === 'YESTERDAY' && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#059669' }} />}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setDatePreset('WEEK'); setCustomDate(''); }}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '20px',
+                border: datePreset === 'WEEK' ? '1.5px solid #059669' : '1px solid #CBD5E1',
+                background: datePreset === 'WEEK' ? '#ECFDF5' : '#FFFFFF',
+                color: datePreset === 'WEEK' ? '#065F46' : '#475569',
+                fontWeight: 800,
+                fontSize: '12px',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+            >
+              <span>This Week (7 Days)</span>
+              {datePreset === 'WEEK' && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#059669' }} />}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setDatePreset('MONTH'); setCustomDate(''); }}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '20px',
+                border: datePreset === 'MONTH' ? '1.5px solid #059669' : '1px solid #CBD5E1',
+                background: datePreset === 'MONTH' ? '#ECFDF5' : '#FFFFFF',
+                color: datePreset === 'MONTH' ? '#065F46' : '#475569',
+                fontWeight: 800,
+                fontSize: '12px',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+            >
+              <span>This Month</span>
+              {datePreset === 'MONTH' && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#059669' }} />}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setDatePreset('ALL'); setCustomDate(''); }}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '20px',
+                border: datePreset === 'ALL' ? '1.5px solid #059669' : '1px solid #CBD5E1',
+                background: datePreset === 'ALL' ? '#ECFDF5' : '#FFFFFF',
+                color: datePreset === 'ALL' ? '#065F46' : '#475569',
+                fontWeight: 800,
+                fontSize: '12px',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+            >
+              <span>All Time</span>
+              {datePreset === 'ALL' && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#059669' }} />}
+            </button>
+
+            {/* Custom Single Day Calendar Picker */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '6px' }}>
+              <Calendar size={14} color="#059669" />
+              <span style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600 }}>Calendar:</span>
+              <input
+                type="date"
+                value={customDate}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setCustomDate(e.target.value);
+                    setDatePreset('CUSTOM');
+                  }
+                }}
+                style={{
+                  padding: '4px 8px',
+                  borderRadius: '6px',
+                  border: datePreset === 'CUSTOM' ? '1.5px solid #059669' : '1.5px solid #CBD5E1',
+                  fontSize: '11.5px',
+                  fontWeight: 700,
+                  color: '#0F172A',
+                  background: datePreset === 'CUSTOM' ? '#ECFDF5' : '#FFFFFF',
+                  cursor: 'pointer'
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Quick Search */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#F8FAFC', border: '1.5px solid #CBD5E1', borderRadius: '8px', padding: '4px 10px', minWidth: '240px' }}>
+            <Search size={14} color="#64748B" />
+            <input
+              type="text"
+              placeholder="Search by Bill #, Vendor, Crop, Yard..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '12px', width: '100%' }}
+            />
+          </div>
+        </div>
+
+        {/* Row 2: Selected Period Summary Badge */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', borderTop: '1px solid #F1F5F9', paddingTop: '8px' }}>
+          <div style={{ fontSize: '12px', color: '#64748B' }}>
+            Showing <strong>{filteredLogs.length}</strong> verified bills for <strong>{datePresetLabel}</strong>
+          </div>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <span style={{ fontSize: '11.5px', background: '#F1F5F9', color: '#334155', padding: '3px 9px', borderRadius: '6px', fontWeight: 700 }}>
+              ⚖️ Total Weight: {periodTotalWeight.toLocaleString()} kg
+            </span>
+            <span style={{ fontSize: '12px', background: '#ECFDF5', color: '#047857', padding: '3px 10px', borderRadius: '6px', fontWeight: 800 }}>
+              💰 Mandi Spend: ₹{periodTotalPaid.toLocaleString()}
+            </span>
+          </div>
+        </div>
+      </div>
+
       <div className="admin-table-card">
         <div className="admin-table-header">
           <div>
-            <h3 style={{ fontSize: '15px', color: '#0F172A', margin: 0 }}>Verified Mandi Invoices ({logs.length})</h3>
+            <h3 style={{ fontSize: '15px', color: '#0F172A', margin: 0 }}>Verified Mandi Invoices ({filteredLogs.length})</h3>
             <span style={{ fontSize: '12px', color: '#64748B' }}>
               Audited weighing slips and produce deliveries allocated across apartment communities
             </span>
@@ -138,16 +376,18 @@ export default function ProcurementLogsPage() {
               </tr>
             </thead>
             <tbody>
-              {logs.length === 0 ? (
+              {filteredLogs.length === 0 ? (
                 <tr>
                   <td colSpan="7">
                     <div className="admin-empty-state">
                       <div className="admin-empty-state-icon">
                         <FileText size={22} />
                       </div>
-                      <div className="admin-empty-state-title">No Mandi Bills Recorded</div>
+                      <div className="admin-empty-state-title">No Mandi Bills Found</div>
                       <div className="admin-empty-state-desc">
-                        Click "+ Log Mandi Purchase" above to enter APMC auction purchase receipts and vendor weights.
+                        {datePreset !== 'ALL' || searchQuery
+                          ? `No purchase bills matching ${datePresetLabel} and search criteria.`
+                          : 'Click "+ Log Mandi Purchase" above to enter APMC auction purchase receipts and vendor weights.'}
                       </div>
                     </div>
                   </td>
@@ -197,7 +437,8 @@ export default function ProcurementLogsPage() {
                             {log.receiptPhoto ? '✓ Weighing Slip Attached' : 'Slip Verified'}
                           </div>
                           <div style={{ fontSize: '10.5px', color: '#94A3B8' }}>
-                            {log.timestamp ? new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Dawn 05:30 AM'}
+                            {log.timestamp ? new Date(log.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : ''}{' '}
+                            • {log.timestamp ? new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Dawn 05:30 AM'}
                           </div>
                         </div>
                       </div>
@@ -245,15 +486,30 @@ export default function ProcurementLogsPage() {
                     </td>
 
                     <td>
-                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>
-                        {log.paymentMode?.replace(/_/g, ' ')}
-                      </span>
+                      <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '3px' }}>
+                        <span style={{
+                          background: '#ECFDF5',
+                          color: '#059669',
+                          fontWeight: 800,
+                          fontSize: '11px',
+                          padding: '2px 8px',
+                          borderRadius: '4px'
+                        }}>
+                          {log.paymentMode?.replace(/_/g, ' ') || 'IMPS TRANSFER'}
+                        </span>
+                        <span style={{ fontSize: '10.5px', color: '#64748B' }}>
+                          Freight: ₹{log.transportAmount || 0}
+                        </span>
+                      </div>
                     </td>
 
                     <td>
-                      <strong style={{ color: '#234B3C', fontSize: '15px' }}>
-                        ₹{log.totalAmountPaid?.toLocaleString()}
+                      <strong style={{ fontSize: '15px', color: '#0F172A', fontWeight: 800 }}>
+                        ₹{(log.totalAmountPaid || 0).toLocaleString()}
                       </strong>
+                      <div style={{ fontSize: '10.5px', color: '#64748B' }}>
+                        Produce: ₹{(log.produceSubtotal || 0).toLocaleString()}
+                      </div>
                     </td>
 
                     <td style={{ textAlign: 'right' }}>
@@ -265,35 +521,31 @@ export default function ProcurementLogsPage() {
                             style={{
                               background: '#F1F5F9',
                               border: '1px solid #CBD5E1',
-                              padding: '5px 10px',
                               borderRadius: '6px',
-                              fontSize: '11.5px',
+                              padding: '5px 8px',
+                              fontSize: '11px',
                               fontWeight: 700,
-                              color: '#334155',
                               cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px'
+                              color: '#334155'
                             }}
-                            title="View Mandi Bill Slip"
                           >
-                            <Eye size={12} />
-                            <span>Slip</span>
+                            View Slip
                           </button>
                         )}
                         <button
                           type="button"
                           onClick={() => setDeleteLogModal(log)}
                           style={{
-                            background: '#FEE2E2',
-                            border: '1px solid #FECACA',
-                            padding: '5px 8px',
+                            background: '#FFF',
+                            border: '1px solid #FCA5A5',
                             borderRadius: '6px',
-                            fontSize: '11.5px',
-                            color: '#DC2626',
-                            cursor: 'pointer'
+                            padding: '5px 8px',
+                            fontSize: '11px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            color: '#DC2626'
                           }}
-                          title="Void / Delete Duplicate Entry"
+                          title="Void bill entry"
                         >
                           <Trash2 size={13} />
                         </button>
@@ -307,7 +559,7 @@ export default function ProcurementLogsPage() {
         </div>
         <AdminPagination
           currentPage={currentPage}
-          totalItems={logs.length}
+          totalItems={filteredLogs.length}
           pageSize={pageSize}
           onPageChange={setCurrentPage}
           onPageSizeChange={(newSize) => {

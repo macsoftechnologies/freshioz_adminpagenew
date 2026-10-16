@@ -219,6 +219,9 @@ export default function FinancialTransactionsPage() {
           weekAgo.setDate(weekAgo.getDate() - 7);
           if (new Date(item.date || 0).getTime() < weekAgo.getTime()) return false;
         }
+        if (datePreset === 'MONTH') {
+          if (!itemDateStr.startsWith(todayStr.slice(0, 7))) return false;
+        }
         if (datePreset === 'CUSTOM' && customDate && itemDateStr !== customDate) return false;
       }
 
@@ -246,6 +249,51 @@ export default function FinancialTransactionsPage() {
     const start = (currentPage - 1) * pageSize;
     return filteredTransactions.slice(start, start + pageSize);
   }, [filteredTransactions, currentPage, pageSize]);
+
+  // Dynamic Period Totals for active date filter
+  const periodStats = useMemo(() => {
+    let inflows = 0;
+    let outflows = 0;
+    let onlineAmount = 0;
+    let codCashAmount = 0;
+    let codUpiAmount = 0;
+    let mandiSpend = 0;
+
+    filteredTransactions.forEach(t => {
+      const amt = Number(t.amount) || 0;
+      if (t.flowType === 'INWARD') {
+        inflows += amt;
+        if (t.isCod) {
+          if (t.receivedMode === 'CASH') codCashAmount += amt;
+          else codUpiAmount += amt;
+        } else {
+          onlineAmount += amt;
+        }
+      } else {
+        outflows += amt;
+        if (t.refType === 'MANDI_PURCHASE') mandiSpend += amt;
+      }
+    });
+
+    return {
+      inflows,
+      outflows,
+      net: inflows - outflows,
+      onlineAmount,
+      codCashAmount,
+      codUpiAmount,
+      mandiSpend
+    };
+  }, [filteredTransactions]);
+
+  const datePresetLabel = useMemo(() => {
+    if (datePreset === 'TODAY') return 'Today';
+    if (datePreset === 'YESTERDAY') return 'Yesterday';
+    if (datePreset === 'WEEK') return 'This Week (Past 7 Days)';
+    if (datePreset === 'MONTH') return 'This Month';
+    if (datePreset === 'CUSTOM') return customDate ? `Date: ${customDate}` : 'Custom Date';
+    return 'All Time';
+  }, [datePreset, customDate]);
 
   // RIDER CASH IN HAND BREAKDOWN
   const riderCashSettlementSummary = useMemo(() => {
@@ -581,8 +629,167 @@ export default function FinancialTransactionsPage() {
         flexDirection: 'column',
         gap: '12px'
       }}>
-        {/* Row 1: Desk Tabs */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+        {/* Row 1: Date Quick Filter Pills + Calendar Picker + Period Summary Metric */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => { setDatePreset('TODAY'); setCustomDate(''); }}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '20px',
+                border: datePreset === 'TODAY' ? '1.5px solid #059669' : '1px solid #CBD5E1',
+                background: datePreset === 'TODAY' ? '#ECFDF5' : '#FFFFFF',
+                color: datePreset === 'TODAY' ? '#065F46' : '#475569',
+                fontWeight: 800,
+                fontSize: '12px',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+            >
+              <span>Today</span>
+              {datePreset === 'TODAY' && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#059669' }} />}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setDatePreset('YESTERDAY'); setCustomDate(''); }}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '20px',
+                border: datePreset === 'YESTERDAY' ? '1.5px solid #059669' : '1px solid #CBD5E1',
+                background: datePreset === 'YESTERDAY' ? '#ECFDF5' : '#FFFFFF',
+                color: datePreset === 'YESTERDAY' ? '#065F46' : '#475569',
+                fontWeight: 800,
+                fontSize: '12px',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+            >
+              <span>Yesterday</span>
+              {datePreset === 'YESTERDAY' && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#059669' }} />}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setDatePreset('WEEK'); setCustomDate(''); }}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '20px',
+                border: datePreset === 'WEEK' ? '1.5px solid #059669' : '1px solid #CBD5E1',
+                background: datePreset === 'WEEK' ? '#ECFDF5' : '#FFFFFF',
+                color: datePreset === 'WEEK' ? '#065F46' : '#475569',
+                fontWeight: 800,
+                fontSize: '12px',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+            >
+              <span>This Week (7 Days)</span>
+              {datePreset === 'WEEK' && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#059669' }} />}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setDatePreset('MONTH'); setCustomDate(''); }}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '20px',
+                border: datePreset === 'MONTH' ? '1.5px solid #059669' : '1px solid #CBD5E1',
+                background: datePreset === 'MONTH' ? '#ECFDF5' : '#FFFFFF',
+                color: datePreset === 'MONTH' ? '#065F46' : '#475569',
+                fontWeight: 800,
+                fontSize: '12px',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+            >
+              <span>This Month</span>
+              {datePreset === 'MONTH' && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#059669' }} />}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => { setDatePreset('ALL'); setCustomDate(''); }}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '20px',
+                border: datePreset === 'ALL' ? '1.5px solid #059669' : '1px solid #CBD5E1',
+                background: datePreset === 'ALL' ? '#ECFDF5' : '#FFFFFF',
+                color: datePreset === 'ALL' ? '#065F46' : '#475569',
+                fontWeight: 800,
+                fontSize: '12px',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+            >
+              <span>All Time</span>
+              {datePreset === 'ALL' && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#059669' }} />}
+            </button>
+
+            {/* Custom Single Day Calendar Picker */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '6px' }}>
+              <Calendar size={14} color="#059669" />
+              <span style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 600 }}>Calendar:</span>
+              <input
+                type="date"
+                value={customDate}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setCustomDate(e.target.value);
+                    setDatePreset('CUSTOM');
+                  }
+                }}
+                style={{
+                  padding: '4px 8px',
+                  borderRadius: '6px',
+                  border: datePreset === 'CUSTOM' ? '1.5px solid #059669' : '1.5px solid #CBD5E1',
+                  fontSize: '11.5px',
+                  fontWeight: 700,
+                  color: '#0F172A',
+                  background: datePreset === 'CUSTOM' ? '#ECFDF5' : '#FFFFFF',
+                  cursor: 'pointer'
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Dynamic Period Metric Badges */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '11.5px', background: '#F1F5F9', color: '#334155', padding: '3px 8px', borderRadius: '6px', fontWeight: 700 }}>
+              {datePresetLabel}: {filteredTransactions.length} records
+            </span>
+            <span style={{ fontSize: '11.5px', background: '#ECFDF5', color: '#065F46', padding: '3px 8px', borderRadius: '6px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+              <ArrowDownLeft size={11} /> Inflows: ₹{periodStats.inflows.toLocaleString()}
+            </span>
+            <span style={{ fontSize: '11.5px', background: '#FEF2F2', color: '#991B1B', padding: '3px 8px', borderRadius: '6px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+              <ArrowUpRight size={11} /> Outflows: ₹{periodStats.outflows.toLocaleString()}
+            </span>
+            <span style={{
+              fontSize: '11.5px',
+              background: periodStats.net >= 0 ? '#EBF2EE' : '#FEE2E2',
+              color: periodStats.net >= 0 ? '#234B3C' : '#DC2626',
+              padding: '3px 8px',
+              borderRadius: '6px',
+              fontWeight: 800
+            }}>
+              Net: ₹{periodStats.net.toLocaleString()}
+            </span>
+          </div>
+        </div>
+
+        {/* Row 2: Desk Tabs & Search */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', borderTop: '1px solid #F1F5F9', paddingTop: '10px' }}>
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
             <button
               type="button"
@@ -683,33 +890,8 @@ export default function FinancialTransactionsPage() {
           </div>
         </div>
 
-        {/* Row 2: Secondary Dropdown Filters */}
+        {/* Row 3: Secondary Filters: Payment Mode & Society Network */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap', borderTop: '1px solid #F1F5F9', paddingTop: '8px' }}>
-          {/* Day-to-Day Date Filter */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Calendar size={13} color="#059669" />
-            <label style={{ fontSize: '11.5px', fontWeight: 700, color: '#475569' }}>Date Range:</label>
-            <select
-              value={datePreset}
-              onChange={(e) => setDatePreset(e.target.value)}
-              style={{ padding: '3px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '11.5px', fontWeight: 700, background: '#F8FAFC' }}
-            >
-              <option value="ALL">All Dates (Lifetime)</option>
-              <option value="TODAY">Today Only</option>
-              <option value="YESTERDAY">Yesterday</option>
-              <option value="WEEK">Past 7 Days</option>
-              <option value="CUSTOM">Custom Single Day...</option>
-            </select>
-            {datePreset === 'CUSTOM' && (
-              <input
-                type="date"
-                value={customDate}
-                onChange={(e) => setCustomDate(e.target.value)}
-                style={{ padding: '2px 6px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '11.5px', background: '#FFF' }}
-              />
-            )}
-          </div>
-
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Filter size={13} color="#64748B" />
             <label style={{ fontSize: '11.5px', fontWeight: 700, color: '#475569' }}>Payment Mode:</label>
