@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import AdminSidebar from './components/layout/AdminSidebar';
 import AdminTopBar from './components/layout/AdminTopBar';
@@ -32,20 +32,40 @@ import FinancialTransactionsPage from './pages/FinancialTransactionsPage';
 import ScrollToTop from './components/common/ScrollToTop';
 import { useAdminRole, ROLES } from './context/AdminRoleContext';
 
+
+// Role Permission Guard Component (Declared outside App to prevent React from unmounting page tree on every re-render)
+function ProtectedByRole({ allowedRoles, children }) {
+  const { currentRoleId } = useAdminRole();
+  const location = useLocation();
+  const isAllowed = currentRoleId === 'SUPER_ADMIN' || allowedRoles.includes(currentRoleId);
+  if (isAllowed) {
+    return children;
+  }
+  const targetHome = currentRoleId === 'SUPER_ADMIN' ? '/dashboard' : (ROLES[currentRoleId]?.defaultRoute || '/orders-fulfillment');
+  if (location.pathname === targetHome) {
+    return (
+      <div style={{ padding: '60px 24px', textAlign: 'center', background: '#FFFFFF', borderRadius: '12px', margin: '24px', border: '1.5px solid #E2E8F0' }}>
+        <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', marginBottom: '8px' }}>
+          Restricted Operational Desk
+        </h2>
+        <p style={{ fontSize: '13px', color: '#64748B', maxWidth: '480px', margin: '0 auto 16px' }}>
+          Your account role (<strong>{ROLES[currentRoleId]?.label || currentRoleId}</strong>) does not have permission to access this page.
+        </p>
+        <a
+          href={targetHome}
+          style={{ display: 'inline-block', padding: '8px 18px', background: '#234B3C', color: '#FFF', borderRadius: '8px', textDecoration: 'none', fontSize: '13px', fontWeight: 700 }}
+        >
+          Go to Your Assigned Workspace
+        </a>
+      </div>
+    );
+  }
+  return <Navigate to={targetHome} replace />;
+}
+
 export default function App() {
   const { currentRoleId, isAuthenticated } = useAdminRole();
   const location = useLocation();
-  const [syncError, setSyncError] = useState(null);
-
-  React.useEffect(() => {
-    const handleSyncError = (e) => {
-      setSyncError(e.detail || 'Database synchronization rejected.');
-      const t = setTimeout(() => setSyncError(null), 7000);
-      return () => clearTimeout(t);
-    };
-    window.addEventListener('freshioz_sync_error', handleSyncError);
-    return () => window.removeEventListener('freshioz_sync_error', handleSyncError);
-  }, []);
 
   // Determine home fallback route per role
   const getHomeRoute = () => {
@@ -78,62 +98,9 @@ export default function App() {
     return <Navigate to="/login" replace />;
   }
 
-  // Role Permission Guard Helper with loop prevention
-  const ProtectedByRole = ({ allowedRoles, children }) => {
-    const isAllowed = currentRoleId === 'SUPER_ADMIN' || allowedRoles.includes(currentRoleId);
-    if (isAllowed) {
-      return children;
-    }
-    const targetHome = getHomeRoute();
-    if (location.pathname === targetHome) {
-      return (
-        <div style={{ padding: '60px 24px', textAlign: 'center', background: '#FFFFFF', borderRadius: '12px', margin: '24px', border: '1.5px solid #E2E8F0' }}>
-          <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', marginBottom: '8px' }}>
-            Restricted Operational Desk
-          </h2>
-          <p style={{ fontSize: '13px', color: '#64748B', maxWidth: '480px', margin: '0 auto 16px' }}>
-            Your account role (<strong>{ROLES[currentRoleId]?.label || currentRoleId}</strong>) does not have permission to access this page.
-          </p>
-          <a
-            href={ROLES[currentRoleId]?.defaultRoute || '/orders-fulfillment'}
-            style={{ display: 'inline-block', padding: '8px 18px', background: '#234B3C', color: '#FFF', borderRadius: '8px', textDecoration: 'none', fontSize: '13px', fontWeight: 700 }}
-          >
-            Go to Your Assigned Workspace
-          </a>
-        </div>
-      );
-    }
-    return <Navigate to={targetHome} replace />;
-  };
 
   return (
     <div className="admin-layout-wrapper">
-      {syncError && (
-        <div style={{
-          position: 'fixed',
-          top: '20px',
-          right: '24px',
-          zIndex: 999999,
-          background: '#FEF2F2',
-          border: '1.5px solid #F87171',
-          color: '#991B1B',
-          padding: '12px 20px',
-          borderRadius: '10px',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-          fontSize: '13px',
-          fontWeight: 700,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px'
-        }}>
-          <span>⚠️ {syncError}</span>
-          <button
-            onClick={() => setSyncError(null)}
-            style={{ background: 'none', border: 'none', color: '#991B1B', fontWeight: 800, cursor: 'pointer' }}
-          >✕</button>
-        </div>
-      )}
-
       {/* Smooth Scroll to Top on Page Navigation & Floating Top Button */}
       <ScrollToTop />
 
