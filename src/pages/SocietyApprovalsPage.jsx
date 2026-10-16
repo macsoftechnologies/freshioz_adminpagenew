@@ -79,8 +79,13 @@ export default function SocietyApprovalsPage() {
 
   const handleOpenApproveModal = (soc) => {
     setSelectedSociety(soc);
-    setCommissionType('PERCENTAGE');
-    setCommissionValue('3.5');
+    const isFlat = soc.commissionType === 'FLAT' || soc.commissionType === 'FIXED_PER_ORDER';
+    setCommissionType(isFlat ? 'FLAT' : 'PERCENTAGE');
+    setCommissionValue(
+      soc.commissionValue !== undefined && soc.commissionValue !== null && soc.commissionValue !== ''
+        ? String(soc.commissionValue)
+        : (isFlat ? '40' : '3.5')
+    );
     setIsApproveModalOpen(true);
   };
 
@@ -114,9 +119,19 @@ export default function SocietyApprovalsPage() {
         societies: (prev.societies || []).map(s => s.id === selectedSociety.id ? canonicalRecord : s)
       }));
 
+      const isAlreadyApproved = selectedSociety.status === 'APPROVED';
       setIsApproveModalOpen(false);
-      showToast(`✓ "${selectedSociety.name}" approved and live in User Storefront!`, 'success');
-      setSuccessToast(`✓ "${selectedSociety.name}" has been approved on the server! It is now live in the User Storefront registration dropdown.`);
+      showToast(
+        isAlreadyApproved
+          ? `✓ Commission settings updated for "${selectedSociety.name}"`
+          : `✓ "${selectedSociety.name}" approved and live in User Storefront!`,
+        'success'
+      );
+      setSuccessToast(
+        isAlreadyApproved
+          ? `✓ Commission settings for "${selectedSociety.name}" have been saved on the server.`
+          : `✓ "${selectedSociety.name}" has been approved on the server! It is now live in the User Storefront registration dropdown.`
+      );
       setTimeout(() => setSuccessToast(''), 6000);
     } catch (err) {
       console.error('Society approval failed:', err);
@@ -413,7 +428,7 @@ export default function SocietyApprovalsPage() {
                             cursor: 'pointer'
                           }}
                         >
-                          Edit %
+                          Edit Settings
                         </button>
                       ) : (
                         <button
@@ -466,10 +481,12 @@ export default function SocietyApprovalsPage() {
             </button>
 
             <h3 style={{ fontSize: '20px', color: '#234B3C', marginBottom: '6px' }}>
-              Approve Society Onboarding
+              {selectedSociety?.status === 'APPROVED' ? 'Edit Society Commission' : 'Approve Society Onboarding'}
             </h3>
             <p style={{ fontSize: '13px', color: '#64748B', marginBottom: '18px' }}>
-              Confirm onboarding for <strong>{selectedSociety?.name}</strong>. Configure the society maintenance cashback pool below:
+              {selectedSociety?.status === 'APPROVED'
+                ? <>Update commission and welfare cashback pool settings for <strong>{selectedSociety?.name}</strong>:</>
+                : <>Confirm onboarding for <strong>{selectedSociety?.name}</strong>. Configure the society maintenance cashback pool below:</>}
             </p>
 
             <form onSubmit={handleConfirmApproval}>
@@ -545,7 +562,7 @@ export default function SocietyApprovalsPage() {
                   type="submit"
                   style={{ flex: 2, padding: '11px', background: '#234B3C', color: '#FFF', fontWeight: 700, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                 >
-                  <Check size={16} /> Confirm & Activate Society
+                  <Check size={16} /> {selectedSociety?.status === 'APPROVED' ? 'Save Commission Settings' : 'Confirm & Activate Society'}
                 </button>
               </div>
             </form>

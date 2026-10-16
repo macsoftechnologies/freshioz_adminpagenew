@@ -1473,7 +1473,7 @@ export default function MasterDataPage() {
                   </div>
                 </div>
 
-                {/* Wholesale / Bulk Crates Packaging Option */}
+                {/* Wholesale / Bulk Crates Packaging Option - Commented out for now
                 <div style={{
                   background: productForm.hasWholesale ? '#F8FAFC' : '#F1F5F9',
                   border: productForm.hasWholesale ? '1.5px solid #CBD5E1' : '1px dashed #CBD5E1',
@@ -1540,6 +1540,7 @@ export default function MasterDataPage() {
                     </div>
                   )}
                 </div>
+                */}
 
                 <div style={{ marginBottom: '14px' }}>
                   <label className="form-label-title" style={{ fontSize: '11px', fontWeight: 700 }}>Mandi Origin / Source</label>

@@ -368,7 +368,9 @@ export default function SocietiesDirectoryPage() {
                       </td>
                       <td>
                         <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#059669' }}>
-                          {s.commissionValue || 3.5}%
+                          {s.commissionType === 'FLAT' || s.commissionType === 'FIXED_PER_ORDER'
+                            ? `₹${s.commissionValue || 0} Flat`
+                            : `${s.commissionValue || 3.5}%`}
                         </span>
                         <div style={{ fontSize: '10.5px', color: '#64748B' }}>Welfare Fund</div>
                       </td>
@@ -510,7 +512,9 @@ export default function SocietiesDirectoryPage() {
               <div style={{ background: '#F8FAFC', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '12px' }}>
                 <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700 }}>WELFARE CASHBACK</div>
                 <div style={{ fontSize: '20px', fontWeight: 800, color: '#059669', marginTop: '2px' }}>
-                  {selectedSociety.commissionValue || 3.5}%
+                  {selectedSociety.commissionType === 'FLAT' || selectedSociety.commissionType === 'FIXED_PER_ORDER'
+                    ? `₹${selectedSociety.commissionValue || 0} Flat`
+                    : `${selectedSociety.commissionValue || 3.5}%`}
                 </div>
               </div>
             </div>
@@ -760,7 +764,9 @@ export default function SocietiesDirectoryPage() {
                     <div>🏷️ <strong>IFSC Code:</strong> {selectedSociety.bankDetails?.ifscCode || 'UTIB0000841'}</div>
                     <div>📍 <strong>Branch:</strong> {selectedSociety.bankDetails?.branch || 'Bengaluru Main Branch'}</div>
                     <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #E2E8F0', fontWeight: 700, color: '#059669' }}>
-                      ✨ Commission Rate: {selectedSociety.commissionValue || 3.5}% credited automatically on every delivery.
+                      ✨ Commission Rate: {selectedSociety.commissionType === 'FLAT' || selectedSociety.commissionType === 'FIXED_PER_ORDER'
+                        ? `₹${selectedSociety.commissionValue || 0} Flat`
+                        : `${selectedSociety.commissionValue || 3.5}%`} credited automatically on every delivery.
                     </div>
                   </div>
                 </div>
