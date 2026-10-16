@@ -206,8 +206,14 @@ export default function EmployeeManagementPage() {
       : null;
     const resolvedPassword = formData.authMethod === 'PASSWORD' ? (formData.password || 'admin123') : null;
 
+    const augmentedRoles = Array.isArray(formData.roles) ? [...formData.roles] : [];
+    if (augmentedRoles.includes('WAREHOUSE_MANAGER') && !augmentedRoles.includes('PROCUREMENT_OFFICER')) {
+      augmentedRoles.push('PROCUREMENT_OFFICER');
+    }
+
     const payload = {
       ...formData,
+      roles: augmentedRoles,
       inviteStatus: resolvedInviteStatus,
       inviteToken: resolvedInviteToken,
       password: resolvedPassword,
