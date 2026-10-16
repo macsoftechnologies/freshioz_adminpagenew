@@ -93,7 +93,7 @@ export default function WarehousesPage() {
         wh.openTime || '05:00',
         wh.capacityTons || 35,
         wh.managerName || 'Operations Lead',
-        wh.managerPhone || '+91 98450 11223',
+        wh.managerPhone || '+91 9999999999',
         whSocCount,
         wh.status || 'ACTIVE'
       ];
