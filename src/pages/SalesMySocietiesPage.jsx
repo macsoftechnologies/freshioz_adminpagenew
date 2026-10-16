@@ -174,7 +174,7 @@ export default function SalesMySocietiesPage() {
                     </td>
                     <td>
                       <div style={{ fontSize: '12px', fontWeight: 700, color: '#1E293B' }}>{soc.salesRepName || 'Field Sales'}</div>
-                      <div style={{ fontSize: '11px', color: '#64748B' }}>+91 {soc.salesRepPhone || '9845011000'}</div>
+                      <div style={{ fontSize: '11px', color: '#64748B' }}>+91 {soc.salesRepPhone || '99999999999'}</div>
                     </td>
                     <td>
                       <span className={`status-pill ${soc.status.toLowerCase()}`}>
