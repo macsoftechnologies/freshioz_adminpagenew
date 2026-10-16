@@ -35,10 +35,24 @@ export {
 };
 
 // Storage key with clean slate versioning
-const STORAGE_KEY = 'freshioz_master_store_clean_v4';
+const STORAGE_KEY = 'freshioz_master_store_clean_v6';
+const LEGACY_STORAGE_KEYS = [
+  'freshioz_master_store_clean_v5',
+  'freshioz_master_store_clean_v4',
+  'freshioz_master_store_clean_v3',
+  'freshioz_master_store_clean_v2',
+  'freshioz_master_store_clean_v1',
+  'freshioz_master_store'
+];
 
 export function getFreshiozStore() {
   try {
+    if (typeof localStorage !== 'undefined') {
+      LEGACY_STORAGE_KEYS.forEach(k => {
+        try { localStorage.removeItem(k); } catch (e) {}
+      });
+    }
+
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
       const initial = { ...DEFAULT_STORE };
@@ -261,12 +275,6 @@ export function areEntityCollectionsEqual(localData, serverData) {
       continue;
     }
 
-    // Safeguard: If server returned 0 items for operational tables (unauthenticated/guest polling),
-    // do not treat it as an active change that clears existing local data
-    if (serverArr.length === 0 && localArr.length > 0 && ['orders', 'procurementLogs', 'vendors', 'employees'].includes(key)) {
-      continue;
-    }
-
     if (localArr.length !== serverArr.length) return false;
 
     // Map-based lookup by ID to ignore array sorting order differences between server & client
@@ -319,24 +327,14 @@ export async function syncFreshiozStoreFromServer() {
         // Only update storage and dispatch re-render if data collections ACTUALLY changed.
         // This prevents aggressive re-renders from interrupting user operations.
         if (!areEntityCollectionsEqual(currentLocal, serverData)) {
-          // Safeguard: Never overwrite operational collections (orders, procurementLogs, warehouseInventory, vendors)
-          // with empty data if server returned empty due to unauthenticated / guest / public store response.
-          const mergedOrders = (Array.isArray(serverData.orders) && serverData.orders.length > 0)
-            ? serverData.orders
-            : (currentLocal.orders || []);
-
-          const mergedProcurement = (Array.isArray(serverData.procurementLogs) && serverData.procurementLogs.length > 0)
-            ? serverData.procurementLogs
-            : (currentLocal.procurementLogs || []);
-
-          const serverInv = serverData.warehouseInventory || {};
-          const localInv = currentLocal.warehouseInventory || {};
-          const hasServerInv = Object.keys(serverInv).some(wh => Object.keys(serverInv[wh] || {}).length > 0);
-          const mergedInventory = hasServerInv ? serverInv : localInv;
-
-          const mergedVendors = (Array.isArray(serverData.vendors) && serverData.vendors.length > 0)
-            ? serverData.vendors
-            : (currentLocal.vendors || []);
+          const mergedOrders = Array.isArray(serverData.orders) ? serverData.orders : [];
+          const mergedProcurement = Array.isArray(serverData.procurementLogs) ? serverData.procurementLogs : [];
+          const mergedVendors = Array.isArray(serverData.vendors) ? serverData.vendors : [];
+          const mergedWarehouses = Array.isArray(serverData.warehouses) ? serverData.warehouses : [];
+          const mergedSocieties = Array.isArray(serverData.societies) ? serverData.societies : [];
+          const mergedWithdrawals = Array.isArray(serverData.withdrawals) ? serverData.withdrawals : [];
+          const mergedSocietyRequests = Array.isArray(serverData.societyRequests) ? serverData.societyRequests : [];
+          const mergedInventory = serverData.warehouseInventory || {};
 
           const mergedData = {
             ...currentLocal,
@@ -344,8 +342,12 @@ export async function syncFreshiozStoreFromServer() {
             orders: mergedOrders,
             procurementLogs: mergedProcurement,
             warehouseInventory: mergedInventory,
+            warehouses: mergedWarehouses,
+            societies: mergedSocieties,
             vendors: mergedVendors,
-            dailyPricingHistory: currentLocal.dailyPricingHistory || serverData.dailyPricingHistory || {}
+            withdrawals: mergedWithdrawals,
+            societyRequests: mergedSocietyRequests,
+            dailyPricingHistory: serverData.dailyPricingHistory || currentLocal.dailyPricingHistory || {}
           };
           localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedData));
           window.dispatchEvent(new CustomEvent('freshioz_store_updated', { detail: mergedData }));
