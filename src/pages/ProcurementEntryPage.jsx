@@ -335,8 +335,8 @@ export default function ProcurementEntryPage() {
       vendorName: vendorName,
       mandiName: mandiLocation,
       vendorBankDetails: activeVendor?.bankDetails || null,
-      lat: 13.1362,
-      lng: 78.1347,
+      lat: Number(activeVendor?.lat) || 17.7231,
+      lng: Number(activeVendor?.lng) || 83.3013,
       items: items.map(i => ({
         name: i.name,
         qty: `${i.qty} (${i.unit})`,

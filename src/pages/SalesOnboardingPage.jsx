@@ -37,8 +37,8 @@ export default function SalesOnboardingPage() {
     type: 'APARTMENT', // 'APARTMENT' | 'HOSTEL'
     address: '',
     imageUrl: '', // Optional building/gate photo
-    lat: 12.9716,
-    lng: 77.5946,
+    lat: 17.7231,
+    lng: 83.3013,
     warehouseId: availableWarehouses[0]?.id || '',
     warehouseName: availableWarehouses[0]?.name || '',
     secretaryName: '',
