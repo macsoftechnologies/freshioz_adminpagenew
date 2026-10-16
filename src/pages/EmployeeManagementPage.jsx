@@ -365,6 +365,25 @@ export default function EmployeeManagementPage() {
     return matchesQuery && matchesRole && matchesStatus && matchesFacility;
   });
 
+  // Stable deterministic sorting: Super Admin always on top, then newest personnel first
+  const sortedEmployees = React.useMemo(() => {
+    return [...filteredEmployees].sort((a, b) => {
+      // 1. Super Admin always pinned to the top
+      const aIsSuper = a.roles?.includes('SUPER_ADMIN') || a.email === 'superadmin@gmail.com';
+      const bIsSuper = b.roles?.includes('SUPER_ADMIN') || b.email === 'superadmin@gmail.com';
+      if (aIsSuper && !bIsSuper) return -1;
+      if (!aIsSuper && bIsSuper) return 1;
+
+      // 2. Stable chronological order by creation date or date joined
+      const dateA = new Date(a.createdAt || a.dateJoined || 0).getTime();
+      const dateB = new Date(b.createdAt || b.dateJoined || 0).getTime();
+      if (dateB !== dateA) return dateB - dateA;
+
+      // 3. Fallback stable sort by ID
+      return String(a.id || '').localeCompare(String(b.id || ''));
+    });
+  }, [filteredEmployees]);
+
   // Reset pagination on filter change
   React.useEffect(() => {
     setCurrentPage(1);
@@ -372,8 +391,8 @@ export default function EmployeeManagementPage() {
 
   const paginatedEmployees = React.useMemo(() => {
     const start = (currentPage - 1) * pageSize;
-    return filteredEmployees.slice(start, start + pageSize);
-  }, [filteredEmployees, currentPage, pageSize]);
+    return sortedEmployees.slice(start, start + pageSize);
+  }, [sortedEmployees, currentPage, pageSize]);
 
   return (
     <div className="admin-page-container">
