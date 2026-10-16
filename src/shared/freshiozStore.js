@@ -73,12 +73,6 @@ export function getFreshiozStore() {
       hasUpdates = true;
     }
 
-    // Ensure initial 20 produce items exist
-    if (!parsed.products || parsed.products.length === 0) {
-      parsed.products = INITIAL_PRODUCTS;
-      hasUpdates = true;
-    }
-
     // Ensure warehouse inventory exists
     if (!parsed.warehouseInventory) {
       parsed.warehouseInventory = INITIAL_WAREHOUSE_INVENTORY;
