@@ -10,17 +10,11 @@ export const ROLES = {
     desc: 'Master Operations, Graphs, Approvals & Pricing',
     defaultRoute: '/dashboard'
   },
-  PROCUREMENT_OFFICER: {
-    id: 'PROCUREMENT_OFFICER',
-    label: 'Procurement Officer (Mandi Buyer)',
-    desc: 'APMC Mandi Sourcing, Vendor Accounts & Procurement Ledger',
-    defaultRoute: '/procurement-demand'
-  },
   WAREHOUSE_MANAGER: {
     id: 'WAREHOUSE_MANAGER',
-    label: 'Warehouse Manager',
-    desc: 'Inventory Inwarding, Stock Balancing & Crating Lines',
-    defaultRoute: '/warehouse-crating'
+    label: 'Warehouse & Procurement Manager',
+    desc: 'Mandi Procurement, Inwarding, Inventory & Crating Lines',
+    defaultRoute: '/procurement-demand'
   },
   WAREHOUSE_STAFF: {
     id: 'WAREHOUSE_STAFF',

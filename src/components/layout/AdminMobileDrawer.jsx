@@ -247,10 +247,10 @@ export default function AdminMobileDrawer() {
             </>
           )}
 
-          {/* ================= PROCUREMENT OFFICER ================= */}
-          {currentRoleId === 'PROCUREMENT_OFFICER' && (
+          {/* ================= WAREHOUSE & PROCUREMENT MANAGER ================= */}
+          {(currentRoleId === 'WAREHOUSE_MANAGER' || currentRoleId === 'PROCUREMENT_OFFICER') && (
             <>
-              <div className="drawer-nav-section-title">Mandi Sourcing & Procurement</div>
+              <div className="drawer-nav-section-title">Warehouse & Procurement Operations</div>
               <NavLink to="/procurement-demand" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
                 <ClipboardList size={17} />
                 <span>Mandi Demand (Stock Net)</span>
@@ -271,36 +271,9 @@ export default function AdminMobileDrawer() {
                 <Coins size={17} />
                 <span>Daily Dynamic Pricing</span>
               </NavLink>
-              <NavLink to="/transactions" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
-                <Receipt size={17} />
-                <span>Payment & Spent Ledger</span>
-              </NavLink>
-            </>
-          )}
-
-          {/* ================= WAREHOUSE MANAGER ================= */}
-          {currentRoleId === 'WAREHOUSE_MANAGER' && (
-            <>
-              <div className="drawer-nav-section-title">Warehouse Operations</div>
-              <NavLink to="/procurement-demand" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
-                <ClipboardList size={17} />
-                <span>Mandi Demand (Stock Net)</span>
-              </NavLink>
-              <NavLink to="/procurement-entry" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
-                <FilePlus size={17} />
-                <span>Log Mandi Bill & Transport</span>
-              </NavLink>
-              <NavLink to="/procurement-logs" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
-                <FileText size={17} />
-                <span>Mandi Purchases Ledger</span>
-              </NavLink>
               <NavLink to="/warehouse-crating" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
                 <PackageCheck size={17} />
                 <span>Society Packing & Crating</span>
-              </NavLink>
-              <NavLink to="/vendors" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
-                <Store size={17} />
-                <span>Vendors & Farmers Directory</span>
               </NavLink>
               <NavLink to="/orders-fulfillment" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
                 <Truck size={17} />

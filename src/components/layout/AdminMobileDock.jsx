@@ -152,8 +152,8 @@ export default function AdminMobileDock() {
         </>
       )}
 
-      {/* Procurement Officer Tabs */}
-      {currentRoleId === 'PROCUREMENT_OFFICER' && (
+      {/* Warehouse & Procurement Manager Tabs */}
+      {(currentRoleId === 'WAREHOUSE_MANAGER' || currentRoleId === 'PROCUREMENT_OFFICER') && (
         <>
           <NavLink to="/procurement-demand" className={({ isActive }) => `admin-dock-item ${isActive ? 'active' : ''}`}>
             <ClipboardList size={18} />
@@ -161,38 +161,11 @@ export default function AdminMobileDock() {
           </NavLink>
           <NavLink to="/procurement-entry" className={({ isActive }) => `admin-dock-item ${isActive ? 'active' : ''}`}>
             <FilePlus size={18} />
-            <span>Log Bill</span>
-          </NavLink>
-          <NavLink to="/vendors" className={({ isActive }) => `admin-dock-item ${isActive ? 'active' : ''}`}>
-            <Store size={18} />
-            <span>Vendors</span>
-          </NavLink>
-          <button
-            type="button"
-            onClick={() => setIsMobileDrawerOpen(true)}
-            className="admin-dock-item"
-            style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-          >
-            <Menu size={18} />
-            <span>Menu</span>
-          </button>
-        </>
-      )}
-
-      {/* Warehouse Manager Tabs */}
-      {currentRoleId === 'WAREHOUSE_MANAGER' && (
-        <>
-          <NavLink to="/warehouse-settings" className={({ isActive }) => `admin-dock-item ${isActive || isWarehouseRoute ? 'active' : ''}`}>
-            <Warehouse size={18} />
-            <span>Cut-Off</span>
+            <span>Mandi Bill</span>
           </NavLink>
           <NavLink to="/warehouse-crating" className={({ isActive }) => `admin-dock-item ${isActive ? 'active' : ''}`}>
-            <ClipboardList size={18} />
+            <PackageCheck size={18} />
             <span>Crating</span>
-          </NavLink>
-          <NavLink to="/orders-fulfillment" className={({ isActive }) => `admin-dock-item ${isActive ? 'active' : ''}`}>
-            <Truck size={18} />
-            <span>Live Orders</span>
           </NavLink>
           <button
             type="button"
