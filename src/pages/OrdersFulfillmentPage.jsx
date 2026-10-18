@@ -133,7 +133,7 @@ export default function OrdersFulfillmentPage() {
     PACKED: { label: 'Packed & Crated', badgeClass: 'approved', desc: 'Quality checked, flat-tagged & loaded in crate', color: '#10B981' },
     OUT_FOR_DELIVERY: { label: 'Out for Delivery', badgeClass: 'in-progress', desc: 'Dispatched to society drop desk', color: '#F28E14' },
     DELIVERED: { label: 'Delivered', badgeClass: 'approved', desc: 'Secured at society drop desk', color: '#059669' },
-    CANCELLED: { label: 'Cancelled', badgeClass: 'rejected', desc: 'Order voided / refunded', color: '#DC2626' }
+    CANCELLED: { label: 'Cancelled', badgeClass: 'rejected', desc: 'Order voided / cancelled', color: '#DC2626' }
   };
 
   // Status counts
