@@ -140,13 +140,16 @@ export default function ReviewsModerationPage() {
 
     setIsSubmittingAward(true);
     try {
+      const days = Number(awardForm.expiryDays) || 30;
+      const calculatedExpiresAt = new Date(Date.now() + days * 86400000).toISOString();
       await discountAdminService.create({
         userId: awardForm.userId.trim(),
         userName: awardForm.userName.trim(),
         discountType: awardForm.discountType,
         discountValue: Number(awardForm.discountValue) || 50,
         minOrderAmount: Number(awardForm.minOrderAmount) || 0,
-        expiryDays: Number(awardForm.expiryDays) || 30,
+        expiryDays: days,
+        expiresAt: calculatedExpiresAt,
         code: awardForm.code.trim().toUpperCase(),
         issueReason: awardForm.issueReason.trim(),
       });
