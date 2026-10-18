@@ -120,7 +120,7 @@ export default function EmployeeManagementPage() {
       assignedLocationName: emp.assignedLocationName || '',
       status: emp.status || 'ACTIVE',
       authMethod: emp.authMethod || (emp.inviteStatus === 'INVITED' ? 'INVITE' : 'PASSWORD'),
-      password: emp.password || 'admin123',
+      password: '', // Kept empty during edit so existing password in database is never overwritten
       inviteStatus: emp.inviteStatus || 'ACTIVE',
       inviteToken: emp.inviteToken || '',
       notes: emp.notes || ''
@@ -184,7 +184,6 @@ export default function EmployeeManagementPage() {
     const resolvedInviteToken = formData.authMethod === 'INVITE'
       ? (formData.inviteToken || `inv_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`)
       : null;
-    const resolvedPassword = formData.authMethod === 'PASSWORD' ? (formData.password || 'admin123') : null;
 
     const augmentedRoles = Array.isArray(formData.roles) ? [...formData.roles] : [];
     if (augmentedRoles.includes('WAREHOUSE_MANAGER') && !augmentedRoles.includes('PROCUREMENT_OFFICER')) {
@@ -196,10 +195,17 @@ export default function EmployeeManagementPage() {
       roles: augmentedRoles,
       inviteStatus: resolvedInviteStatus,
       inviteToken: resolvedInviteToken,
-      password: resolvedPassword,
       assignedLocationType: locType,
       assignedLocationName: locName,
     };
+
+    if (formData.authMethod === 'PASSWORD' && formData.password && formData.password.trim() !== '') {
+      payload.password = formData.password.trim();
+    } else if (editingEmployee) {
+      delete payload.password; // Do not overwrite existing password if left blank
+    } else {
+      payload.password = 'Freshioz@123';
+    }
 
     if (editingEmployee) {
       try {
@@ -954,13 +960,13 @@ export default function EmployeeManagementPage() {
                     <input
                       type="text"
                       className="form-input-control"
-                      placeholder="e.g. admin123"
+                      placeholder={editingEmployee ? "Leave blank to keep existing password" : "e.g. Freshioz@123"}
                       value={formData.password}
                       onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                       style={{ marginTop: '4px' }}
                     />
                     <div style={{ fontSize: '11px', color: '#64748B', marginTop: '3px' }}>
-                      Staff can log in immediately using their phone/email and this password.
+                      {editingEmployee ? "Leave blank to keep existing password. Enter a new password only if resetting." : "Staff can log in immediately using their phone/email and this initial password."}
                     </div>
                   </div>
                 ) : (

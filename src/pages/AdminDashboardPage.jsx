@@ -24,7 +24,7 @@ import {
 import { exportToExcel } from '../utils/excelExporter';
 
 export default function AdminDashboardPage() {
-  const { store } = useAdminRole();
+  const { store, hasApiError, apiErrorMessage, refetchAll } = useAdminRole();
 
   const pendingSocieties = (store.societies || []).filter(s => s.status === 'PENDING');
   const approvedSocieties = (store.societies || []).filter(s => s.status === 'APPROVED');
@@ -100,6 +100,49 @@ export default function AdminDashboardPage() {
           </Link>
         </div>
       </div>
+
+      {hasApiError && (
+        <div style={{
+          background: '#FEF2F2',
+          border: '1.5px solid #FCA5A5',
+          borderRadius: '8px',
+          padding: '10px 14px',
+          marginBottom: '12px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '8px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <AlertCircle size={16} color="#DC2626" />
+            <div>
+              <span style={{ fontWeight: 800, fontSize: '13px', color: '#991B1B' }}>
+                Operational Data Sync Warning:
+              </span>
+              <span style={{ fontSize: '12px', color: '#B91C1C', marginLeft: '6px' }}>
+                {apiErrorMessage || 'Some API records could not be fetched from the backend server.'} Metrics may reflect cached or partial data.
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => refetchAll && refetchAll()}
+            style={{
+              background: '#DC2626',
+              color: '#FFF',
+              border: 'none',
+              fontSize: '11.5px',
+              fontWeight: 700,
+              padding: '4px 12px',
+              borderRadius: '6px',
+              cursor: 'pointer'
+            }}
+          >
+            Retry Sync &rarr;
+          </button>
+        </div>
+      )}
 
       {/* Pending Action Banner if any */}
       {pendingSocieties.length > 0 && (

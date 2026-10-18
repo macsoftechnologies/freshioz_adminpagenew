@@ -75,16 +75,45 @@ export function AdminRoleProvider({ children }) {
 
   // Live server-driven state via React Query (only enabled when authenticated session exists)
   const queryOpts = { enabled: !!isAuthenticated };
-  const { data: societies = [] } = societyResource.useList(null, queryOpts);
-  const { data: warehouses = [] } = warehouseResource.useList(null, queryOpts);
-  const { data: employees = [] } = employeeResource.useList(null, queryOpts);
-  const { data: vendors = [] } = vendorResource.useList(null, queryOpts);
-  const { data: leadsData = {} } = leadResource.useList(null, queryOpts);
-  const { data: orders = [] } = orderResource.useList(null, queryOpts);
-  const { data: procurementLogs = [] } = procurementResource.useList(null, queryOpts);
-  const { data: products = [] } = productResource.useList(null, queryOpts);
-  const { data: categories = [] } = categoryResource.useList(null, queryOpts);
-  const { data: withdrawals = [] } = usePayouts(null, queryOpts);
+  const societiesQuery = societyResource.useList(null, queryOpts);
+  const warehousesQuery = warehouseResource.useList(null, queryOpts);
+  const employeesQuery = employeeResource.useList(null, queryOpts);
+  const vendorsQuery = vendorResource.useList(null, queryOpts);
+  const leadsQuery = leadResource.useList(null, queryOpts);
+  const ordersQuery = orderResource.useList(null, queryOpts);
+  const procurementQuery = procurementResource.useList(null, queryOpts);
+  const productsQuery = productResource.useList(null, queryOpts);
+  const categoriesQuery = categoryResource.useList(null, queryOpts);
+  const withdrawalsQuery = usePayouts(null, queryOpts);
+
+  const societies = societiesQuery.data || [];
+  const warehouses = warehousesQuery.data || [];
+  const employees = employeesQuery.data || [];
+  const vendors = vendorsQuery.data || [];
+  const leadsData = leadsQuery.data || {};
+  const orders = ordersQuery.data || [];
+  const procurementLogs = procurementQuery.data || [];
+  const products = productsQuery.data || [];
+  const categories = categoriesQuery.data || [];
+  const withdrawals = withdrawalsQuery.data || [];
+
+  const hasApiError = !!(
+    societiesQuery.isError ||
+    warehousesQuery.isError ||
+    employeesQuery.isError ||
+    ordersQuery.isError ||
+    procurementQuery.isError ||
+    productsQuery.isError
+  );
+
+  const apiErrorMessage = (
+    ordersQuery.error?.message ||
+    societiesQuery.error?.message ||
+    employeesQuery.error?.message ||
+    procurementQuery.error?.message ||
+    productsQuery.error?.message ||
+    null
+  );
 
   const store = React.useMemo(() => ({
     societies: Array.isArray(societies) ? societies : [],
@@ -272,7 +301,10 @@ export function AdminRoleProvider({ children }) {
         isWarehouse: currentRoleId === 'WAREHOUSE_MANAGER',
         isWarehouseStaff: currentRoleId === 'WAREHOUSE_STAFF',
         isStoreManager: currentRoleId === 'STORE_MANAGER',
-        isRider: currentRoleId === 'DELIVERY_EXECUTIVE'
+        isRider: currentRoleId === 'DELIVERY_EXECUTIVE',
+        hasApiError,
+        apiErrorMessage,
+        refetchAll: () => queryClient.refetchQueries()
       }}
     >
       {children}

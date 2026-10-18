@@ -43,6 +43,8 @@ export default function DailyPricingPage() {
 
   const [selectedDate, setSelectedDate] = useState(todayStr);
   const [products, setProducts] = useState([]);
+  const [pricingError, setPricingError] = useState(null);
+  const [isLoadingPricing, setIsLoadingPricing] = useState(false);
   const [successToast, setSuccessToast] = useState('');
   const [isConfirmPricingModalOpen, setIsConfirmPricingModalOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -55,26 +57,32 @@ export default function DailyPricingPage() {
 
   const bulkUnits = units.filter(u => u.isBulk);
 
-  useEffect(() => {
-    let isMounted = true;
-    async function loadPricing() {
-      try {
-        const prices = await pricingService.getDailyPrices(selectedDate);
-        if (isMounted && Array.isArray(prices) && prices.length > 0) {
-          setProducts(prices);
-          return;
-        }
-      } catch (e) {
-        // Fallback to active catalog
+  const loadPricing = React.useCallback(async () => {
+    setIsLoadingPricing(true);
+    setPricingError(null);
+    try {
+      const prices = await pricingService.getDailyPrices(selectedDate);
+      if (Array.isArray(prices) && prices.length > 0) {
+        setProducts(prices);
+        setPricingError(null);
+        return;
       }
-      if (isMounted && Array.isArray(rawProducts) && rawProducts.length > 0) {
+      // If server explicitly returned an empty array (no custom rates set yet for this date)
+      if (Array.isArray(rawProducts) && rawProducts.length > 0) {
         setProducts(rawProducts);
       }
+    } catch (e) {
+      console.error('Failed to load daily pricing:', e);
+      setPricingError(e.message || 'Failed to fetch dynamic daily prices from server');
+    } finally {
+      setIsLoadingPricing(false);
     }
+  }, [selectedDate, rawProducts]);
+
+  useEffect(() => {
     loadPricing();
     isEditingRef.current = false;
-    return () => { isMounted = false; };
-  }, [selectedDate, rawProducts]);
+  }, [loadPricing]);
 
   // Live volume bulk tier discount calculator (standardized to clean rupee integers)
   const calculateBulkStats = (prod) => {
@@ -448,6 +456,76 @@ export default function DailyPricingPage() {
         }}>
           <Lock size={16} color="#D97706" />
           <span>Historical Archive for {selectedDate}: Daily prices in the past are locked to preserve audit integrity. To update active prices, switch to Today or Next Run.</span>
+        </div>
+      )}
+
+      {pricingError && (
+        <div style={{
+          background: '#FEF2F2',
+          border: '1.5px solid #FCA5A5',
+          borderRadius: '10px',
+          padding: '14px 18px',
+          marginBottom: '14px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <AlertCircle size={22} color="#DC2626" />
+            <div>
+              <div style={{ fontWeight: 800, fontSize: '13.5px', color: '#991B1B' }}>
+                Server Pricing Load Failed for {selectedDate}
+              </div>
+              <div style={{ fontSize: '12px', color: '#B91C1C', marginTop: '2px' }}>
+                {pricingError}. Overridden daily rates could not be verified from the server.
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              type="button"
+              onClick={loadPricing}
+              disabled={isLoadingPricing}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                background: '#DC2626',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '7px 14px',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              <RefreshCw size={13} className={isLoadingPricing ? 'spin-icon' : ''} />
+              <span>{isLoadingPricing ? 'Retrying...' : 'Retry Connection'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPricingError(null);
+                setProducts(rawProducts);
+                showToast('Using base catalog prices as temporary fallback.', 'info');
+              }}
+              style={{
+                background: '#FFFFFF',
+                color: '#991B1B',
+                border: '1.5px solid #FCA5A5',
+                borderRadius: '6px',
+                padding: '7px 14px',
+                fontSize: '12px',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              Use Base Catalog Fallback
+            </button>
+          </div>
         </div>
       )}
 

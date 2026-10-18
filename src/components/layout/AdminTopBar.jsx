@@ -8,7 +8,17 @@ import { API_BASE_URL } from '../../api/client';
 
 export default function AdminTopBar({ onMobileMenuClick }) {
   const navigate = useNavigate();
-  const { currentRoleId, setRole, currentUser, requestLogout, allowedRoles, canSwitchRoles } = useAdminRole();
+  const { 
+    currentRoleId, 
+    setRole, 
+    currentUser, 
+    requestLogout, 
+    allowedRoles, 
+    canSwitchRoles,
+    hasApiError,
+    apiErrorMessage,
+    refetchAll
+  } = useAdminRole();
   const { showToast } = useToast();
   const [isBackendOnline, setIsBackendOnline] = React.useState(true);
 
@@ -77,6 +87,38 @@ export default function AdminTopBar({ onMobileMenuClick }) {
           />
           <span>{isBackendOnline ? 'NestJS Live (IST)' : 'Backend Offline'}</span>
         </div>
+
+        {hasApiError && (
+          <div
+            onClick={() => refetchAll && refetchAll()}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: '#FEF2F2',
+              border: '1px solid #FECACA',
+              color: '#991B1B',
+              padding: '3px 9px',
+              borderRadius: '9999px',
+              fontSize: '11px',
+              fontWeight: 700,
+              cursor: 'pointer'
+            }}
+            title={`API Outage Detected: ${apiErrorMessage || 'Failed to fetch live records'}. Click to retry.`}
+          >
+            <span
+              style={{
+                width: '7px',
+                height: '7px',
+                borderRadius: '50%',
+                background: '#EF4444',
+                display: 'inline-block',
+                boxShadow: '0 0 6px #EF4444',
+              }}
+            />
+            <span>API Outage Detected (Retry)</span>
+          </div>
+        )}
         {/* Dynamic Role Switcher Pill - ONLY visible to multi-role or Super Admin users */}
         {canSwitchRoles ? (
           <div className="role-switcher-box" title="Switch between your assigned operational workdesks">
