@@ -593,7 +593,7 @@ export default function DailyPricingPage() {
           </span>
         </div>
 
-        <div style={{ overflowX: 'auto' }}>
+        <div style={{ overflowX: 'auto', opacity: isLoadingPricing ? 0.7 : 1, transition: 'opacity 0.2s', pointerEvents: isLoadingPricing ? 'none' : 'auto' }}>
           <table className="admin-data-table">
             <thead>
               <tr>
@@ -626,15 +626,22 @@ export default function DailyPricingPage() {
               {products.length === 0 ? (
                 <tr>
                   <td colSpan="8">
-                    <div className="admin-empty-state">
-                      <div className="admin-empty-state-icon">
-                        <Tags size={22} />
+                    {isLoadingPricing || isLoading ? (
+                      <div style={{ padding: '40px 20px', textAlign: 'center', color: '#64748B' }}>
+                        <RefreshCw size={24} className="spin-icon" style={{ margin: '0 auto 10px', color: '#059669' }} />
+                        <div style={{ fontWeight: 700, fontSize: '13px' }}>Loading rate sheet for {selectedDate}...</div>
                       </div>
-                      <div className="admin-empty-state-title">No Cataloged Produce Items</div>
-                      <div className="admin-empty-state-desc">
-                        Add vegetables and fruits in Master Data to configure daily retail pricing, volume bulk discounts, and GST % here.
+                    ) : (
+                      <div className="admin-empty-state">
+                        <div className="admin-empty-state-icon">
+                          <Tags size={22} />
+                        </div>
+                        <div className="admin-empty-state-title">No Cataloged Produce Items</div>
+                        <div className="admin-empty-state-desc">
+                          Add vegetables and fruits in Master Data to configure daily retail pricing, volume bulk discounts, and GST % here.
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </td>
                 </tr>
               ) : (
