@@ -20,10 +20,7 @@ import {
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
-import { saveFreshiozStore, generateId, generateUUID } from '../shared/freshiozStore';
-import { productService } from '../services/productService';
-import { categoryService } from '../services/categoryService';
-import { unitService } from '../services/unitService';
+import { products as productResource, categories as categoryResource, units as unitResource } from '../hooks/resources';
 import { uploadService } from '../services/uploadService';
 import { exportToExcel } from '../utils/excelExporter';
 import AdminPagination from '../components/common/AdminPagination';
@@ -95,13 +92,30 @@ const PRODUCE_PRESETS = [
 ];
 
 export default function MasterDataPage() {
-  const { store, currentUser } = useAdminRole();
+  const { currentUser } = useAdminRole();
   const { showToast } = useToast();
   const location = useLocation();
   const navigate = useNavigate();
-  const categories = store.categories || [];
-  const products = store.products || [];
-  const units = store.units || [];
+
+  const { data: rawCategories = [], isLoading: isLoadingCategories } = categoryResource.useList();
+  const { data: rawProducts = [], isLoading: isLoadingProducts } = productResource.useList();
+  const { data: rawUnits = [], isLoading: isLoadingUnits } = unitResource.useList();
+
+  const createCategoryMutation = categoryResource.useCreate();
+  const updateCategoryMutation = categoryResource.useUpdate();
+  const removeCategoryMutation = categoryResource.useRemove();
+
+  const createProductMutation = productResource.useCreate();
+  const updateProductMutation = productResource.useUpdate();
+  const removeProductMutation = productResource.useRemove();
+
+  const createUnitMutation = unitResource.useCreate();
+  const updateUnitMutation = unitResource.useUpdate();
+  const removeUnitMutation = unitResource.useRemove();
+
+  const categories = Array.isArray(rawCategories) ? rawCategories : [];
+  const products = Array.isArray(rawProducts) ? rawProducts : [];
+  const units = Array.isArray(rawUnits) ? rawUnits : [];
 
   const getTabFromHash = (hashStr) => {
     const raw = (hashStr || '').toLowerCase().replace('#', '').trim();
@@ -144,29 +158,7 @@ export default function MasterDataPage() {
   const [isUnitModalOpen, setIsUnitModalOpen] = useState(false);
   const [isConfirmProductModalOpen, setIsConfirmProductModalOpen] = useState(false);
 
-  useEffect(() => {
-    let isMounted = true;
-    async function loadTaxonomies() {
-      try {
-        const [catsRes, unitsRes] = await Promise.allSettled([
-          categoryService.getAll(),
-          unitService.getAll(),
-        ]);
-        if (isMounted) {
-          if (catsRes.status === 'fulfilled' && Array.isArray(catsRes.value) && catsRes.value.length > 0) {
-            saveFreshiozStore(prev => ({ ...prev, categories: catsRes.value }));
-          }
-          if (unitsRes.status === 'fulfilled' && Array.isArray(unitsRes.value) && unitsRes.value.length > 0) {
-            saveFreshiozStore(prev => ({ ...prev, units: unitsRes.value }));
-          }
-        }
-      } catch (err) {
-        console.warn('Initial categories/units load note:', err);
-      }
-    }
-    loadTaxonomies();
-    return () => { isMounted = false; };
-  }, []);
+
 
   // Simplified Form states
   const [categoryForm, setCategoryForm] = useState({ id: '', name: '', slug: '', icon: '🥦', description: '', status: 'ACTIVE' });
@@ -229,44 +221,30 @@ export default function MasterDataPage() {
     const slug = categoryForm.slug || categoryForm.name.toLowerCase().replace(/\s+/g, '-');
 
     try {
-      let savedServerCat = null;
       if (editingId) {
-        savedServerCat = await categoryService.update(editingId, {
+        await updateCategoryMutation.mutateAsync({
+          id: editingId,
+          data: {
+            name: categoryForm.name.trim(),
+            slug,
+            icon: categoryForm.icon,
+            description: categoryForm.description,
+            status: categoryForm.status || 'ACTIVE',
+          }
+        });
+      } else {
+        await createCategoryMutation.mutateAsync({
           name: categoryForm.name.trim(),
           slug,
           icon: categoryForm.icon,
           description: categoryForm.description,
           status: categoryForm.status || 'ACTIVE',
         });
-      } else {
-        savedServerCat = await categoryService.create({
-          name: categoryForm.name.trim(),
-          slug,
-          icon: categoryForm.icon,
-          description: categoryForm.description,
-        });
       }
-
-      // Canonical record from API
-      const canonicalCat = {
-        ...categoryForm,
-        ...(savedServerCat || {}),
-        id: savedServerCat?.id || catId,
-        slug: savedServerCat?.slug || slug,
-        status: savedServerCat?.status || categoryForm.status || 'ACTIVE',
-        itemCount: products.filter(p => p.category === (savedServerCat?.id || catId)).length
-      };
-
-      saveFreshiozStore(prev => ({
-        ...prev,
-        categories: editingId 
-          ? prev.categories.map(c => c.id === editingId ? canonicalCat : c)
-          : [...(prev.categories || []).filter(c => c.id !== canonicalCat.id), canonicalCat]
-      }));
 
       setIsCategoryModalOpen(false);
       setEditingId(null);
-      showToast(`✓ Category "${canonicalCat.name}" saved!`, 'success');
+      showToast(`✓ Category "${categoryForm.name}" saved!`, 'success');
     } catch (err) {
       console.error('Backend category persistence failed:', err);
       showToast(`Failed to save category on server: ${err?.message || 'Server error'}`, 'error');
@@ -289,12 +267,10 @@ export default function MasterDataPage() {
     }
 
     try {
-      const updated = await categoryService.update(cat.id, { status: newStatus });
-
-      saveFreshiozStore(prev => ({
-        ...prev,
-        categories: (prev.categories || []).map(c => c.id === cat.id ? { ...c, ...(updated || {}), status: newStatus } : c)
-      }));
+      await updateCategoryMutation.mutateAsync({
+        id: cat.id,
+        data: { status: newStatus }
+      });
 
       showToast(
         newStatus === 'ACTIVE'
@@ -320,36 +296,23 @@ export default function MasterDataPage() {
     try {
       let savedServerUnit = null;
       if (editingId) {
-        savedServerUnit = await unitService.update(editingId, {
-          name: unitCode,
-          label: unitLabel,
-          isBulk: Boolean(unitForm.isBulk),
-          description: unitForm.description,
+        await updateUnitMutation.mutateAsync({
+          id: editingId,
+          data: {
+            name: unitCode,
+            label: unitLabel,
+            isBulk: Boolean(unitForm.isBulk),
+            description: unitForm.description,
+          }
         });
       } else {
-        savedServerUnit = await unitService.create({
+        await createUnitMutation.mutateAsync({
           name: unitCode,
           label: unitLabel,
           isBulk: Boolean(unitForm.isBulk),
           description: unitForm.description,
         });
       }
-
-      const canonicalUnit = {
-        ...unitForm,
-        ...(savedServerUnit || {}),
-        id: savedServerUnit?.id || editingId || `u-${unitCode}`,
-        name: unitCode,
-        label: unitLabel,
-        isBulk: Boolean(unitForm.isBulk),
-      };
-
-      saveFreshiozStore(prev => ({
-        ...prev,
-        units: editingId
-          ? prev.units.map(u => u.id === editingId ? canonicalUnit : u)
-          : [...(prev.units || []).filter(u => u.id !== canonicalUnit.id), canonicalUnit]
-      }));
 
       setIsUnitModalOpen(false);
       setEditingId(null);
@@ -364,11 +327,7 @@ export default function MasterDataPage() {
   const handleDeleteUnit = async (id) => {
     if (confirm('Delete this packaging unit?')) {
       try {
-        await unitService.delete(id);
-        saveFreshiozStore(prev => ({
-          ...prev,
-          units: prev.units.filter(u => u.id !== id)
-        }));
+        await removeUnitMutation.mutateAsync(id);
         showToast('Unit deleted.', 'success');
       } catch (err) {
         console.error('Backend unit delete failed:', err);
@@ -493,29 +452,30 @@ export default function MasterDataPage() {
       lastEditedById: currentUser?.id || 'emp-101'
     };
 
-    // 1. Persist directly to backend database via productService
+    // 1. Persist directly to backend database via React Query mutations
     try {
-      let savedProd = null;
       if (editingId) {
-        savedProd = await productService.update(prodId, {
+        await updateProductMutation.mutateAsync({
           id: prodId,
-          name: newProd.name,
-          categoryId: newProd.categoryId,
-          category: newProd.category,
-          retailUnit: newProd.retailUnit,
-          defaultUnit: newProd.retailUnit,
-          retailPrice: Number(newProd.retailPrice) || 0,
-          retailMarketPrice: Number(newProd.retailMarketPrice) || 0,
-          origin: newProd.origin,
-          shelfLife: newProd.shelfLife,
-          desc: newProd.desc,
-          image: newProd.image,
-          badge: newProd.badge,
-          tags: tagsArray,
-          status: newProd.status || 'ACTIVE'
+          data: {
+            name: newProd.name,
+            categoryId: newProd.categoryId,
+            category: newProd.category,
+            retailUnit: newProd.retailUnit,
+            defaultUnit: newProd.retailUnit,
+            retailPrice: Number(newProd.retailPrice) || 0,
+            retailMarketPrice: Number(newProd.retailMarketPrice) || 0,
+            origin: newProd.origin,
+            shelfLife: newProd.shelfLife,
+            desc: newProd.desc,
+            image: newProd.image,
+            badge: newProd.badge,
+            tags: tagsArray,
+            status: newProd.status || 'ACTIVE'
+          }
         });
       } else {
-        savedProd = await productService.create({
+        await createProductMutation.mutateAsync({
           id: prodId,
           name: newProd.name,
           categoryId: newProd.categoryId,
@@ -532,16 +492,6 @@ export default function MasterDataPage() {
         });
       }
 
-      const canonicalProd = { ...newProd, ...(savedProd || {}) };
-
-      // 2. Update store upon server confirmation
-      saveFreshiozStore(prev => ({
-        ...prev,
-        products: editingId
-          ? (prev.products || []).map(p => (p.id === editingId || p.uuid === editingId) ? canonicalProd : p)
-          : [...(prev.products || []), canonicalProd]
-      }));
-
       setIsConfirmProductModalOpen(false);
       setIsProductModalOpen(false);
       setEditingId(null);
@@ -557,20 +507,12 @@ export default function MasterDataPage() {
   const handleDeleteProduct = async (id, name = 'Produce item') => {
     if (!window.confirm(`Are you sure you want to delete "${name}" from the master produce catalog?`)) return;
 
-    // 1. Immediately remove locally and pass deletedProductIds for PostgreSQL store sync
-    saveFreshiozStore(prev => ({
-      ...prev,
-      products: (prev.products || []).filter(p => p.id !== id && p.uuid !== id),
-      deletedProductIds: Array.from(new Set([...(prev.deletedProductIds || []), id]))
-    }));
-
-    showToast(`✓ "${name}" removed from catalog.`);
-
-    // 2. Persist deletion directly to backend PostgreSQL
     try {
-      await productService.delete(id);
+      await removeProductMutation.mutateAsync(id);
+      showToast(`✓ "${name}" removed from catalog.`, 'success');
     } catch (err) {
-      console.warn('Backend product delete notification:', err?.message || err);
+      console.warn('Backend product delete error:', err);
+      showToast(`Failed to delete product: ${err?.message || 'Server error'}`, 'error');
     }
   };
 

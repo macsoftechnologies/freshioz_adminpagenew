@@ -2,60 +2,39 @@ import React, { useState, useEffect } from 'react';
 import { Coins, Check, CreditCard, Clock, CheckCircle2, X } from 'lucide-react';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
-import { saveFreshiozStore } from '../shared/freshiozStore';
-import { societyService } from '../services/societyService';
+import { usePayouts, useApprovePayout, useRejectPayout } from '../hooks/resources';
 import AdminPagination from '../components/common/AdminPagination';
 
 export default function SocietyPayoutsPage() {
-  const { store, currentUser } = useAdminRole();
+  const { currentUser } = useAdminRole();
   const { showToast } = useToast();
 
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, _setPageSize] = useState(15);
-  const [apiWithdrawals, setApiWithdrawals] = useState([]);
-  const [_isLoading, setIsLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  useEffect(() => {
-    let isMounted = true;
-    async function fetchPayouts() {
-      setIsLoading(true);
-      try {
-        const res = await societyService.listPayouts();
-        if (isMounted && Array.isArray(res)) {
-          const formatted = res.map(p => ({
-            id: p.id,
-            societyId: p.societyId,
-            societyName: p.society?.name || p.societyName || 'Society Partner',
-            amount: p.amount,
-            status: p.status,
-            bankUtr: p.transactionRef || p.bankUtr || '',
-            bankName: p.society?.bankName || p.bankName || 'Bank Account',
-            accountNo: p.society?.bankAccountNumber || p.accountNo || '••••5678',
-            ifsc: p.society?.bankIfsc || p.ifsc || '',
-            requestedAt: p.requestedAt || p.createdAt,
-            disbursedAt: p.disbursedAt,
-            disbursedBy: p.disbursedBy,
-            rejectionReason: p.rejectionReason,
-          }));
-          setApiWithdrawals(formatted);
-        }
-      } catch (err) {
-        console.warn('Payouts fetch note:', err?.message || err);
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    }
-    fetchPayouts();
-    return () => { isMounted = false; };
-  }, []);
+  const { data: rawPayouts = [], isLoading } = usePayouts();
+  const approvePayoutMutation = useApprovePayout();
+  const rejectPayoutMutation = useRejectPayout();
 
-  const combinedMap = new Map();
-  (store.withdrawals || []).forEach(w => combinedMap.set(w.id, w));
-  apiWithdrawals.forEach(w => combinedMap.set(w.id, { ...(combinedMap.get(w.id) || {}), ...w }));
-  const withdrawals = Array.from(combinedMap.values()).sort((a, b) => 
-    new Date(b.requestedAt || 0) - new Date(a.requestedAt || 0)
-  );
+  const withdrawals = useMemo(() => {
+    if (!Array.isArray(rawPayouts)) return [];
+    return rawPayouts.map(p => ({
+      id: p.id,
+      societyId: p.societyId,
+      societyName: p.society?.name || p.societyName || 'Society Partner',
+      amount: p.amount,
+      status: p.status,
+      bankUtr: p.transactionRef || p.bankUtr || '',
+      bankName: p.society?.bankName || p.bankName || 'Bank Account',
+      accountNo: p.society?.bankAccountNumber || p.accountNo || '••••5678',
+      ifsc: p.society?.bankIfsc || p.ifsc || '',
+      requestedAt: p.requestedAt || p.createdAt,
+      disbursedAt: p.disbursedAt,
+      disbursedBy: p.disbursedBy,
+      rejectionReason: p.rejectionReason,
+    })).sort((a, b) => new Date(b.requestedAt || 0) - new Date(a.requestedAt || 0));
+  }, [rawPayouts]);
 
   const paginatedWithdrawals = withdrawals.slice(
     (currentPage - 1) * pageSize,
@@ -76,23 +55,10 @@ export default function SocietyPayoutsPage() {
 
     try {
       setIsProcessing(true);
-      const approvedPayout = await societyService.approvePayout(selectedWithdrawal.id, bankUtr.trim());
-
-      const canonicalPayout = {
-        ...selectedWithdrawal,
-        ...(approvedPayout || {}),
-        status: 'COMPLETED',
-        bankUtr: bankUtr.trim(),
-        disbursedAt: new Date().toISOString(),
-        disbursedBy: currentUser?.name || 'Super Admin',
-      };
-
-      setApiWithdrawals(prev => prev.map(w => w.id === selectedWithdrawal.id ? canonicalPayout : w));
-
-      saveFreshiozStore(prev => ({
-        ...prev,
-        withdrawals: (prev.withdrawals || []).map(w => w.id === selectedWithdrawal.id ? canonicalPayout : w)
-      }));
+      await approvePayoutMutation.mutateAsync({
+        id: selectedWithdrawal.id,
+        transactionRef: bankUtr.trim(),
+      });
 
       showToast(`Payout #${selectedWithdrawal.id} for ₹${selectedWithdrawal.amount.toLocaleString()} marked as Disbursed with Bank UTR ${bankUtr}!`, 'success');
       setSelectedWithdrawal(null);
@@ -113,35 +79,12 @@ export default function SocietyPayoutsPage() {
 
     try {
       setIsProcessing(true);
-      const rejectedPayout = await societyService.rejectPayout(rejectingWithdrawal.id, rejectionReason.trim());
+      await rejectPayoutMutation.mutateAsync({
+        id: rejectingWithdrawal.id,
+        reason: rejectionReason.trim(),
+      });
 
-      const refundAmt = rejectingWithdrawal.amount;
-      const canonicalPayout = {
-        ...rejectingWithdrawal,
-        ...(rejectedPayout || {}),
-        status: 'REJECTED',
-        rejectionReason: rejectionReason.trim(),
-        rejectedAt: new Date().toISOString(),
-        rejectedBy: currentUser?.name || 'Super Admin',
-      };
-
-      setApiWithdrawals(prev => prev.map(w => w.id === rejectingWithdrawal.id ? canonicalPayout : w));
-
-      saveFreshiozStore(prev => ({
-        ...prev,
-        withdrawals: (prev.withdrawals || []).map(w => w.id === rejectingWithdrawal.id ? canonicalPayout : w),
-        societies: (prev.societies || []).map(s => {
-          if (s.id === rejectingWithdrawal.societyId || s.name === rejectingWithdrawal.societyName) {
-            return {
-              ...s,
-              balanceEarned: Number(((s.balanceEarned || 0) + refundAmt).toFixed(2))
-            };
-          }
-          return s;
-        })
-      }));
-
-      showToast(`Withdrawal #${rejectingWithdrawal.id} rejected. ₹${refundAmt.toLocaleString()} refunded to ${rejectingWithdrawal.societyName} balance.`, 'warning');
+      showToast(`Withdrawal #${rejectingWithdrawal.id} rejected and refunded on server.`, 'warning');
       setRejectingWithdrawal(null);
       setRejectionReason('');
     } catch (err) {
@@ -167,13 +110,13 @@ export default function SocietyPayoutsPage() {
 
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '11.5px', background: '#E2E8F0', color: '#334155', padding: '3px 10px', borderRadius: '6px', fontWeight: 700 }}>
-              Total: {(store.withdrawals || []).length}
+              Total: {withdrawals.length}
             </span>
             <span style={{ fontSize: '11.5px', background: '#FEF3C7', color: '#B45309', padding: '3px 10px', borderRadius: '6px', fontWeight: 700 }}>
-              Pending: {(store.withdrawals || []).filter(w => w.status !== 'COMPLETED').length}
+              Pending: {withdrawals.filter(w => w.status !== 'COMPLETED').length}
             </span>
             <span style={{ fontSize: '11.5px', background: '#EBF2EE', color: '#234B3C', padding: '3px 10px', borderRadius: '6px', fontWeight: 700 }}>
-              Disbursed: {(store.withdrawals || []).filter(w => w.status === 'COMPLETED').length}
+              Disbursed: {withdrawals.filter(w => w.status === 'COMPLETED').length}
             </span>
           </div>
         </div>
@@ -200,7 +143,7 @@ export default function SocietyPayoutsPage() {
               </tr>
             </thead>
             <tbody>
-              {(store.withdrawals || []).length === 0 ? (
+              {withdrawals.length === 0 ? (
                 <tr>
                   <td colSpan="7">
                     <div className="admin-empty-state">

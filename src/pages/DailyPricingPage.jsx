@@ -19,14 +19,22 @@ import {
 } from 'lucide-react';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
-import { saveFreshiozStore } from '../shared/freshiozStore';
+import { products as productResource, categories as categoryResource, units as unitResource, usePublishPrices } from '../hooks/resources';
+import { pricingService } from '../services/pricingService';
 import { exportToExcel } from '../utils/excelExporter';
 import AdminPagination from '../components/common/AdminPagination';
 
 export default function DailyPricingPage() {
-  const { store, currentUser } = useAdminRole();
+  const { currentUser } = useAdminRole();
   const { showToast } = useToast();
-  const categories = store.categories || [];
+
+  const { data: rawCategories = [] } = categoryResource.useList();
+  const { data: rawUnits = [] } = unitResource.useList();
+  const { data: rawProducts = [], isLoading } = productResource.useList();
+
+  const categories = Array.isArray(rawCategories) ? rawCategories : [];
+  const units = Array.isArray(rawUnits) ? rawUnits : [];
+  const publishPricesMutation = usePublishPrices();
 
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0];
@@ -34,7 +42,7 @@ export default function DailyPricingPage() {
   const tomorrowStr = tomorrow.toISOString().split('T')[0];
 
   const [selectedDate, setSelectedDate] = useState(todayStr);
-  const [products, setProducts] = useState(store.products || []);
+  const [products, setProducts] = useState([]);
   const [successToast, setSuccessToast] = useState('');
   const [isConfirmPricingModalOpen, setIsConfirmPricingModalOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -45,28 +53,28 @@ export default function DailyPricingPage() {
   const isToday = selectedDate === todayStr;
   const isTomorrow = selectedDate === tomorrowStr;
 
-  const units = store.units || [];
   const bulkUnits = units.filter(u => u.isBulk);
 
   useEffect(() => {
-    const history = store.dailyPricingHistory || {};
-    if (history[selectedDate]) {
-      setProducts(history[selectedDate]);
-    } else {
-      setProducts(store.products || []);
+    let isMounted = true;
+    async function loadPricing() {
+      try {
+        const prices = await pricingService.getDailyPrices(selectedDate);
+        if (isMounted && Array.isArray(prices) && prices.length > 0) {
+          setProducts(prices);
+          return;
+        }
+      } catch (e) {
+        // Fallback to active catalog
+      }
+      if (isMounted && Array.isArray(rawProducts) && rawProducts.length > 0) {
+        setProducts(rawProducts);
+      }
     }
+    loadPricing();
     isEditingRef.current = false;
-  }, [selectedDate]);
-
-  useEffect(() => {
-    if (isEditingRef.current) return;
-    const history = store.dailyPricingHistory || {};
-    if (history[selectedDate]) {
-      setProducts(history[selectedDate]);
-    } else {
-      setProducts(store.products || []);
-    }
-  }, [store.products, store.dailyPricingHistory]);
+    return () => { isMounted = false; };
+  }, [selectedDate, rawProducts]);
 
   // Live volume bulk tier discount calculator (standardized to clean rupee integers)
   const calculateBulkStats = (prod) => {
@@ -155,7 +163,7 @@ export default function DailyPricingPage() {
     setIsConfirmPricingModalOpen(true);
   };
 
-  const handleConfirmCommitPricing = () => {
+  const handleConfirmCommitPricing = async () => {
     if (isPastDate) return;
 
     const stampedProducts = products.map(p => ({
@@ -170,24 +178,20 @@ export default function DailyPricingPage() {
       pricingDate: selectedDate
     }));
 
-    saveFreshiozStore(prev => {
-      const updatedHistory = {
-        ...(prev.dailyPricingHistory || {}),
-        [selectedDate]: stampedProducts
-      };
+    try {
+      await publishPricesMutation.mutateAsync({
+        date: selectedDate,
+        products: stampedProducts,
+      });
 
-      return {
-        ...prev,
-        dailyPricingHistory: updatedHistory,
-        ...(selectedDate === todayStr ? { products: stampedProducts } : {})
-      };
-    });
-
-    setIsConfirmPricingModalOpen(false);
-    showToast(`✓ Dynamic Retail Rates & Volume Discounts for ${selectedDate === todayStr ? 'Today' : selectedDate === tomorrowStr ? 'Tomorrow' : selectedDate} saved!`, 'success');
-    isEditingRef.current = false;
-    setSuccessToast(`✓ Rates for ${selectedDate === todayStr ? 'Today' : selectedDate === tomorrowStr ? 'Tomorrow' : selectedDate} successfully recorded.`);
-    setTimeout(() => setSuccessToast(''), 5000);
+      setIsConfirmPricingModalOpen(false);
+      showToast(`✓ Dynamic Retail Rates & Volume Discounts for ${selectedDate === todayStr ? 'Today' : selectedDate === tomorrowStr ? 'Tomorrow' : selectedDate} saved on server!`, 'success');
+      isEditingRef.current = false;
+      setSuccessToast(`✓ Rates for ${selectedDate === todayStr ? 'Today' : selectedDate === tomorrowStr ? 'Tomorrow' : selectedDate} successfully recorded.`);
+      setTimeout(() => setSuccessToast(''), 5000);
+    } catch (err) {
+      showToast(err.message || 'Failed to publish prices on server.', 'error');
+    }
   };
 
   // Export to Excel with complete Retail + Volume Bulk Discount specs
