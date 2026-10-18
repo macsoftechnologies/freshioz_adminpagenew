@@ -21,6 +21,7 @@ import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
 import { products as productResource, categories as categoryResource, units as unitResource, usePublishPrices } from '../hooks/resources';
 import { pricingService } from '../services/pricingService';
+import { productService } from '../services/productService';
 import { exportToExcel } from '../utils/excelExporter';
 import { resolveImageUrl, handleImageError } from '../utils/imageUtils';
 import AdminPagination from '../components/common/AdminPagination';
@@ -72,9 +73,14 @@ export default function DailyPricingPage() {
         setPricingError(null);
         return;
       }
-      // If server explicitly returned an empty array (no custom rates set yet for this date)
+      // If server returned an empty array (no custom rates set yet for this date), fallback to catalog products
       if (Array.isArray(rawProducts) && rawProducts.length > 0) {
         setProducts(rawProducts);
+      } else {
+        const fallback = await productService.getAll().catch(() => []);
+        if (Array.isArray(fallback) && fallback.length > 0) {
+          setProducts(fallback);
+        }
       }
     } catch (e) {
       console.error('Failed to load daily pricing:', e);
