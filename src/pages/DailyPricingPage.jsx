@@ -57,7 +57,9 @@ export default function DailyPricingPage() {
   const isToday = selectedDate === todayStr;
   const isTomorrow = selectedDate === tomorrowStr;
 
-  const bulkUnits = units.filter(u => u.isBulk);
+  const rawProductsRef = React.useRef(rawProducts);
+  rawProductsRef.current = rawProducts;
+  const lastValidProductsRef = React.useRef([]);
 
   const loadPricing = React.useCallback(async () => {
     setIsLoadingPricing(true);
@@ -70,30 +72,47 @@ export default function DailyPricingPage() {
 
       if (priceList.length > 0) {
         setProducts(priceList);
+        lastValidProductsRef.current = priceList;
         setPricingError(null);
         return;
       }
       // If server returned an empty array (no custom rates set yet for this date), fallback to catalog products
-      if (Array.isArray(rawProducts) && rawProducts.length > 0) {
-        setProducts(rawProducts);
+      const catalogItems = rawProductsRef.current;
+      if (Array.isArray(catalogItems) && catalogItems.length > 0) {
+        setProducts(catalogItems);
+        lastValidProductsRef.current = catalogItems;
       } else {
         const fallback = await productService.getAll().catch(() => []);
         if (Array.isArray(fallback) && fallback.length > 0) {
           setProducts(fallback);
+          lastValidProductsRef.current = fallback;
+        } else if (lastValidProductsRef.current.length > 0) {
+          setProducts(lastValidProductsRef.current);
         }
       }
     } catch (e) {
       console.error('Failed to load daily pricing:', e);
       setPricingError(e.message || 'Failed to fetch dynamic daily prices from server');
+      if (lastValidProductsRef.current.length > 0) {
+        setProducts(lastValidProductsRef.current);
+      }
     } finally {
       setIsLoadingPricing(false);
     }
-  }, [selectedDate, rawProducts]);
+  }, [selectedDate]);
 
   useEffect(() => {
     loadPricing();
     isEditingRef.current = false;
   }, [loadPricing]);
+
+  // When initial catalog products load, populate empty state smoothly
+  useEffect(() => {
+    if (products.length === 0 && Array.isArray(rawProducts) && rawProducts.length > 0) {
+      setProducts(rawProducts);
+      lastValidProductsRef.current = rawProducts;
+    }
+  }, [rawProducts, products.length]);
 
   // Live volume bulk tier discount calculator (standardized to clean rupee integers)
   const calculateBulkStats = (prod) => {

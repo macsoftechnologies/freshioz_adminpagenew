@@ -1,7 +1,7 @@
 // Server-state hooks for the admin portal. REPLACES getFreshiozStore()/saveFreshiozStore().
 // Rules: (1) the server is the only source of truth, (2) every write is a dedicated endpoint call,
 // (3) after a write we INVALIDATE and refetch, we never hand-edit a local copy.
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { productService } from '../services/productService';
 import { orderService } from '../services/orderService';
 import { vendorService } from '../services/vendorService';
@@ -27,6 +27,8 @@ function makeResource(key, service, { refetchMs = 0 } = {}) {
       useQuery({
         queryKey: [key, params ?? {}],
         queryFn: () => service.getAll(params),
+        placeholderData: keepPreviousData,
+        staleTime: 15_000,
         refetchInterval: refetchMs || false,
         refetchIntervalInBackground: false,
         ...options,
@@ -71,6 +73,8 @@ export function useInventory(warehouseId, options = {}) {
   return useQuery({
     queryKey: ['inventory', warehouseId ?? 'ALL'],
     queryFn: () => inventoryService.getAll(warehouseId),
+    placeholderData: keepPreviousData,
+    staleTime: 15_000,
     refetchInterval: 20_000,
     refetchIntervalInBackground: false,
     ...options,
