@@ -73,18 +73,39 @@ export function AdminRoleProvider({ children }) {
     return storedAuth === 'true' && !!token;
   });
 
-  // Live server-driven state via React Query (only enabled when authenticated session exists)
+  const [currentRoleId, setCurrentRoleId] = useState(() => {
+    return localStorage.getItem('freshioz_admin_role') || 'SUPER_ADMIN';
+  });
+
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const stored = localStorage.getItem('freshioz_admin_user');
+      if (stored) return JSON.parse(stored);
+    } catch (e) {
+      // ignore
+    }
+    return DEMO_USERS[currentRoleId] || DEMO_USERS.SUPER_ADMIN;
+  });
+
+  const isSuperAdmin = currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN';
+  const isProcurementRole = isSuperAdmin || 
+    currentUser?.roles?.includes('WAREHOUSE_MANAGER') || 
+    currentUser?.roles?.includes('PROCUREMENT_OFFICER') || 
+    currentUser?.role === 'WAREHOUSE_MANAGER' || 
+    currentUser?.role === 'PROCUREMENT_OFFICER';
+
+  // Live server-driven state via React Query (only enabled when authenticated session exists & role has permission)
   const queryOpts = { enabled: !!isAuthenticated };
   const societiesQuery = societyResource.useList(null, queryOpts);
   const warehousesQuery = warehouseResource.useList(null, queryOpts);
-  const employeesQuery = employeeResource.useList(null, queryOpts);
+  const employeesQuery = employeeResource.useList(null, { enabled: !!isAuthenticated && isSuperAdmin });
   const vendorsQuery = vendorResource.useList(null, queryOpts);
   const leadsQuery = leadResource.useList(null, queryOpts);
   const ordersQuery = orderResource.useList(null, queryOpts);
-  const procurementQuery = procurementResource.useList(null, queryOpts);
+  const procurementQuery = procurementResource.useList(null, { enabled: !!isAuthenticated && isProcurementRole });
   const productsQuery = productResource.useList(null, queryOpts);
   const categoriesQuery = categoryResource.useList(null, queryOpts);
-  const withdrawalsQuery = usePayouts(null, queryOpts);
+  const withdrawalsQuery = usePayouts(null, { enabled: !!isAuthenticated && isSuperAdmin });
 
   const societies = societiesQuery.data || [];
   const warehouses = warehousesQuery.data || [];
@@ -97,23 +118,25 @@ export function AdminRoleProvider({ children }) {
   const categories = categoriesQuery.data || [];
   const withdrawals = withdrawalsQuery.data || [];
 
-  const hasApiError = !!(
-    societiesQuery.isError ||
-    warehousesQuery.isError ||
-    employeesQuery.isError ||
-    ordersQuery.isError ||
-    procurementQuery.isError ||
-    productsQuery.isError
-  );
+  const allQueries = [
+    societiesQuery,
+    warehousesQuery,
+    employeesQuery,
+    vendorsQuery,
+    leadsQuery,
+    ordersQuery,
+    procurementQuery,
+    productsQuery,
+    categoriesQuery,
+    withdrawalsQuery,
+  ];
 
-  const apiErrorMessage = (
-    ordersQuery.error?.message ||
-    societiesQuery.error?.message ||
-    employeesQuery.error?.message ||
-    procurementQuery.error?.message ||
-    productsQuery.error?.message ||
-    null
-  );
+  // Exclude HTTP 403 Forbidden: expected role permission restrictions are NOT outages!
+  const isActualOutage = (q) => q.isError && q.error?.status !== 403;
+
+  const hasApiError = allQueries.some(isActualOutage);
+
+  const apiErrorMessage = allQueries.find(isActualOutage)?.error?.message || null;
 
   const store = React.useMemo(() => ({
     societies: Array.isArray(societies) ? societies : [],
@@ -128,20 +151,6 @@ export function AdminRoleProvider({ children }) {
     withdrawals: Array.isArray(withdrawals) ? withdrawals : [],
     users: [],
   }), [societies, warehouses, employees, vendors, leadsData, orders, procurementLogs, products, categories, withdrawals]);
-
-  const [currentRoleId, setCurrentRoleId] = useState(() => {
-    return localStorage.getItem('freshioz_admin_role') || 'SUPER_ADMIN';
-  });
-
-  const [currentUser, setCurrentUser] = useState(() => {
-    try {
-      const stored = localStorage.getItem('freshioz_admin_user');
-      if (stored) return JSON.parse(stored);
-    } catch (e) {
-      // ignore
-    }
-    return DEMO_USERS[currentRoleId] || DEMO_USERS.SUPER_ADMIN;
-  });
 
   const setRole = (roleId) => {
     // Super Admin can switch to preview any role desk
@@ -248,8 +257,6 @@ export function AdminRoleProvider({ children }) {
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
 
   const currentRole = ROLES[currentRoleId] || ROLES.SUPER_ADMIN;
-
-  const isSuperAdmin = currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN';
 
   // Compute allowed roles for the logged-in employee:
   // - Super Admin can switch across all operational desks.

@@ -20,16 +20,59 @@ export default function AdminTopBar({ onMobileMenuClick }) {
     refetchAll
   } = useAdminRole();
   const { showToast } = useToast();
-  const [isBackendOnline, setIsBackendOnline] = React.useState(true);
+  const [healthStatus, setHealthStatus] = React.useState({
+    isOnline: true,
+    isDatabaseConnected: true,
+    latencyMs: 0,
+    message: 'NestJS Live (IST)'
+  });
 
   React.useEffect(() => {
     let mounted = true;
     const checkHealth = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/health`, { signal: AbortSignal.timeout(2000) });
-        if (mounted) setIsBackendOnline(res.ok);
+        // Probe /health/ready which specifically asserts database connectivity
+        const res = await fetch(`${API_BASE_URL}/health/ready`, { signal: AbortSignal.timeout(3000) });
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          if (mounted) {
+            setHealthStatus({
+              isOnline: true,
+              isDatabaseConnected: data.database === 'connected',
+              latencyMs: data.latencyMs || 0,
+              message: 'NestJS Live (IST)'
+            });
+          }
+        } else {
+          // If readiness fails (e.g. 503 DB down or other error), check liveness to distinguish process vs DB
+          const liveRes = await fetch(`${API_BASE_URL}/health/live`, { signal: AbortSignal.timeout(2000) }).catch(() => null);
+          if (mounted) {
+            if (liveRes && liveRes.ok) {
+              setHealthStatus({
+                isOnline: true,
+                isDatabaseConnected: false,
+                latencyMs: 0,
+                message: 'PostgreSQL Disconnected'
+              });
+            } else {
+              setHealthStatus({
+                isOnline: false,
+                isDatabaseConnected: false,
+                latencyMs: 0,
+                message: 'Backend Offline'
+              });
+            }
+          }
+        }
       } catch (e) {
-        if (mounted) setIsBackendOnline(false);
+        if (mounted) {
+          setHealthStatus({
+            isOnline: false,
+            isDatabaseConnected: false,
+            latencyMs: 0,
+            message: 'Backend Offline'
+          });
+        }
       }
     };
     checkHealth();
@@ -59,33 +102,49 @@ export default function AdminTopBar({ onMobileMenuClick }) {
       </div>
 
       <div className="topbar-right" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-        {/* Dynamic Live Backend Indicator Badge */}
+        {/* Dynamic Live Backend & Database Indicator Badge */}
         <div
           style={{
             display: 'inline-flex',
             alignItems: 'center',
             gap: '6px',
-            background: isBackendOnline ? '#ECFDF5' : '#FEF2F2',
-            border: isBackendOnline ? '1px solid #A7F3D0' : '1px solid #FECACA',
-            color: isBackendOnline ? '#065F46' : '#991B1B',
+            background: !healthStatus.isOnline 
+              ? '#FEF2F2' 
+              : (!healthStatus.isDatabaseConnected ? '#FFFBEB' : '#ECFDF5'),
+            border: !healthStatus.isOnline 
+              ? '1px solid #FECACA' 
+              : (!healthStatus.isDatabaseConnected ? '1px solid #FCD34D' : '1px solid #A7F3D0'),
+            color: !healthStatus.isOnline 
+              ? '#991B1B' 
+              : (!healthStatus.isDatabaseConnected ? '#92400E' : '#065F46'),
             padding: '3px 9px',
             borderRadius: '9999px',
             fontSize: '11px',
             fontWeight: 700
           }}
-          title={isBackendOnline ? 'Backend: NestJS on :5000 | PostgreSQL Connected | Asia/Kolkata (IST)' : 'Backend Offline - Check NestJS server on port 5000'}
+          title={
+            !healthStatus.isOnline
+              ? 'Backend Offline - Cannot reach NestJS API server on :5000'
+              : (!healthStatus.isDatabaseConnected
+                  ? 'PostgreSQL Disconnected - Database connection check failed'
+                  : `Backend: NestJS on :5000 | PostgreSQL Connected (${healthStatus.latencyMs}ms) | Asia/Kolkata (IST)`)
+          }
         >
           <span
             style={{
               width: '7px',
               height: '7px',
               borderRadius: '50%',
-              background: isBackendOnline ? '#10B981' : '#EF4444',
+              background: !healthStatus.isOnline 
+                ? '#EF4444' 
+                : (!healthStatus.isDatabaseConnected ? '#D97706' : '#10B981'),
               display: 'inline-block',
-              boxShadow: isBackendOnline ? '0 0 6px #10B981' : '0 0 6px #EF4444',
+              boxShadow: !healthStatus.isOnline 
+                ? '0 0 6px #EF4444' 
+                : (!healthStatus.isDatabaseConnected ? '0 0 6px #D97706' : '0 0 6px #10B981'),
             }}
           />
-          <span>{isBackendOnline ? 'NestJS Live (IST)' : 'Backend Offline'}</span>
+          <span>{healthStatus.message}</span>
         </div>
 
         {hasApiError && (
