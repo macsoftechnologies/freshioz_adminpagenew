@@ -62,9 +62,13 @@ export default function DailyPricingPage() {
     setIsLoadingPricing(true);
     setPricingError(null);
     try {
-      const prices = await pricingService.getDailyPrices(selectedDate);
-      if (Array.isArray(prices) && prices.length > 0) {
-        setProducts(prices);
+      const res = await pricingService.getDailyPrices(selectedDate);
+      const priceList = Array.isArray(res) 
+        ? res 
+        : (Array.isArray(res?.entries) ? res.entries : []);
+
+      if (priceList.length > 0) {
+        setProducts(priceList);
         setPricingError(null);
         return;
       }
@@ -175,22 +179,20 @@ export default function DailyPricingPage() {
   const handleConfirmCommitPricing = async () => {
     if (isPastDate) return;
 
-    const stampedProducts = products.map(p => ({
-      ...p,
+    const payloadPrices = products.map(p => ({
+      productId: p.id || p.productId,
       retailPrice: Number(p.retailPrice) || 0,
       retailMarketPrice: Number(p.retailMarketPrice) || Number(p.retailPrice) || 0,
       bulkMinQty: Number(p.bulkMinQty) || 0,
       bulkDiscountPercent: Number(p.bulkDiscountPercent) || 0,
-      lastPricingUpdateAt: new Date().toISOString(),
-      lastPricingUpdateBy: currentUser?.name || 'Super Admin',
-      lastPricingUpdateById: currentUser?.id || 'emp-101',
-      pricingDate: selectedDate
+      gstPercent: Number(p.gstPercent) || 0,
     }));
 
     try {
       await publishPricesMutation.mutateAsync({
         date: selectedDate,
-        products: stampedProducts,
+        prices: payloadPrices,
+        publishedById: currentUser?.id,
       });
 
       setIsConfirmPricingModalOpen(false);
@@ -198,6 +200,7 @@ export default function DailyPricingPage() {
       isEditingRef.current = false;
       setSuccessToast(`✓ Rates for ${selectedDate === todayStr ? 'Today' : selectedDate === tomorrowStr ? 'Tomorrow' : selectedDate} successfully recorded.`);
       setTimeout(() => setSuccessToast(''), 5000);
+      await loadPricing();
     } catch (err) {
       showToast(err.message || 'Failed to publish prices on server.', 'error');
     }
