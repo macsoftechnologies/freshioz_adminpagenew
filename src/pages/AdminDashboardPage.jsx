@@ -24,7 +24,7 @@ import {
 import { exportToExcel } from '../utils/excelExporter';
 
 export default function AdminDashboardPage() {
-  const { store, hasApiError, apiErrorMessage, refetchAll } = useAdminRole();
+  const { store, hasApiError, apiErrorMessage, isInitialLoading, refetchAll } = useAdminRole();
 
   const pendingSocieties = (store.societies || []).filter(s => s.status === 'PENDING');
   const approvedSocieties = (store.societies || []).filter(s => s.status === 'APPROVED');
@@ -180,7 +180,9 @@ export default function AdminDashboardPage() {
       <div className="admin-metric-grid" style={{ marginBottom: '14px', gap: '10px' }}>
         <div className="admin-metric-card" style={{ padding: '12px 14px' }}>
           <div className="metric-label" style={{ fontSize: '11px' }}>Batched Next-Day Sales</div>
-          <div className="metric-value" style={{ fontSize: '20px', margin: '4px 0 2px' }}>₹{totalGrossSales.toLocaleString()}</div>
+          <div className="metric-value" style={{ fontSize: '20px', margin: '4px 0 2px' }}>
+            {isInitialLoading ? <span style={{ color: '#94A3B8', fontSize: '15px' }}>Syncing...</span> : `₹${totalGrossSales.toLocaleString()}`}
+          </div>
           <div className="metric-sub" style={{ color: '#059669', fontWeight: 700, fontSize: '11px' }}>
             +18.4% vs last week
           </div>
@@ -189,7 +191,7 @@ export default function AdminDashboardPage() {
         <div className="admin-metric-card" style={{ padding: '12px 14px' }}>
           <div className="metric-label" style={{ fontSize: '11px' }}>Dawn Mandi Spend</div>
           <div className="metric-value" style={{ color: '#F28E14', fontSize: '20px', margin: '4px 0 2px' }}>
-            ₹{totalMandiSpend.toLocaleString()}
+            {isInitialLoading ? <span style={{ color: '#94A3B8', fontSize: '15px' }}>Syncing...</span> : `₹${totalMandiSpend.toLocaleString()}`}
           </div>
           <div className="metric-sub" style={{ fontSize: '11px' }}>APMC Kolar & Lasalgaon</div>
         </div>
@@ -197,7 +199,7 @@ export default function AdminDashboardPage() {
         <div className="admin-metric-card" style={{ padding: '12px 14px' }}>
           <div className="metric-label" style={{ fontSize: '11px' }}>Gross Margin Spread</div>
           <div className="metric-value" style={{ color: '#059669', fontSize: '20px', margin: '4px 0 2px' }}>
-            {netMargin}%
+            {isInitialLoading ? <span style={{ color: '#94A3B8', fontSize: '15px' }}>Syncing...</span> : `${netMargin}%`}
           </div>
           <div className="metric-sub" style={{ fontSize: '11px' }}>Farm procurement spread</div>
         </div>
@@ -205,10 +207,10 @@ export default function AdminDashboardPage() {
         <div className="admin-metric-card" style={{ padding: '12px 14px' }}>
           <div className="metric-label" style={{ fontSize: '11px' }}>Approved Societies</div>
           <div className="metric-value" style={{ fontSize: '20px', margin: '4px 0 2px' }}>
-            {approvedSocieties.length}
+            {isInitialLoading ? <span style={{ color: '#94A3B8', fontSize: '15px' }}>Syncing...</span> : approvedSocieties.length}
           </div>
           <div className="metric-sub" style={{ fontSize: '11px' }}>
-            {approvedSocieties.reduce((acc, s) => acc + (s.totalUnits || 0), 0)} Total Flats/Rooms
+            {isInitialLoading ? 'Locating units...' : `${approvedSocieties.reduce((acc, s) => acc + (s.totalUnits || 0), 0)} Total Flats/Rooms`}
           </div>
         </div>
       </div>

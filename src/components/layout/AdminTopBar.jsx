@@ -32,7 +32,7 @@ export default function AdminTopBar({ onMobileMenuClick }) {
     const checkHealth = async () => {
       try {
         // Probe /health/ready which specifically asserts database connectivity
-        const res = await fetch(`${API_BASE_URL}/health/ready`, { signal: AbortSignal.timeout(3000) });
+        const res = await fetch(`${API_BASE_URL}/health/ready`, { signal: AbortSignal.timeout(6000) });
         if (res.ok) {
           const data = await res.json().catch(() => ({}));
           if (mounted) {
@@ -45,7 +45,7 @@ export default function AdminTopBar({ onMobileMenuClick }) {
           }
         } else {
           // If readiness fails (e.g. 503 DB down or other error), check liveness to distinguish process vs DB
-          const liveRes = await fetch(`${API_BASE_URL}/health/live`, { signal: AbortSignal.timeout(2000) }).catch(() => null);
+          const liveRes = await fetch(`${API_BASE_URL}/health/live`, { signal: AbortSignal.timeout(3000) }).catch(() => null);
           if (mounted) {
             if (liveRes && liveRes.ok) {
               setHealthStatus({

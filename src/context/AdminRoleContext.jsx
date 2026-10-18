@@ -131,12 +131,25 @@ export function AdminRoleProvider({ children }) {
     withdrawalsQuery,
   ];
 
-  // Exclude HTTP 403 Forbidden: expected role permission restrictions are NOT outages!
   const isActualOutage = (q) => q.isError && q.error?.status !== 403;
 
   const hasApiError = allQueries.some(isActualOutage);
 
   const apiErrorMessage = allQueries.find(isActualOutage)?.error?.message || null;
+
+  const isInitialLoading = Boolean(isAuthenticated && (
+    societiesQuery.isLoading ||
+    ordersQuery.isLoading ||
+    productsQuery.isLoading ||
+    warehousesQuery.isLoading
+  ));
+
+  // Proactively and immediately refetch all operational queries whenever authenticated session activates
+  useEffect(() => {
+    if (isAuthenticated) {
+      queryClient.refetchQueries();
+    }
+  }, [isAuthenticated, queryClient]);
 
   const store = React.useMemo(() => ({
     societies: Array.isArray(societies) ? societies : [],
@@ -314,6 +327,7 @@ export function AdminRoleProvider({ children }) {
         isRider: currentRoleId === 'DELIVERY_EXECUTIVE',
         hasApiError,
         apiErrorMessage,
+        isInitialLoading,
         refetchAll: () => queryClient.refetchQueries()
       }}
     >
