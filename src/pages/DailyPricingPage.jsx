@@ -484,7 +484,7 @@ export default function DailyPricingPage() {
           gap: '8px'
         }}>
           <Lock size={16} color="#D97706" />
-          <span>Historical Archive for {selectedDate}: Daily prices in the past are locked to preserve audit integrity. To update active prices, switch to Today or Next Run.</span>
+          <span>Historical Archive for {selectedDate}: Daily prices in the past are locked to preserve audit integrity. Produce marked '— (Unrecorded)' had no daily price published on or before this date, preventing newer rates from bleeding into the past.</span>
         </div>
       )}
 
@@ -703,27 +703,31 @@ export default function DailyPricingPage() {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <span style={{ fontSize: '13px', fontWeight: 700, color: '#94A3B8' }}>₹</span>
-                            <input
-                              type="number"
-                              min="0"
-                              placeholder="55"
-                              disabled={isPastDate}
-                              value={prod.retailMarketPrice ?? ''}
-                              onChange={(e) => handlePriceChange(prod.id, 'retailMarketPrice', e.target.value)}
-                              style={{
-                                width: '84px',
-                                height: '34px',
-                                padding: '0 8px',
-                                borderRadius: '6px',
-                                border: '1.5px solid #CBD5E1',
-                                fontWeight: 700,
-                                color: isPastDate ? '#94A3B8' : '#64748B',
-                                fontSize: '13px',
-                                background: isPastDate ? '#F1F5F9' : '#F8FAFC',
-                                cursor: isPastDate ? 'not-allowed' : 'text',
-                                outline: 'none'
-                              }}
-                            />
+                            {isPastDate && prod.retailMarketPrice === null ? (
+                              <span style={{ fontSize: '12px', color: '#94A3B8', fontWeight: 600, padding: '6px 8px' }}>—</span>
+                            ) : (
+                              <input
+                                type="number"
+                                min="0"
+                                placeholder="55"
+                                disabled={isPastDate}
+                                value={prod.retailMarketPrice ?? ''}
+                                onChange={(e) => handlePriceChange(prod.id, 'retailMarketPrice', e.target.value)}
+                                style={{
+                                  width: '84px',
+                                  height: '34px',
+                                  padding: '0 8px',
+                                  borderRadius: '6px',
+                                  border: '1.5px solid #CBD5E1',
+                                  fontWeight: 700,
+                                  color: isPastDate ? '#94A3B8' : '#64748B',
+                                  fontSize: '13px',
+                                  background: isPastDate ? '#F1F5F9' : '#F8FAFC',
+                                  cursor: isPastDate ? 'not-allowed' : 'text',
+                                  outline: 'none'
+                                }}
+                              />
+                            )}
                           </div>
                           <span style={{ fontSize: '10px', color: '#94A3B8' }}>Market MRP</span>
                         </div>
@@ -734,28 +738,32 @@ export default function DailyPricingPage() {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <span style={{ fontSize: '13px', fontWeight: 700, color: isPastDate ? '#64748B' : '#059669' }}>₹</span>
-                            <input
-                              type="number"
-                              min="0"
-                              disabled={isPastDate}
-                              value={prod.retailPrice ?? ''}
-                              onChange={(e) => handlePriceChange(prod.id, 'retailPrice', e.target.value)}
-                              style={{
-                                width: '84px',
-                                height: '34px',
-                                padding: '0 8px',
-                                borderRadius: '6px',
-                                border: isPastDate ? '1.5px solid #CBD5E1' : '1.5px solid #059669',
-                                fontWeight: 800,
-                                color: isPastDate ? '#475569' : '#166534',
-                                fontSize: '14px',
-                                background: isPastDate ? '#F1F5F9' : '#F0FDF4',
-                                cursor: isPastDate ? 'not-allowed' : 'text',
-                                outline: 'none'
-                              }}
-                            />
+                            {isPastDate && prod.retailPrice === null ? (
+                              <span style={{ fontSize: '12px', color: '#94A3B8', fontWeight: 600, padding: '6px 8px' }}>— (Unrecorded)</span>
+                            ) : (
+                              <input
+                                type="number"
+                                min="0"
+                                disabled={isPastDate}
+                                value={prod.retailPrice ?? ''}
+                                onChange={(e) => handlePriceChange(prod.id, 'retailPrice', e.target.value)}
+                                style={{
+                                  width: '84px',
+                                  height: '34px',
+                                  padding: '0 8px',
+                                  borderRadius: '6px',
+                                  border: isPastDate ? '1.5px solid #CBD5E1' : '1.5px solid #059669',
+                                  fontWeight: 800,
+                                  color: isPastDate ? '#475569' : '#166534',
+                                  fontSize: '14px',
+                                  background: isPastDate ? '#F1F5F9' : '#F0FDF4',
+                                  cursor: isPastDate ? 'not-allowed' : 'text',
+                                  outline: 'none'
+                                }}
+                              />
+                            )}
                           </div>
-                          {savingsDiff > 0 && (
+                          {savingsDiff > 0 && prod.retailPrice !== null && (
                             <span style={{ fontSize: '10px', color: isPastDate ? '#64748B' : '#15803D', fontWeight: 700 }}>
                               Save {savingsPct}% (₹{savingsDiff})
                             </span>

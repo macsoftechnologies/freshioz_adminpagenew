@@ -109,17 +109,63 @@ export function AdminRoleProvider({ children }) {
   const unitsQuery = unitResource.useList(null, queryOpts);
   const withdrawalsQuery = usePayouts(null, { enabled: !!isAuthenticated && isSuperAdmin });
 
-  const societies = societiesQuery.data ?? [];
-  const warehouses = warehousesQuery.data ?? [];
-  const employees = employeesQuery.data ?? [];
-  const vendors = vendorsQuery.data ?? [];
-  const leadsData = leadsQuery.data ?? {};
-  const orders = ordersQuery.data ?? [];
-  const procurementLogs = procurementQuery.data ?? [];
-  const products = productsQuery.data ?? [];
-  const categories = categoriesQuery.data ?? [];
-  const units = unitsQuery.data ?? [];
-  const withdrawals = withdrawalsQuery.data ?? [];
+  const getCachedStore = () => {
+    try {
+      const cached = localStorage.getItem('freshioz_cached_admin_store');
+      if (cached) return JSON.parse(cached);
+    } catch (e) {}
+    return null;
+  };
+  const cachedStoreRef = React.useRef(getCachedStore());
+
+  const societies = societiesQuery.data ?? (cachedStoreRef.current?.societies ?? []);
+  const warehouses = warehousesQuery.data ?? (cachedStoreRef.current?.warehouses ?? []);
+  const employees = employeesQuery.data ?? (cachedStoreRef.current?.employees ?? []);
+  const vendors = vendorsQuery.data ?? (cachedStoreRef.current?.vendors ?? []);
+  const leadsData = leadsQuery.data ?? (cachedStoreRef.current?.societyRequests ?? {});
+  const orders = ordersQuery.data ?? (cachedStoreRef.current?.orders ?? []);
+  const procurementLogs = procurementQuery.data ?? (cachedStoreRef.current?.procurementLogs ?? []);
+  const products = productsQuery.data ?? (cachedStoreRef.current?.products ?? []);
+  const categories = categoriesQuery.data ?? (cachedStoreRef.current?.categories ?? []);
+  const units = unitsQuery.data ?? (cachedStoreRef.current?.units ?? []);
+  const withdrawals = withdrawalsQuery.data ?? (cachedStoreRef.current?.withdrawals ?? []);
+
+  // Persist updated server data to localStorage cache whenever queries succeed
+  useEffect(() => {
+    if (ordersQuery.data || societiesQuery.data || productsQuery.data) {
+      try {
+        const toCache = {
+          societies: societiesQuery.data || cachedStoreRef.current?.societies || [],
+          warehouses: warehousesQuery.data || cachedStoreRef.current?.warehouses || [],
+          employees: employeesQuery.data || cachedStoreRef.current?.employees || [],
+          vendors: vendorsQuery.data || cachedStoreRef.current?.vendors || [],
+          societyRequests: leadsQuery.data?.leads || leadsQuery.data || cachedStoreRef.current?.societyRequests || [],
+          orders: ordersQuery.data || cachedStoreRef.current?.orders || [],
+          procurementLogs: procurementQuery.data || cachedStoreRef.current?.procurementLogs || [],
+          products: productsQuery.data || cachedStoreRef.current?.products || [],
+          categories: categoriesQuery.data || cachedStoreRef.current?.categories || [],
+          units: unitsQuery.data || cachedStoreRef.current?.units || [],
+          withdrawals: withdrawalsQuery.data || cachedStoreRef.current?.withdrawals || [],
+        };
+        cachedStoreRef.current = toCache;
+        localStorage.setItem('freshioz_cached_admin_store', JSON.stringify(toCache));
+      } catch (e) {
+        // Ignore quota limits
+      }
+    }
+  }, [
+    societiesQuery.data,
+    warehousesQuery.data,
+    employeesQuery.data,
+    vendorsQuery.data,
+    leadsQuery.data,
+    ordersQuery.data,
+    procurementQuery.data,
+    productsQuery.data,
+    categoriesQuery.data,
+    unitsQuery.data,
+    withdrawalsQuery.data
+  ]);
 
   const allQueries = [
     societiesQuery,
