@@ -31,10 +31,10 @@ export function resolveImageUrl(img) {
 
   // Uploaded media on API server
   if (trimmed.startsWith('/uploads/')) {
-    return `https://api.freshioz.com${trimmed}`;
+    return trimmed;
   }
   if (trimmed.startsWith('uploads/')) {
-    return `https://api.freshioz.com/${trimmed}`;
+    return `/${trimmed}`;
   }
 
   // Default fallback if unknown format
