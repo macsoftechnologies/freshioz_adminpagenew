@@ -294,7 +294,17 @@ export function areEntityCollectionsEqual(localData, serverData) {
         if (l.deliverySlot !== s.deliverySlot || l.deliveryDate !== s.deliveryDate) return false;
       }
       if (key === 'products') {
-        if (l.retailPrice !== s.retailPrice || l.wholesalePrice !== s.wholesalePrice) return false;
+        if (
+          Number(l.retailPrice) !== Number(s.retailPrice) ||
+          Number(l.retailMarketPrice) !== Number(s.retailMarketPrice) ||
+          Number(l.wholesalePrice) !== Number(s.wholesalePrice) ||
+          Number(l.bulkMinQty) !== Number(s.bulkMinQty) ||
+          Number(l.bulkDiscountPercent) !== Number(s.bulkDiscountPercent) ||
+          Boolean(l.inStock) !== Boolean(s.inStock) ||
+          Number(l.gstPercent) !== Number(s.gstPercent) ||
+          l.badge !== s.badge ||
+          l.image !== s.image
+        ) return false;
       }
     }
   }
