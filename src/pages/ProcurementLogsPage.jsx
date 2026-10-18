@@ -3,11 +3,11 @@ import { Truck, MapPin, FileText, CheckCircle2, Eye, X, Image as ImageIcon, Tras
 import { Link } from 'react-router-dom';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
-import { saveFreshiozStore } from '../shared/freshiozStore';
+import { procurement as procurementResource } from '../hooks/resources';
 import AdminPagination from '../components/common/AdminPagination';
 
 export default function ProcurementLogsPage() {
-  const { store, currentUser } = useAdminRole();
+  const { currentUser } = useAdminRole();
   const { showToast } = useToast();
 
   const [scopeFilter, setScopeFilter] = useState('ALL'); // 'ALL' | 'MY'
@@ -17,7 +17,9 @@ export default function ProcurementLogsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
 
-  const allLogs = store.procurementLogs || [];
+  const { data: rawLogs = [], isLoading } = procurementResource.useList();
+  const removeProcurementMutation = procurementResource.useRemove();
+  const allLogs = Array.isArray(rawLogs) ? rawLogs : [];
 
   // Filter logs by scope, date, and search query
   const filteredLogs = useMemo(() => {
@@ -98,14 +100,16 @@ export default function ProcurementLogsPage() {
   const [activePhotoModal, setActivePhotoModal] = useState(null); // URL or null
   const [deleteLogModal, setDeleteLogModal] = useState(null); // log or null
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!deleteLogModal) return;
-    saveFreshiozStore(prev => ({
-      ...prev,
-      procurementLogs: (prev.procurementLogs || []).filter(l => l.id !== deleteLogModal.id)
-    }));
-    showToast(`Mandi bill #${deleteLogModal.billNumber} removed from ledger.`, 'info');
-    setDeleteLogModal(null);
+    try {
+      await removeProcurementMutation.mutateAsync(deleteLogModal.id);
+      showToast(`Mandi bill #${deleteLogModal.billNumber} removed from ledger.`, 'info');
+    } catch (err) {
+      showToast(err.message || 'Failed to remove bill from server.', 'error');
+    } finally {
+      setDeleteLogModal(null);
+    }
   };
 
   return (

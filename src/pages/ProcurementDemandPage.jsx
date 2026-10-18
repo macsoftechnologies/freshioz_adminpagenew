@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
-import { saveFreshiozStore } from '../shared/freshiozStore';
+import { warehouses as warehouseResource, products as productResource, orders as orderResource, procurement as procurementResource, useInventory, useAdjustStock } from '../hooks/resources';
 
 // Robust helper to parse weights in kg from any packaging units (e.g. "25 kg Gunny Sack", "500g", "1 bunch (250g)", "20 bunches Harvesting Crate")
 const parseUnitWeightInKg = (unitStr) => {
@@ -58,9 +58,18 @@ const parseUnitWeightInKg = (unitStr) => {
 import AdminPagination from '../components/common/AdminPagination';
 
 export default function ProcurementDemandPage() {
-  const { store, currentUser } = useAdminRole();
+  const { currentUser } = useAdminRole();
   const { showToast } = useToast();
-  const warehouses = store.warehouses || [];
+
+  const { data: rawWarehouses = [] } = warehouseResource.useList();
+  const { data: rawProducts = [] } = productResource.useList();
+  const { data: rawOrders = [] } = orderResource.useList();
+  const { data: rawProcLogs = [] } = procurementResource.useList();
+
+  const warehouses = Array.isArray(rawWarehouses) ? rawWarehouses : [];
+  const products = Array.isArray(rawProducts) ? rawProducts : [];
+  const allOrders = Array.isArray(rawOrders) ? rawOrders : [];
+  const procurementLogs = Array.isArray(rawProcLogs) ? rawProcLogs : [];
 
   const initialWarehouse = (currentUser?.role === 'WAREHOUSE_MANAGER' && currentUser?.assignedWarehouseId && currentUser.assignedWarehouseId !== 'ALL')
     ? currentUser.assignedWarehouseId
@@ -107,25 +116,34 @@ export default function ProcurementDemandPage() {
     setCurrentPage(1);
   }, [selectedSlot, selectedWarehouseId, activeTab, selectedDate]);
 
+  const { data: rawInventory = [] } = useInventory(selectedWarehouseId !== 'ALL' ? selectedWarehouseId : undefined);
+  const adjustStockMutation = useAdjustStock();
+
+  const inventoryStockMap = useMemo(() => {
+    const map = {};
+    if (Array.isArray(rawInventory)) {
+      rawInventory.forEach(item => {
+        const pName = item.productName || item.product?.name;
+        if (pName) {
+          map[pName.toLowerCase()] = (map[pName.toLowerCase()] || 0) + (Number(item.quantity) || 0);
+        }
+        if (item.productId) {
+          map[item.productId.toLowerCase()] = (map[item.productId.toLowerCase()] || 0) + (Number(item.quantity) || 0);
+        }
+      });
+    }
+    return map;
+  }, [rawInventory]);
+
   // Helper to query warehouse stock (single warehouse or summed citywide across all hubs)
   const getCropStockInWarehouse = (cropName, prodId) => {
-    const getWhQty = (whInv) => {
-      if (!whInv) return 0;
-      if (cropName && whInv[cropName] !== undefined) return Number(whInv[cropName]) || 0;
-      if (prodId && whInv[prodId] !== undefined) return Number(whInv[prodId]) || 0;
-      const lower = (cropName || '').toLowerCase();
-      for (const [k, v] of Object.entries(whInv)) {
-        if (k.toLowerCase() === lower) return Number(v) || 0;
-      }
-      return 0;
-    };
-
-    if (selectedWarehouseId !== 'ALL') {
-      return getWhQty(store.warehouseInventory?.[selectedWarehouseId]);
+    if (cropName && inventoryStockMap[cropName.toLowerCase()] !== undefined) {
+      return inventoryStockMap[cropName.toLowerCase()];
     }
-    return (warehouses || []).reduce((sum, w) => {
-      return sum + getWhQty(store.warehouseInventory?.[w.id]);
-    }, 0);
+    if (prodId && inventoryStockMap[prodId.toLowerCase()] !== undefined) {
+      return inventoryStockMap[prodId.toLowerCase()];
+    }
+    return 0;
   };
 
   // Filter orders by warehouse
@@ -139,7 +157,6 @@ export default function ProcurementDemandPage() {
   };
 
   // Discover all available delivery dates and slots from orders
-  const allOrders = store.orders || [];
   const availableDeliveryDates = useMemo(() => {
     return Array.from(new Set(allOrders.map(o => o.deliveryDate).filter(Boolean)));
   }, [allOrders]);
@@ -162,7 +179,7 @@ export default function ProcurementDemandPage() {
   // Calculate gross customer demand by produce item (grouped deterministically by canonical produce name)
   const cropDemandMap = useMemo(() => {
     const map = {};
-    const productsList = store.products || [];
+    const productsList = products;
 
     activeOrders.forEach(order => {
       (order.items || []).forEach(item => {
@@ -214,11 +231,11 @@ export default function ProcurementDemandPage() {
     });
 
     return map;
-  }, [activeOrders, store.products]);
+  }, [activeOrders, products]);
 
-  // Calculate already procured quantities directly from matching store.procurementLogs
+  // Calculate already procured quantities directly from matching procurementLogs
   const matchingProcurementLogs = useMemo(() => {
-    return (store.procurementLogs || []).filter(log => {
+    return procurementLogs.filter(log => {
       if (selectedWarehouseId !== 'ALL' && log.destinationWarehouseId && log.destinationWarehouseId !== selectedWarehouseId) {
         return false;
       }
@@ -230,12 +247,12 @@ export default function ProcurementDemandPage() {
       }
       return true;
     });
-  }, [store.procurementLogs, selectedWarehouseId, selectedSlot, selectedDate]);
+  }, [procurementLogs, selectedWarehouseId, selectedSlot, selectedDate]);
 
   const alreadyProcuredMap = useMemo(() => {
     const map = {};
     const demandKeys = Object.keys(cropDemandMap);
-    const productsList = store.products || [];
+    const productsList = products;
 
     matchingProcurementLogs.forEach(log => {
       (log.items || []).forEach(it => {
@@ -278,7 +295,7 @@ export default function ProcurementDemandPage() {
     });
 
     return map;
-  }, [matchingProcurementLogs, cropDemandMap, store.products]);
+  }, [matchingProcurementLogs, cropDemandMap, products]);
 
   // Combine into complete Demand Sheet with Rigorous Inventory Reconciliation:
   // Gross Customer Demand minus Total Available Supply (Warehouse Buffer Stock + Mandi Procured Today) = Net Mandi Remaining
@@ -324,7 +341,7 @@ export default function ProcurementDemandPage() {
     });
 
     return items;
-  }, [cropDemandMap, alreadyProcuredMap, store.warehouseInventory, selectedWarehouseId, warehouses]);
+  }, [cropDemandMap, alreadyProcuredMap, inventoryStockMap, selectedWarehouseId, warehouses]);
 
   // Pending items that still have net required > 0
   const pendingDemandList = useMemo(() => allDemandItems.filter(d => !d.isFullyCovered), [allDemandItems]);
@@ -408,30 +425,27 @@ export default function ProcurementDemandPage() {
   }, [activeOrders]);
 
   // Save updated stock count
-  const handleSaveStock = (e) => {
+  const handleSaveStock = async (e) => {
     e.preventDefault();
     const targetWhId = (selectedWarehouseId !== 'ALL') ? selectedWarehouseId : (stockEditWhId || warehouses[0]?.id || '');
     if (!targetWhId) return;
     const newQty = Math.max(0, parseFloat(stockInputVal) || 0);
 
-    saveFreshiozStore(prev => {
-      const currentInventory = prev.warehouseInventory || {};
-      const whInv = currentInventory[targetWhId] || {};
-      return {
-        ...prev,
-        warehouseInventory: {
-          ...currentInventory,
-          [targetWhId]: {
-            ...whInv,
-            [stockEditCrop]: newQty
-          }
-        }
-      };
-    });
-
-    const targetWhName = warehouses.find(w => w.id === targetWhId)?.name || targetWhId;
-    showToast(`Updated ${stockEditCrop} in-stock inventory for ${targetWhName} to ${newQty} kg.`, 'success');
-    setStockEditCrop(null);
+    const prod = products.find(p => p.name.toLowerCase() === (stockEditCrop || '').toLowerCase()) || { id: stockEditCrop };
+    try {
+      await adjustStockMutation.mutateAsync({
+        warehouseId: targetWhId,
+        productId: prod.id,
+        qty: newQty,
+        action: 'SET',
+        remarks: 'Physical count adjustment from Procurement Demand'
+      });
+      const targetWhName = warehouses.find(w => w.id === targetWhId)?.name || targetWhId;
+      showToast(`Updated ${stockEditCrop} in-stock inventory for ${targetWhName} to ${newQty} kg.`, 'success');
+      setStockEditCrop(null);
+    } catch (err) {
+      showToast(err.message || 'Failed to update inventory on server.', 'error');
+    }
   };
 
   return (
@@ -1130,7 +1144,7 @@ export default function ProcurementDemandPage() {
                     onChange={(e) => {
                       const newWhId = e.target.value;
                       setStockEditWhId(newWhId);
-                      const currentVal = store.warehouseInventory?.[newWhId]?.[stockEditCrop] || 0;
+                      const currentVal = getCropStockInWarehouse(stockEditCrop);
                       setStockInputVal(String(currentVal));
                     }}
                     style={{ width: '100%', height: '36px', padding: '0 8px', borderRadius: '6px', border: '1.5px solid #CBD5E1', fontSize: '13px', fontWeight: 700, background: '#F8FAFC' }}

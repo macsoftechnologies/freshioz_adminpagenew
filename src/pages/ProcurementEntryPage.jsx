@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { 
   Truck, 
@@ -25,8 +25,7 @@ import {
 } from 'lucide-react';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
-import { saveFreshiozStore, generateId, generateUUID } from '../shared/freshiozStore';
-import { procurementService } from '../services/procurementService';
+import { warehouses as warehouseResource, vendors as vendorResource, products as productResource, orders as orderResource, procurement as procurementResource, useInventory } from '../hooks/resources';
 
 // Robust helper to parse weights in kg from packaging units
 const parseUnitWeightInKg = (unitStr) => {
@@ -64,13 +63,25 @@ const parseUnitWeightInKg = (unitStr) => {
 };
 
 export default function ProcurementEntryPage() {
-  const { store, currentUser } = useAdminRole();
+  const { currentUser } = useAdminRole();
   const { showToast } = useToast();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  const warehouses = store.warehouses || [];
-  const vendors = store.vendors || [];
+  const { data: rawWarehouses = [] } = warehouseResource.useList();
+  const { data: rawVendors = [] } = vendorResource.useList();
+  const { data: rawProducts = [] } = productResource.useList();
+  const { data: rawOrders = [] } = orderResource.useList();
+  const { data: rawProcLogs = [] } = procurementResource.useList();
+
+  const warehouses = Array.isArray(rawWarehouses) ? rawWarehouses : [];
+  const vendors = Array.isArray(rawVendors) ? rawVendors : [];
+  const products = Array.isArray(rawProducts) ? rawProducts : [];
+  const orders = Array.isArray(rawOrders) ? rawOrders : [];
+  const procurementLogs = Array.isArray(rawProcLogs) ? rawProcLogs : [];
+
+  const createProcurementMutation = procurementResource.useCreate();
+
   const queryWarehouseId = searchParams.get('warehouseId');
   const querySlot = searchParams.get('slot') || 'ALL';
   const queryDate = searchParams.get('date') || 'ALL';
@@ -78,10 +89,23 @@ export default function ProcurementEntryPage() {
 
   const selectedWh = (warehouses || []).find(w => w.id === queryWarehouseId) || warehouses[0];
   const activeWhId = selectedWh?.id || warehouses[0]?.id || '';
-  const warehouseStock = activeWhId ? (store.warehouseInventory?.[activeWhId] || {}) : {};
+
+  const { data: rawInventory = [] } = useInventory(activeWhId);
+  const warehouseStock = useMemo(() => {
+    const stockMap = {};
+    if (Array.isArray(rawInventory)) {
+      rawInventory.forEach(item => {
+        const name = item.productName || item.product?.name || item.name;
+        if (name) stockMap[name] = item.quantity ?? item.stockQty ?? 0;
+      });
+    } else if (rawInventory && typeof rawInventory === 'object') {
+      return rawInventory;
+    }
+    return stockMap;
+  }, [rawInventory]);
 
   // Active customer orders that require Mandi fulfillment
-  const unprocuredOrders = (store.orders || []).filter(o => {
+  const unprocuredOrders = orders.filter(o => {
     if (['CANCELLED', 'DELIVERED'].includes(o.status)) return false;
     if (queryWarehouseId && queryWarehouseId !== 'ALL') {
       if (o.warehouseId && o.warehouseId !== queryWarehouseId) return false;
@@ -109,7 +133,7 @@ export default function ProcurementEntryPage() {
   unprocuredOrders.forEach(order => {
     (order.items || []).forEach(item => {
       const itemName = item.name || item.productName || 'Fresh Item';
-      const prod = (store.products || []).find(p => 
+      const prod = products.find(p => 
         (item.id && p.id === item.id) ||
         p.name.toLowerCase() === itemName.toLowerCase() ||
         p.name.toLowerCase().includes(itemName.toLowerCase()) ||
@@ -136,7 +160,7 @@ export default function ProcurementEntryPage() {
   });
 
   // Calculate what has ALREADY been procured across bills today for this run
-  const matchingProcLogs = (store.procurementLogs || []).filter(log => {
+  const matchingProcLogs = procurementLogs.filter(log => {
     if (queryWarehouseId && queryWarehouseId !== 'ALL' && log.destinationWarehouseId && log.destinationWarehouseId !== queryWarehouseId) {
       return false;
     }
@@ -194,7 +218,7 @@ export default function ProcurementEntryPage() {
     if (matched) {
       computedInitialItems = [matched];
     } else {
-      const prod = (store.products || []).find(p => p.name.toLowerCase() === queryCrop.toLowerCase()) || store.products?.[0];
+      const prod = products.find(p => p.name.toLowerCase() === queryCrop.toLowerCase()) || products[0];
       const rate = prod?.wholesalePrice ? Math.round(prod.wholesalePrice / 20) : 25;
       computedInitialItems = [{ name: prod?.name || queryCrop, qty: 10, unit: 'kg', rate, total: rate * 10 }];
     }
@@ -291,7 +315,7 @@ export default function ProcurementEntryPage() {
   };
 
   const handleAddItem = () => {
-    const firstProd = store.products?.[0];
+    const firstProd = products[0];
     setItems(prev => [
       ...prev,
       {
@@ -363,7 +387,7 @@ export default function ProcurementEntryPage() {
     };
 
     try {
-      const serverBill = await procurementService.create({
+      await createProcurementMutation.mutateAsync({
         billNumber: billNumber,
         vendorId: selectedVendorId || undefined,
         vendorName: vendorName,
@@ -386,56 +410,13 @@ export default function ProcurementEntryPage() {
         }))
       });
 
-      if (serverBill?.id) {
-        newProcLog.id = serverBill.id;
-      }
+      setShowConfirmModal(false);
+      showToast(`✓ Mandi Bill #${billNumber} recorded on server! Viewing updated demand checklist...`, 'success');
+      navigate(`/procurement-demand?warehouseId=${destWh?.id || 'ALL'}&slot=${querySlot}&date=${queryDate}`);
     } catch (err) {
       console.error('Backend procurement creation failed:', err);
       showToast(`Failed to record procurement bill on server: ${err?.message || 'Server error'}`, 'error');
-      return;
     }
-
-    saveFreshiozStore(prev => {
-      // Advance only the unprocured orders for the target destination warehouse to PROCURING
-      const targetOrderIds = new Set(unprocuredOrders.map(o => o.id));
-      const updatedOrders = (prev.orders || []).map(o => {
-        if (targetOrderIds.has(o.id)) {
-          return { 
-            ...o, 
-            status: 'PROCURING', 
-            mandiBillId: newProcLog.id,
-            mandiBillNumber: billNumber,
-            procuredAt: new Date().toISOString() 
-          };
-        }
-        return o;
-      });
-
-      // Auto-increment warehouse inventory for destination hub
-      const currentInv = prev.warehouseInventory || {};
-      const targetWhId = destWh?.id || warehouses[0]?.id || '';
-      const destWhInv = { ...(currentInv[targetWhId] || {}) };
-      items.forEach(it => {
-        const kg = parseUnitWeightInKg(it.unit) * (parseFloat(it.qty) || 0);
-        if (it.name) {
-          destWhInv[it.name] = Number(((destWhInv[it.name] || 0) + kg).toFixed(2));
-        }
-      });
-
-      return {
-        ...prev,
-        procurementLogs: [newProcLog, ...(prev.procurementLogs || [])],
-        warehouseInventory: {
-          ...currentInv,
-          [targetWhId]: destWhInv
-        },
-        orders: updatedOrders
-      };
-    });
-
-    setShowConfirmModal(false);
-    showToast(`✓ Mandi Bill #${billNumber} recorded on server! Viewing updated demand checklist...`, 'success');
-    navigate(`/procurement-demand?warehouseId=${destWh?.id || 'ALL'}&slot=${querySlot}&date=${queryDate}`);
   };
 
   const handleCopyText = (text, label) => {
@@ -879,7 +860,7 @@ export default function ProcurementEntryPage() {
                               background: '#FFFFFF'
                             }}
                           >
-                            {store.products.map(p => (
+                            {products.map(p => (
                               <option key={p.id} value={p.name}>{p.name} ({p.origin || 'Kolar Mandi'})</option>
                             ))}
                           </select>

@@ -13,4 +13,9 @@ export const procurementService = {
       body: JSON.stringify(data),
     });
   },
+  async delete(id) {
+    return apiClient(`/procurement/${id}`, {
+      method: 'DELETE',
+    });
+  },
 };

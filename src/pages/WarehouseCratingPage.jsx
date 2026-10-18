@@ -21,8 +21,7 @@ import {
 } from 'lucide-react';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
-import { saveFreshiozStore, generateId, generateUUID } from '../shared/freshiozStore';
-import { orderService } from '../services/orderService';
+import { orders as orderResource, employees as employeeResource, warehouses as warehouseResource, societies as societyResource, useUpdateOrderStatus } from '../hooks/resources';
 import AdminPagination from '../components/common/AdminPagination';
 
 // Helper to parse unit weight
@@ -51,14 +50,22 @@ const parseUnitWeightInKg = (unitStr) => {
 };
 
 export default function WarehouseCratingPage() {
-  const { store, currentUser, currentRoleId } = useAdminRole();
+  const { currentUser, currentRoleId } = useAdminRole();
   const { showToast } = useToast();
 
   const isDeliveryExecutive = currentRoleId === 'DELIVERY_EXECUTIVE' || currentUser?.role === 'DELIVERY_EXECUTIVE';
 
-  const orders = store.orders || [];
-  const employees = store.employees || [];
-  const warehouses = store.warehouses || [];
+  const { data: rawOrders = [], isLoading: isLoadingOrders } = orderResource.useList();
+  const { data: rawEmployees = [] } = employeeResource.useList();
+  const { data: rawWarehouses = [] } = warehouseResource.useList();
+  const { data: rawSocieties = [] } = societyResource.useList();
+
+  const orders = Array.isArray(rawOrders) ? rawOrders : [];
+  const employees = Array.isArray(rawEmployees) ? rawEmployees : [];
+  const warehouses = Array.isArray(rawWarehouses) ? rawWarehouses : [];
+  const societies = Array.isArray(rawSocieties) ? rawSocieties : [];
+
+  const updateOrderStatusMutation = useUpdateOrderStatus();
   const deliveryRiders = employees.filter(e => (e.roles || []).includes('DELIVERY_EXECUTIVE'));
 
   // URL Hash synchronization (#packing, #dispatch, #delivered)
@@ -150,51 +157,17 @@ export default function WarehouseCratingPage() {
   // 1. Mark individual order packed with customer address tag & deduct inventory
   const handleMarkPacked = async (orderId) => {
     try {
-      await orderService.updateStatus(orderId, { status: 'PACKED' });
+      await updateOrderStatusMutation.mutateAsync({
+        id: orderId,
+        status: 'PACKED',
+        packedBy: currentUser?.name || 'Warehouse Packing Team',
+        packedById: currentUser?.id || 'emp-packer',
+      });
+      showToast(`✓ Order #${orderId} packed & labeled on server!`, 'success');
     } catch (err) {
       console.error('Backend order packing status failed:', err);
       showToast(`Failed to pack order on server: ${err?.message || 'Server error'}`, 'error');
-      return;
     }
-
-    saveFreshiozStore(prev => {
-      const targetOrder = (prev.orders || []).find(o => o.id === orderId);
-      const whId = targetOrder?.warehouseId || warehouses[0]?.id || '';
-
-      // Deduct produce from warehouse inventory upon packing
-      const currentInv = prev.warehouseInventory || {};
-      const whInv = { ...(currentInv[whId] || {}) };
-      if (targetOrder && targetOrder.status !== 'PACKED') {
-        (targetOrder.items || []).forEach(it => {
-          const kg = (parseFloat(it.qty) || 1);
-          if (it.name && whInv[it.name] !== undefined) {
-            whInv[it.name] = Math.max(0, Number((whInv[it.name] - kg).toFixed(2)));
-          }
-        });
-      }
-
-      return {
-        ...prev,
-        warehouseInventory: {
-          ...currentInv,
-          [whId]: whInv
-        },
-        orders: (prev.orders || []).map(o => {
-          if (o.id === orderId) {
-            return {
-              ...o,
-              status: 'PACKED',
-              packedAt: new Date().toISOString(),
-              packedBy: currentUser?.name || 'Warehouse Packing Team',
-              packedById: currentUser?.id || 'emp-packer',
-              packageTag: `${o.societyName} • ${o.flatNo}`
-            };
-          }
-          return o;
-        })
-      };
-    });
-    showToast(`✓ Order #${orderId} packed & labeled on server!`, 'success');
   };
 
   // Crating station is strictly for warehouse ops; visibleOrders filters by manager warehouse
@@ -319,106 +292,39 @@ export default function WarehouseCratingPage() {
     if (!handoverLot) return;
 
     try {
-      await Promise.all(handoverLot.orders.map(o => orderService.updateStatus(o.id, {
+      await Promise.all(handoverLot.orders.map(o => updateOrderStatusMutation.mutateAsync({
+        id: o.id,
         status: 'OUT_FOR_DELIVERY',
+        deliveryLotId: handoverLot.lotId,
         deliveryPartnerId: driverId || (deliveryRiders.find(r => r.name === driverName || r.phone === driverPhone)?.id) || 'FRZ_EMP_105',
         deliveryPartnerName: driverName,
         deliveryPartnerPhone: driverPhone,
-        vehicleNumber: vehicleNumber
+        vehicleNumber: vehicleNumber,
+        dispatchedBy: currentUser?.name || 'Warehouse Dispatch Lead',
+        dispatchedById: currentUser?.id || 'emp-lead'
       })));
+      showToast(`✓ Lot #${handoverLot.lotId} dispatched to driver ${driverName} (${vehicleNumber}) on server!`, 'success');
+      setHandoverLot(null);
     } catch (err) {
       console.error('Backend dispatch status update failed:', err);
       showToast(`Failed to dispatch orders on server: ${err?.message || 'Server error'}`, 'error');
-      return;
     }
-
-    saveFreshiozStore(prev => {
-      const targetOrderIds = new Set(handoverLot.orders.map(o => o.id));
-      const sharedLotUuid = handoverLot.orders.find(o => o.deliveryLotUuid)?.deliveryLotUuid || generateUUID();
-      const updatedOrders = (prev.orders || []).map(o => {
-        if (targetOrderIds.has(o.id)) {
-          return {
-            ...o,
-            status: 'OUT_FOR_DELIVERY',
-            deliveryLotId: handoverLot.lotId,
-            deliveryLotUuid: sharedLotUuid,
-            deliveryPartnerId: driverId || (deliveryRiders.find(r => r.name === driverName || r.phone === driverPhone)?.id) || 'FRZ_EMP_105',
-            deliveryPartnerName: driverName,
-            deliveryPartnerPhone: driverPhone,
-            vehicleType: vehicleType,
-            vehicleNumber: vehicleNumber,
-            dispatchedAt: new Date().toISOString(),
-            dispatchedBy: currentUser?.name || 'Warehouse Dispatch Lead',
-            dispatchedById: currentUser?.id || 'emp-lead'
-          };
-        }
-        return o;
-      });
-
-      return {
-        ...prev,
-        orders: updatedOrders
-      };
-    });
-
-    showToast(`✓ Lot #${handoverLot.lotId} dispatched to driver ${driverName} (${vehicleNumber}) on server!`, 'success');
-    setHandoverLot(null);
   };
 
   // Mark lot delivered at society drop desk with unified commission crediting
   const handleMarkLotDelivered = async (lot) => {
     try {
-      await Promise.all(lot.orders.map(o => orderService.updateStatus(o.id, {
-        status: 'DELIVERED'
+      await Promise.all(lot.orders.map(o => updateOrderStatusMutation.mutateAsync({
+        id: o.id,
+        status: 'DELIVERED',
+        deliveredConfirmedBy: currentUser?.name || 'Delivery Rider',
+        deliveredConfirmedById: currentUser?.id || 'emp-rider'
       })));
+      showToast(`✓ All orders in Lot #${lot.lotId} marked Delivered on server! Commission credited.`, 'success');
     } catch (err) {
       console.error('Backend delivery confirmation failed:', err);
       showToast(`Failed to mark orders delivered on server: ${err?.message || 'Server error'}`, 'error');
-      return;
     }
-
-    saveFreshiozStore(prev => {
-      const targetOrderIds = new Set(lot.orders.map(o => o.id));
-      let newlyDeliveredCount = 0;
-      let batchCommissionAccrued = 0;
-
-      const updatedOrders = (prev.orders || []).map(o => {
-        if (targetOrderIds.has(o.id)) {
-          if (o.status !== 'DELIVERED') {
-            newlyDeliveredCount++;
-            batchCommissionAccrued += Number(o.societyCommissionEarned || 0);
-          }
-          return {
-            ...o,
-            status: 'DELIVERED',
-            deliveredAt: new Date().toISOString(),
-            deliveredConfirmedBy: currentUser?.name || 'Delivery Rider',
-            deliveredConfirmedById: currentUser?.id || 'emp-rider'
-          };
-        }
-        return o;
-      });
-
-      // Credit commission to the society wallet!
-      const updatedSocieties = (newlyDeliveredCount > 0) ? (prev.societies || []).map(s => {
-        if (s.name === lot.societyName || s.id === lot.societyId) {
-          return {
-            ...s,
-            balanceEarned: Number(((s.balanceEarned || 0) + batchCommissionAccrued).toFixed(2)),
-            totalOrdersDelivered: (s.totalOrdersDelivered || 0) + newlyDeliveredCount
-          };
-        }
-        return s;
-      }) : (prev.societies || []);
-
-      return {
-        ...prev,
-        societies: updatedSocieties,
-        orders: updatedOrders
-      };
-    });
-
-    showToast(`✓ All orders in Lot #${lot.lotId} marked Delivered on server! Commission credited.`, 'success');
   };
 
   const toPackCount = orders.filter(o => o.status === 'CONFIRMED' || o.status === 'PROCURING').length;
@@ -1194,7 +1100,7 @@ export default function WarehouseCratingPage() {
             </div>
 
             {(() => {
-              const targetSoc = (store.societies || []).find(s => s.id === labelModalOrder.societyId || s.name === labelModalOrder.societyName);
+              const targetSoc = societies.find(s => s.id === labelModalOrder.societyId || s.name === labelModalOrder.societyName);
               const socAddress = targetSoc?.address || `${labelModalOrder.societyName}, Drop Desk / Security Gate`;
               const mapQuery = targetSoc?.lat && targetSoc?.lng
                 ? `${targetSoc.lat},${targetSoc.lng}`
