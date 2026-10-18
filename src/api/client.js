@@ -1,4 +1,8 @@
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+export const API_BASE_URL = 
+  import.meta.env.VITE_API_BASE_URL || 
+  (typeof window !== 'undefined' && window.location.hostname.includes('freshioz.com')
+    ? 'https://api.freshioz.com/api'
+    : '/api');
 
 /**
  * Standard HTTP client with automatic Bearer token injection and error parsing
