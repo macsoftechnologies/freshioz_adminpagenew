@@ -19,18 +19,22 @@ import {
 } from 'lucide-react';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
-import { saveFreshiozStore, generateId, generateUUID } from '../shared/freshiozStore';
-import { societyService } from '../services/societyService';
+import { societies as societyResource, warehouses as warehouseResource, leads as leadResource } from '../hooks/resources';
 
 export default function SalesOnboardingPage() {
-  const { store, currentUser } = useAdminRole();
+  const { currentUser } = useAdminRole();
   const { showToast } = useToast();
   const [searchParams] = useSearchParams();
   const leadId = searchParams.get('leadId');
 
-  const leadReq = leadId ? (store.societyRequests || []).find(r => r.id === leadId) : null;
+  const { data: rawWarehouses = [] } = warehouseResource.useList();
+  const { data: rawLeads = [] } = leadResource.useList();
+  const createSocietyMutation = societyResource.useCreate();
+  const updateLeadMutation = leadResource.useUpdate();
 
-  const availableWarehouses = store.warehouses || [];
+  const availableWarehouses = Array.isArray(rawWarehouses) ? rawWarehouses : [];
+  const leads = Array.isArray(rawLeads) ? rawLeads : (rawLeads?.leads || []);
+  const leadReq = leadId ? leads.find(r => r.id === leadId) : null;
 
   const [formData, setFormData] = useState({
     name: '',
@@ -206,25 +210,28 @@ export default function SalesOnboardingPage() {
     };
 
     try {
-      await societyService.create(newSocietyRecord);
+      const created = await createSocietyMutation.mutateAsync(newSocietyRecord);
+      if (leadId) {
+        try {
+          await updateLeadMutation.mutateAsync({
+            id: leadId,
+            data: {
+              status: 'ONBOARDED',
+              convertedSocietyId: created?.id || newSocietyRecord.id,
+            }
+          });
+        } catch (leadErr) {
+          console.warn('Lead conversion note:', leadErr);
+        }
+      }
+
+      showToast('✓ Society onboarded! Awaiting Admin approval at /approvals.', 'success');
+      setIsConfirmModalOpen(false);
+      setSubmittedSuccess(true);
     } catch (err) {
-      console.warn('Backend society onboarding persistence note:', err?.message || err);
+      console.error('Backend society onboarding persistence failed:', err);
+      showToast(err.message || 'Failed to onboard society on server.', 'error');
     }
-
-    saveFreshiozStore(prev => ({
-      ...prev,
-      societies: [newSocietyRecord, ...prev.societies],
-      societyRequests: leadId ? (prev.societyRequests || []).map(r => r.id === leadId ? {
-        ...r,
-        status: 'CONVERTED',
-        convertedSocietyId: newSocietyRecord.id,
-        convertedAt: new Date().toISOString()
-      } : r) : (prev.societyRequests || [])
-    }));
-
-    showToast('✓ Society onboarded! Awaiting Admin approval at /approvals.', 'success');
-    setIsConfirmModalOpen(false);
-    setSubmittedSuccess(true);
   };
 
   return (

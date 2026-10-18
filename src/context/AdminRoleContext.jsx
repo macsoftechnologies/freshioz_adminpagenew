@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { getFreshiozStore, syncFreshiozStoreFromServer, generateId, generateUUID, API_BASE_URL } from '../shared/freshiozStore';
+import { API_BASE_URL } from '../api/client';
 
 const AdminRoleContext = createContext(null);
 
@@ -49,45 +49,8 @@ const DEMO_USERS = {
 };
 
 export function AdminRoleProvider({ children }) {
-  const [store, setStore] = useState(() => getFreshiozStore());
-
-  useEffect(() => {
-    const handleSync = (e) => setStore(e.detail || getFreshiozStore());
-    window.addEventListener('freshioz_store_updated', handleSync);
-
-    const handleStorage = (e) => {
-      if (!e.key || e.key === 'freshioz_ops_store_v1') {
-        setStore(getFreshiozStore());
-      }
-    };
-    window.addEventListener('storage', handleStorage);
-
-    // Initial server sync
-    syncFreshiozStoreFromServer();
-
-    // Sync on window focus (throttled to at most once every 10s)
-    let lastFocusSync = 0;
-    const handleFocus = () => {
-      const now = Date.now();
-      if (now - lastFocusSync > 10000) {
-        lastFocusSync = now;
-        syncFreshiozStoreFromServer();
-      }
-    };
-    window.addEventListener('focus', handleFocus);
-
-    // Live polling (25s) for real-time mirroring across multiple tabs and devices
-    const interval = setInterval(() => {
-      syncFreshiozStoreFromServer();
-    }, 25000);
-
-    return () => {
-      window.removeEventListener('freshioz_store_updated', handleSync);
-      window.removeEventListener('storage', handleStorage);
-      window.removeEventListener('focus', handleFocus);
-      clearInterval(interval);
-    };
-  }, []);
+  // Empty proxy store retained only for backward compatibility; all pages now use server-driven React Query
+  const store = React.useMemo(() => ({}), []);
 
   const [currentRoleId, setCurrentRoleId] = useState(() => {
     return localStorage.getItem('freshioz_admin_role') || 'SUPER_ADMIN';

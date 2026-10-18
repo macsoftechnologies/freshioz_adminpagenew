@@ -2,36 +2,41 @@ import React, { useState } from 'react';
 import { Users, MapPin, Phone, Mail, ArrowRight, Building2, UserCheck, ShieldCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAdminRole } from '../context/AdminRoleContext';
-import { saveFreshiozStore } from '../shared/freshiozStore';
+import { leads as leadResource, employees as employeeResource } from '../hooks/resources';
 import { useToast } from '../context/ToastContext';
 import AdminPagination from '../components/common/AdminPagination';
 
 export default function InboundLeadsPage() {
-  const { store, currentUser, isAdmin, isSales } = useAdminRole();
+  const { currentUser, isAdmin, isSales } = useAdminRole();
   const { showToast } = useToast();
 
   const [filterTab, setFilterTab] = useState('ALL'); // 'ALL' | 'MY_LEADS' | 'UNASSIGNED' | 'CONVERTED'
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
 
-  const rawRequests = store.societyRequests || [];
-  const salesOfficers = (store.employees || []).filter(e => (e.roles || []).includes('SALES_OFFICER') || e.role === 'SALES_OFFICER');
+  const { data: rawData = [], isLoading } = leadResource.useList();
+  const { data: rawEmployees = [] } = employeeResource.useList();
+  const updateLeadMutation = leadResource.useUpdate();
+
+  const rawRequests = Array.isArray(rawData) ? rawData : (rawData?.leads || []);
+  const salesOfficers = (Array.isArray(rawEmployees) ? rawEmployees : []).filter(e => (e.roles || []).includes('SALES_OFFICER') || e.role === 'SALES_OFFICER');
 
   // Handle assign sales rep
-  const handleAssignSalesRep = (leadId, salesRepId) => {
+  const handleAssignSalesRep = async (leadId, salesRepId) => {
     const rep = salesOfficers.find(s => s.id === salesRepId);
-    saveFreshiozStore(prev => ({
-      ...prev,
-      societyRequests: (prev.societyRequests || []).map(r => r.id === leadId ? {
-        ...r,
-        assignedToId: rep ? rep.id : null,
-        assignedToName: rep ? rep.name : null,
-        assignedAt: rep ? new Date().toISOString() : null,
-        assignedBy: currentUser?.name || 'Super Admin',
-        assignedById: currentUser?.id || 'emp-101'
-      } : r)
-    }));
-    showToast(rep ? `Assigned lead to ${rep.name}` : 'Unassigned lead', 'success');
+    try {
+      await updateLeadMutation.mutateAsync({
+        id: leadId,
+        data: {
+          assignedToId: rep ? rep.id : null,
+          assignedToName: rep ? rep.name : null,
+          status: rep ? 'VERIFIED' : 'NEW_LEAD',
+        }
+      });
+      showToast(rep ? `Assigned lead to ${rep.name}` : 'Unassigned lead', 'success');
+    } catch (err) {
+      showToast(err.message || 'Failed to update lead on server.', 'error');
+    }
   };
 
   // Scoped requests

@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
-import { saveFreshiozStore } from '../shared/freshiozStore';
+import { orders as orderResource, procurement as procurementResource, societies as societyResource, employees as employeeResource, usePayouts, useUpdateOrderStatus } from '../hooks/resources';
 import { exportToExcel } from '../utils/excelExporter';
 
 const HASH_TAB_MAP = {
@@ -49,13 +49,21 @@ const getTabFromHash = () => {
 };
 
 export default function FinancialTransactionsPage() {
-  const { store, currentUser } = useAdminRole();
+  const { currentUser } = useAdminRole();
   const { showToast } = useToast();
 
-  const orders = store.orders || [];
-  const procurementLogs = store.procurementLogs || [];
-  const withdrawals = store.withdrawals || [];
-  const employees = store.employees || [];
+  const { data: rawOrders = [] } = orderResource.useList();
+  const { data: rawProcurementLogs = [] } = procurementResource.useList();
+  const { data: rawWithdrawals = [] } = usePayouts();
+  const { data: rawSocieties = [] } = societyResource.useList();
+  const { data: rawEmployees = [] } = employeeResource.useList();
+  const updateOrderStatusMutation = useUpdateOrderStatus();
+
+  const orders = Array.isArray(rawOrders) ? rawOrders : [];
+  const procurementLogs = Array.isArray(rawProcurementLogs) ? rawProcurementLogs : [];
+  const withdrawals = Array.isArray(rawWithdrawals) ? rawWithdrawals : [];
+  const societies = Array.isArray(rawSocieties) ? rawSocieties : [];
+  const employees = Array.isArray(rawEmployees) ? rawEmployees : [];
 
   const [activeTab, setActiveTab] = useState(getTabFromHash);
   const [confirmDepositModal, setConfirmDepositModal] = useState(null); // { name, pendingHandoverAmount, totalStops, orderIds }
@@ -347,25 +355,28 @@ export default function FinancialTransactionsPage() {
   const totalRiderCashPendingDeposit = riderCashSettlementSummary.reduce((sum, r) => sum + r.pendingHandoverAmount, 0);
 
   // Mark Rider Cash Settled to Hub Desk
-  const handleSettleRiderCash = (riderName) => {
-    saveFreshiozStore(prev => ({
-      ...prev,
-      orders: (prev.orders || []).map(o => {
-        const isMatchedRider = (o.codCollectedBy || 'Assigned Delivery Partner') === riderName;
-        const isCodCash = ((o.paymentMethod || '').includes('PAY_ON_DELIVERY') || o.paymentMethod === 'COD') && (o.codReceivedMode === 'CASH' || !o.codReceivedMode);
-        if (isMatchedRider && isCodCash && !o.codSettledToHub) {
-          return {
-            ...o,
-            codSettledToHub: true,
-            codSettledAt: new Date().toISOString(),
-            codSettledBy: currentUser?.name || 'Hub Cashier Desk'
-          };
-        }
-        return o;
-      })
-    }));
+  const handleSettleRiderCash = async (riderName) => {
+    const matchedOrders = orders.filter(o => {
+      const isMatchedRider = (o.codCollectedBy || 'Assigned Delivery Partner') === riderName;
+      const isCodCash = ((o.paymentMethod || '').includes('PAY_ON_DELIVERY') || o.paymentMethod === 'COD') && (o.codReceivedMode === 'CASH' || !o.codReceivedMode);
+      return isMatchedRider && isCodCash && !o.codSettledToHub;
+    });
 
-    showToast(`✓ Cash collected by ${riderName} successfully reconciled and deposited at Hub Cashier Desk!`, 'success');
+    if (matchedOrders.length === 0) {
+      showToast(`No pending COD cash to settle for ${riderName}.`);
+      return;
+    }
+
+    try {
+      await Promise.all(matchedOrders.map(o => updateOrderStatusMutation.mutateAsync({
+        id: o.id,
+        codSettledToHub: true,
+        codSettledBy: currentUser?.name || 'Hub Cashier Desk'
+      })));
+      showToast(`✓ Cash collected by ${riderName} successfully reconciled and deposited at Hub Cashier Desk!`, 'success');
+    } catch (err) {
+      showToast(err.message || 'Failed to settle rider cash on server.', 'error');
+    }
   };
 
   // Export CSV
@@ -917,7 +928,7 @@ export default function FinancialTransactionsPage() {
               style={{ padding: '3px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '11.5px', fontWeight: 700, background: '#F8FAFC' }}
             >
               <option value="ALL">All Communities</option>
-              {(store.societies || []).map(s => (
+              {societies.map(s => (
                 <option key={s.id} value={s.name}>{s.name}</option>
               ))}
             </select>

@@ -14,12 +14,11 @@ import {
 } from 'lucide-react';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
-import { saveFreshiozStore } from '../shared/freshiozStore';
-import { societyService } from '../services/societyService';
+import { societies as societyResource } from '../hooks/resources';
 import AdminPagination from '../components/common/AdminPagination';
 
 export default function SocietyApprovalsPage() {
-  const { store, currentUser } = useAdminRole();
+  const { currentUser } = useAdminRole();
   const { showToast } = useToast();
 
   const [activeTab, setActiveTab] = useState('PENDING'); // 'PENDING' | 'APPROVED' | 'REJECTED'
@@ -39,31 +38,11 @@ export default function SocietyApprovalsPage() {
   // Rejection Form
   const [rejectionReason, setRejectionReason] = useState('');
   const [successToast, setSuccessToast] = useState('');
-  const [apiSocieties, setApiSocieties] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
 
-  // Load live canonical societies from server
-  useEffect(() => {
-    let isMounted = true;
-    async function loadSocieties() {
-      try {
-        setIsLoading(true);
-        const data = await societyService.getAll();
-        if (isMounted && Array.isArray(data)) {
-          setApiSocieties(data);
-          saveFreshiozStore(prev => ({ ...prev, societies: data }));
-        }
-      } catch (err) {
-        console.warn('Backend societies load note:', err);
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    }
-    loadSocieties();
-    return () => { isMounted = false; };
-  }, []);
+  const { data: rawSocieties = [], isLoading } = societyResource.useList();
+  const updateSocietyMutation = societyResource.useUpdate();
 
-  const effectiveSocieties = apiSocieties.length > 0 ? apiSocieties : (store.societies || []);
+  const effectiveSocieties = Array.isArray(rawSocieties) ? rawSocieties : [];
 
   const societiesList = effectiveSocieties.filter(s => {
     if (activeTab === 'PENDING') return s.status === 'PENDING';
@@ -94,30 +73,14 @@ export default function SocietyApprovalsPage() {
     if (!selectedSociety) return;
 
     try {
-      const updatedSociety = await societyService.update(selectedSociety.id, {
-        status: 'APPROVED',
-        commissionType,
-        commissionValue: Number(commissionValue),
+      await updateSocietyMutation.mutateAsync({
+        id: selectedSociety.id,
+        data: {
+          status: 'APPROVED',
+          commissionType,
+          commissionValue: Number(commissionValue),
+        }
       });
-
-      // Strictly on confirmed server success, update component state with canonical server record
-      const canonicalRecord = {
-        ...selectedSociety,
-        ...(updatedSociety || {}),
-        status: 'APPROVED',
-        commissionType,
-        commissionValue: Number(commissionValue),
-        approvedAt: new Date().toISOString(),
-        approvedBy: currentUser?.name || 'Super Admin',
-        approvedById: currentUser?.id || 'emp-101'
-      };
-
-      setApiSocieties(prev => prev.map(s => s.id === selectedSociety.id ? canonicalRecord : s));
-
-      saveFreshiozStore(prev => ({
-        ...prev,
-        societies: (prev.societies || []).map(s => s.id === selectedSociety.id ? canonicalRecord : s)
-      }));
 
       const isAlreadyApproved = selectedSociety.status === 'APPROVED';
       setIsApproveModalOpen(false);
@@ -154,28 +117,13 @@ export default function SocietyApprovalsPage() {
     }
 
     try {
-      const updatedSociety = await societyService.update(selectedSociety.id, {
-        status: 'REJECTED',
-        rejectionReason: rejectionReason.trim(),
+      await updateSocietyMutation.mutateAsync({
+        id: selectedSociety.id,
+        data: {
+          status: 'REJECTED',
+          rejectionReason: rejectionReason.trim(),
+        }
       });
-
-      // Strictly on confirmed server success, update component state with canonical server record
-      const canonicalRecord = {
-        ...selectedSociety,
-        ...(updatedSociety || {}),
-        status: 'REJECTED',
-        rejectionReason: rejectionReason.trim(),
-        rejectedAt: new Date().toISOString(),
-        rejectedBy: currentUser?.name || 'Super Admin',
-        rejectedById: currentUser?.id || 'emp-101'
-      };
-
-      setApiSocieties(prev => prev.map(s => s.id === selectedSociety.id ? canonicalRecord : s));
-
-      saveFreshiozStore(prev => ({
-        ...prev,
-        societies: (prev.societies || []).map(s => s.id === selectedSociety.id ? canonicalRecord : s)
-      }));
 
       setIsRejectModalOpen(false);
       showToast(`✓ "${selectedSociety.name}" rejected on server.`, 'warning');
@@ -223,7 +171,7 @@ export default function SocietyApprovalsPage() {
                   cursor: 'pointer'
                 }}
               >
-                {tab} ({(store.societies || []).filter(s => s.status === tab).length})
+                {tab} ({effectiveSocieties.filter(s => s.status === tab).length})
               </button>
             ))}
           </div>
