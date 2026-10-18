@@ -29,6 +29,7 @@ import WarehouseCratingPage from './pages/WarehouseCratingPage';
 import SocietiesDirectoryPage from './pages/SocietiesDirectoryPage';
 import VendorsDirectoryPage from './pages/VendorsDirectoryPage';
 import FinancialTransactionsPage from './pages/FinancialTransactionsPage';
+import ReviewsModerationPage from './pages/ReviewsModerationPage';
 import ScrollToTop from './components/common/ScrollToTop';
 import { useAdminRole, ROLES } from './context/AdminRoleContext';
 
@@ -135,6 +136,7 @@ export default function App() {
           <Route path="/transactions" element={<ProtectedByRole allowedRoles={['SUPER_ADMIN', 'WAREHOUSE_MANAGER']}><FinancialTransactionsPage /></ProtectedByRole>} />
           <Route path="/societies" element={<ProtectedByRole allowedRoles={['SUPER_ADMIN', 'SALES_OFFICER']}><SocietiesDirectoryPage /></ProtectedByRole>} />
           <Route path="/vendors" element={<ProtectedByRole allowedRoles={['SUPER_ADMIN', 'WAREHOUSE_MANAGER', 'PROCUREMENT_OFFICER']}><VendorsDirectoryPage /></ProtectedByRole>} />
+          <Route path="/reviews-moderation" element={<ProtectedByRole allowedRoles={['SUPER_ADMIN']}><ReviewsModerationPage /></ProtectedByRole>} />
           
           <Route path="/login" element={<Navigate to={getHomeRoute()} replace />} />
           <Route path="/forgot-password" element={<Navigate to={getHomeRoute()} replace />} />

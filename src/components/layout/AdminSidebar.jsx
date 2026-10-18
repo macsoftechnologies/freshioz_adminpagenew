@@ -18,7 +18,8 @@ import {
   Layers,
   PackageCheck,
   Receipt,
-  FileText
+  FileText,
+  MessageSquareQuote
 } from 'lucide-react';
 import FreshiozLogo from '../common/FreshiozLogo';
 import { useAdminRole } from '../../context/AdminRoleContext';
@@ -162,6 +163,14 @@ export default function AdminSidebar() {
             <NavLink to="/transactions" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
               <Receipt size={18} />
               <span>Payment & Spent Ledger</span>
+            </NavLink>
+
+            <div style={{ fontSize: '10.5px', textTransform: 'uppercase', color: '#94A3B8', fontWeight: 800, padding: '12px 14px 4px', letterSpacing: '0.6px' }}>
+              Feedback & Customer Care
+            </div>
+            <NavLink to="/reviews-moderation" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
+              <MessageSquareQuote size={18} />
+              <span style={{ flex: 1 }}>Reviews & Rewards</span>
             </NavLink>
           </>
         )}
