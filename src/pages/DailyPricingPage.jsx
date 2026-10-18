@@ -257,7 +257,7 @@ export default function DailyPricingPage() {
       return [
         p.id,
         p.name,
-        p.category,
+        typeof p.category === 'object' && p.category !== null ? (p.category.name || p.category.id || '') : (p.category || p.categoryId || ''),
         p.retailUnit || '1 kg',
         mrp,
         rate,
@@ -683,12 +683,16 @@ export default function DailyPricingPage() {
                       <td>
                         <span style={{ fontSize: '11px', background: '#F1F5F9', padding: '3px 8px', borderRadius: '5px', fontWeight: 700, color: '#1E293B' }}>
                           {(() => {
-                            const catKey = prod.category || prod.categoryId || '';
-                            const matchedCat = categories.find(c => 
-                              c.id === catKey || 
-                              c.id?.toLowerCase() === catKey.toLowerCase() ||
-                              c.name?.toLowerCase() === catKey.toLowerCase()
-                            );
+                            const rawCat = prod.category;
+                            const catKey = typeof rawCat === 'object' && rawCat !== null 
+                              ? String(rawCat.id || rawCat.name || '')
+                              : String(prod.categoryId || rawCat || '');
+                            const target = catKey.toLowerCase();
+                            const matchedCat = categories.find(c => {
+                              const cId = String(c?.id || '').toLowerCase();
+                              const cName = String(c?.name || '').toLowerCase();
+                              return c?.id === catKey || cId === target || cName === target;
+                            });
                             if (matchedCat?.name) return matchedCat.name;
                             if (catKey) {
                               return catKey.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
@@ -1010,7 +1014,21 @@ export default function DailyPricingPage() {
                       <div>
                         <span style={{ fontWeight: 700, color: '#1E293B' }}>{p.name}</span>
                         <span style={{ fontSize: '10px', color: '#64748B', display: 'block' }}>
-                          {categories.find(c => c.id === (p.category || p.categoryId))?.name || p.category || p.categoryId || 'Produce'}
+                          {(() => {
+                            const rawCat = p.category;
+                            const catKey = typeof rawCat === 'object' && rawCat !== null 
+                              ? String(rawCat.id || rawCat.name || '')
+                              : String(p.categoryId || rawCat || '');
+                            const target = catKey.toLowerCase();
+                            const matchedCat = categories.find(c => {
+                              const cId = String(c?.id || '').toLowerCase();
+                              const cName = String(c?.name || '').toLowerCase();
+                              return c?.id === catKey || cId === target || cName === target;
+                            });
+                            if (matchedCat?.name) return matchedCat.name;
+                            if (catKey) return catKey.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                            return 'Produce';
+                          })()}
                         </span>
                       </div>
                     </div>
