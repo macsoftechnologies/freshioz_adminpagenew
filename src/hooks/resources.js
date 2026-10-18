@@ -67,12 +67,13 @@ export function useUpdateOrderStatus() {
   });
 }
 
-export function useInventory(warehouseId) {
+export function useInventory(warehouseId, options = {}) {
   return useQuery({
     queryKey: ['inventory', warehouseId ?? 'ALL'],
     queryFn: () => inventoryService.getAll(warehouseId),
     refetchInterval: 20_000,
     refetchIntervalInBackground: false,
+    ...options,
   });
 }
 
@@ -82,8 +83,8 @@ export function useAdjustStock() {
   return useMutation({ mutationFn: (dto) => inventoryService.adjustStock(dto), onSuccess: () => inv('inventory') });
 }
 
-export function usePayouts(params) {
-  return useQuery({ queryKey: ['payouts', params ?? {}], queryFn: () => societyService.listPayouts(params) });
+export function usePayouts(params, options = {}) {
+  return useQuery({ queryKey: ['payouts', params ?? {}], queryFn: () => societyService.listPayouts(params), ...options });
 }
 
 export function useApprovePayout() {

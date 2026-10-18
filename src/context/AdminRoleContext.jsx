@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { API_BASE_URL } from '../api/client';
 import { 
   societies as societyResource,
@@ -63,17 +64,27 @@ const DEMO_USERS = {
 
 
 export function AdminRoleProvider({ children }) {
-  // Live server-driven state via React Query replacing legacy localStorage pseudo-database
-  const { data: societies = [] } = societyResource.useList();
-  const { data: warehouses = [] } = warehouseResource.useList();
-  const { data: employees = [] } = employeeResource.useList();
-  const { data: vendors = [] } = vendorResource.useList();
-  const { data: leadsData = {} } = leadResource.useList();
-  const { data: orders = [] } = orderResource.useList();
-  const { data: procurementLogs = [] } = procurementResource.useList();
-  const { data: products = [] } = productResource.useList();
-  const { data: categories = [] } = categoryResource.useList();
-  const { data: withdrawals = [] } = usePayouts();
+  const queryClient = useQueryClient();
+
+  // Authentication State
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    const storedAuth = localStorage.getItem('freshioz_admin_auth');
+    const token = localStorage.getItem('freshioz_auth_token') || localStorage.getItem('freshioz_admin_token');
+    return storedAuth === 'true' && !!token;
+  });
+
+  // Live server-driven state via React Query (only enabled when authenticated session exists)
+  const queryOpts = { enabled: !!isAuthenticated };
+  const { data: societies = [] } = societyResource.useList(null, queryOpts);
+  const { data: warehouses = [] } = warehouseResource.useList(null, queryOpts);
+  const { data: employees = [] } = employeeResource.useList(null, queryOpts);
+  const { data: vendors = [] } = vendorResource.useList(null, queryOpts);
+  const { data: leadsData = {} } = leadResource.useList(null, queryOpts);
+  const { data: orders = [] } = orderResource.useList(null, queryOpts);
+  const { data: procurementLogs = [] } = procurementResource.useList(null, queryOpts);
+  const { data: products = [] } = productResource.useList(null, queryOpts);
+  const { data: categories = [] } = categoryResource.useList(null, queryOpts);
+  const { data: withdrawals = [] } = usePayouts(null, queryOpts);
 
   const store = React.useMemo(() => ({
     societies: Array.isArray(societies) ? societies : [],
@@ -91,12 +102,6 @@ export function AdminRoleProvider({ children }) {
 
   const [currentRoleId, setCurrentRoleId] = useState(() => {
     return localStorage.getItem('freshioz_admin_role') || 'SUPER_ADMIN';
-  });
-
-  // Authentication State
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    const storedAuth = localStorage.getItem('freshioz_admin_auth');
-    return storedAuth === 'true';
   });
 
   const [currentUser, setCurrentUser] = useState(() => {
@@ -168,6 +173,7 @@ export function AdminRoleProvider({ children }) {
           localStorage.setItem('freshioz_admin_role', chosenRole);
           localStorage.setItem('freshioz_admin_user', JSON.stringify(userObj));
           localStorage.setItem('freshioz_admin_auth', 'true');
+          queryClient.invalidateQueries();
           return { success: true, user: userObj, token: authData.token };
         }
       } else if (authRes && !authRes.ok) {
@@ -184,7 +190,22 @@ export function AdminRoleProvider({ children }) {
   const logout = () => {
     setIsAuthenticated(false);
     localStorage.setItem('freshioz_admin_auth', 'false');
+    localStorage.removeItem('freshioz_auth_token');
+    localStorage.removeItem('freshioz_admin_token');
+    localStorage.removeItem('freshioz_admin_user');
+    queryClient.clear();
   };
+
+  // Listen for 401 Unauthorized events from apiClient to gracefully log out expired sessions
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      logout();
+    };
+    window.addEventListener('freshioz_auth_expired', handleAuthExpired);
+    return () => {
+      window.removeEventListener('freshioz_auth_expired', handleAuthExpired);
+    };
+  }, []);
 
   const forgotPassword = (emailOrPhone) => {
     // Simulated token generation for backend implementation
