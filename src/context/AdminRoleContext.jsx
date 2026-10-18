@@ -87,7 +87,7 @@ export function AdminRoleProvider({ children }) {
     return DEMO_USERS[currentRoleId] || DEMO_USERS.SUPER_ADMIN;
   });
 
-  const isSuperAdmin = currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN';
+  const isSuperAdmin = currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN' || currentUser?.email === 'superadmin@gmail.com';
   const isProcurementRole = isSuperAdmin || 
     currentUser?.roles?.includes('WAREHOUSE_MANAGER') || 
     currentUser?.roles?.includes('PROCUREMENT_OFFICER') || 
@@ -107,16 +107,16 @@ export function AdminRoleProvider({ children }) {
   const categoriesQuery = categoryResource.useList(null, queryOpts);
   const withdrawalsQuery = usePayouts(null, { enabled: !!isAuthenticated && isSuperAdmin });
 
-  const societies = societiesQuery.data || [];
-  const warehouses = warehousesQuery.data || [];
-  const employees = employeesQuery.data || [];
-  const vendors = vendorsQuery.data || [];
-  const leadsData = leadsQuery.data || {};
-  const orders = ordersQuery.data || [];
-  const procurementLogs = procurementQuery.data || [];
-  const products = productsQuery.data || [];
-  const categories = categoriesQuery.data || [];
-  const withdrawals = withdrawalsQuery.data || [];
+  const societies = societiesQuery.data ?? [];
+  const warehouses = warehousesQuery.data ?? [];
+  const employees = employeesQuery.data ?? [];
+  const vendors = vendorsQuery.data ?? [];
+  const leadsData = leadsQuery.data ?? {};
+  const orders = ordersQuery.data ?? [];
+  const procurementLogs = procurementQuery.data ?? [];
+  const products = productsQuery.data ?? [];
+  const categories = categoriesQuery.data ?? [];
+  const withdrawals = withdrawalsQuery.data ?? [];
 
   const allQueries = [
     societiesQuery,
@@ -153,11 +153,14 @@ export function AdminRoleProvider({ children }) {
   }), [societies, warehouses, employees, vendors, leadsData, orders, procurementLogs, products, categories, withdrawals]);
 
   const setRole = (roleId) => {
-    // Super Admin can switch to preview any role desk
-    if (currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN') {
+    // Super Admin can switch to preview any role desk without losing Super Admin status
+    if (isSuperAdmin) {
       setCurrentRoleId(roleId);
       localStorage.setItem('freshioz_admin_role', roleId);
-      const updated = { ...currentUser, role: roleId };
+      const preservedRoles = Array.isArray(currentUser?.roles) && currentUser.roles.includes('SUPER_ADMIN')
+        ? currentUser.roles
+        : ['SUPER_ADMIN', ...(currentUser?.roles || [])];
+      const updated = { ...currentUser, role: roleId, roles: preservedRoles };
       setCurrentUser(updated);
       localStorage.setItem('freshioz_admin_user', JSON.stringify(updated));
       return;

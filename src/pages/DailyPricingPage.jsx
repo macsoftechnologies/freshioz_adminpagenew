@@ -22,6 +22,7 @@ import { useToast } from '../context/ToastContext';
 import { products as productResource, categories as categoryResource, units as unitResource, usePublishPrices } from '../hooks/resources';
 import { pricingService } from '../services/pricingService';
 import { exportToExcel } from '../utils/excelExporter';
+import { resolveImageUrl, handleImageError } from '../utils/imageUtils';
 import AdminPagination from '../components/common/AdminPagination';
 
 export default function DailyPricingPage() {
@@ -626,8 +627,9 @@ export default function DailyPricingPage() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                           {prod.image ? (
                             <img
-                              src={prod.image}
+                              src={resolveImageUrl(prod.image)}
                               alt={prod.name}
+                              onError={handleImageError}
                               style={{ width: '36px', height: '36px', borderRadius: '6px', objectFit: 'cover', flexShrink: 0, border: '1px solid #E2E8F0' }}
                             />
                           ) : (
@@ -953,7 +955,12 @@ export default function DailyPricingPage() {
                   <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px dotted #E2E8F0', fontSize: '12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       {p.image ? (
-                        <img src={p.image} alt={p.name} style={{ width: '24px', height: '24px', borderRadius: '4px', objectFit: 'cover' }} />
+                        <img 
+                          src={resolveImageUrl(p.image)} 
+                          alt={p.name} 
+                          onError={handleImageError}
+                          style={{ width: '24px', height: '24px', borderRadius: '4px', objectFit: 'cover' }} 
+                        />
                       ) : (
                         <Package size={14} color="#64748B" />
                       )}

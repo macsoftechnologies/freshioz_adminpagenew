@@ -23,16 +23,10 @@ import { useToast } from '../context/ToastContext';
 import { products as productResource, categories as categoryResource, units as unitResource } from '../hooks/resources';
 import { uploadService } from '../services/uploadService';
 import { exportToExcel } from '../utils/excelExporter';
+import { resolveImageUrl, handleImageError } from '../utils/imageUtils';
 import AdminPagination from '../components/common/AdminPagination';
 
-export const resolveImageUrl = (img) => {
-  if (!img) return 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600&auto=format&fit=crop&q=80';
-  if (typeof img !== 'string') return 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=600&auto=format&fit=crop&q=80';
-  if (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('data:')) return img;
-  if (img.startsWith('/uploads/')) return `https://api.freshioz.com${img}`;
-  if (img.startsWith('uploads/')) return `https://api.freshioz.com/${img}`;
-  return `https://api.freshioz.com/uploads/${img}`;
-};
+export { resolveImageUrl };
 
 const PRODUCE_PRESETS = [
   {
