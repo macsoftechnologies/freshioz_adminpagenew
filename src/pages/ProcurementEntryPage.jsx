@@ -90,7 +90,12 @@ export default function ProcurementEntryPage() {
   const selectedWh = (warehouses || []).find(w => w.id === queryWarehouseId) || warehouses[0];
   const activeWhId = selectedWh?.id || warehouses[0]?.id || '';
 
-  const { data: rawInventory = [] } = useInventory(activeWhId);
+  const { 
+    data: rawInventory = [], 
+    isError: isInventoryError, 
+    error: inventoryError, 
+    refetch: refetchInventory 
+  } = useInventory(activeWhId);
   const warehouseStock = useMemo(() => {
     const stockMap = {};
     if (Array.isArray(rawInventory)) {
@@ -446,6 +451,49 @@ export default function ProcurementEntryPage() {
           </span>
         </div>
       </div>
+
+      {isInventoryError && (
+        <div style={{
+          background: '#FEF2F2',
+          border: '1.5px solid #FCA5A5',
+          borderRadius: '8px',
+          padding: '10px 14px',
+          marginBottom: '16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '8px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <AlertCircle size={16} color="#DC2626" />
+            <div>
+              <span style={{ fontWeight: 800, fontSize: '13px', color: '#991B1B' }}>
+                Warehouse Inventory Sync Warning:
+              </span>
+              <span style={{ fontSize: '12px', color: '#B91C1C', marginLeft: '6px' }}>
+                {inventoryError?.message || 'Unable to fetch warehouse stock levels.'} Existing crates in warehouse may not be reflected in calculations.
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => refetchInventory && refetchInventory()}
+            style={{
+              background: '#DC2626',
+              color: '#FFF',
+              border: 'none',
+              fontSize: '11.5px',
+              fontWeight: 700,
+              padding: '4px 12px',
+              borderRadius: '6px',
+              cursor: 'pointer'
+            }}
+          >
+            Retry Inventory Sync &rarr;
+          </button>
+        </div>
+      )}
 
       {/* SUCCESS SCREEN */}
       {submittedBill ? (

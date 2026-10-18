@@ -11,6 +11,7 @@ import {
   procurement as procurementResource,
   products as productResource,
   categories as categoryResource,
+  units as unitResource,
   usePayouts,
 } from '../hooks/resources';
 
@@ -105,6 +106,7 @@ export function AdminRoleProvider({ children }) {
   const procurementQuery = procurementResource.useList(null, { enabled: !!isAuthenticated && isProcurementRole });
   const productsQuery = productResource.useList(null, queryOpts);
   const categoriesQuery = categoryResource.useList(null, queryOpts);
+  const unitsQuery = unitResource.useList(null, queryOpts);
   const withdrawalsQuery = usePayouts(null, { enabled: !!isAuthenticated && isSuperAdmin });
 
   const societies = societiesQuery.data ?? [];
@@ -116,6 +118,7 @@ export function AdminRoleProvider({ children }) {
   const procurementLogs = procurementQuery.data ?? [];
   const products = productsQuery.data ?? [];
   const categories = categoriesQuery.data ?? [];
+  const units = unitsQuery.data ?? [];
   const withdrawals = withdrawalsQuery.data ?? [];
 
   const allQueries = [
@@ -128,6 +131,7 @@ export function AdminRoleProvider({ children }) {
     procurementQuery,
     productsQuery,
     categoriesQuery,
+    unitsQuery,
     withdrawalsQuery,
   ];
 
@@ -161,9 +165,10 @@ export function AdminRoleProvider({ children }) {
     procurementLogs: Array.isArray(procurementLogs) ? procurementLogs : [],
     products: Array.isArray(products) ? products : [],
     categories: Array.isArray(categories) ? categories : [],
+    units: Array.isArray(units) ? units : [],
     withdrawals: Array.isArray(withdrawals) ? withdrawals : [],
     users: [],
-  }), [societies, warehouses, employees, vendors, leadsData, orders, procurementLogs, products, categories, withdrawals]);
+  }), [societies, warehouses, employees, vendors, leadsData, orders, procurementLogs, products, categories, units, withdrawals]);
 
   const setRole = (roleId) => {
     // Super Admin can switch to preview any role desk without losing Super Admin status

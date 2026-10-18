@@ -116,7 +116,12 @@ export default function ProcurementDemandPage() {
     setCurrentPage(1);
   }, [selectedSlot, selectedWarehouseId, activeTab, selectedDate]);
 
-  const { data: rawInventory = [] } = useInventory(selectedWarehouseId !== 'ALL' ? selectedWarehouseId : undefined);
+  const { 
+    data: rawInventory = [], 
+    isError: isInventoryError, 
+    error: inventoryError, 
+    refetch: refetchInventory 
+  } = useInventory(selectedWarehouseId !== 'ALL' ? selectedWarehouseId : undefined);
   const adjustStockMutation = useAdjustStock();
 
   const inventoryStockMap = useMemo(() => {
@@ -504,6 +509,49 @@ export default function ProcurementDemandPage() {
           )}
         </div>
       </div>
+
+      {isInventoryError && (
+        <div style={{
+          background: '#FEF2F2',
+          border: '1.5px solid #FCA5A5',
+          borderRadius: '8px',
+          padding: '10px 14px',
+          marginBottom: '14px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '8px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <AlertCircle size={16} color="#DC2626" />
+            <div>
+              <span style={{ fontWeight: 800, fontSize: '13px', color: '#991B1B' }}>
+                Warehouse Inventory Sync Warning:
+              </span>
+              <span style={{ fontSize: '12px', color: '#B91C1C', marginLeft: '6px' }}>
+                {inventoryError?.message || 'Unable to fetch live warehouse crate inventory.'} Numbers below do not reflect existing warehouse stock.
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => refetchInventory && refetchInventory()}
+            style={{
+              background: '#DC2626',
+              color: '#FFF',
+              border: 'none',
+              fontSize: '11.5px',
+              fontWeight: 700,
+              padding: '4px 12px',
+              borderRadius: '6px',
+              cursor: 'pointer'
+            }}
+          >
+            Retry Inventory Sync &rarr;
+          </button>
+        </div>
+      )}
 
       {/* Warehouse & Dispatch Slot Filter Strip */}
       <div style={{
