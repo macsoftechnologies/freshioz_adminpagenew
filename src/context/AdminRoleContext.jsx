@@ -1,5 +1,17 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { API_BASE_URL } from '../api/client';
+import { 
+  societies as societyResource,
+  warehouses as warehouseResource,
+  employees as employeeResource,
+  vendors as vendorResource,
+  leads as leadResource,
+  orders as orderResource,
+  procurement as procurementResource,
+  products as productResource,
+  categories as categoryResource,
+  usePayouts,
+} from '../hooks/resources';
 
 const AdminRoleContext = createContext(null);
 
@@ -48,9 +60,34 @@ const DEMO_USERS = {
   }
 };
 
+
+
 export function AdminRoleProvider({ children }) {
-  // Empty proxy store retained only for backward compatibility; all pages now use server-driven React Query
-  const store = React.useMemo(() => ({}), []);
+  // Live server-driven state via React Query replacing legacy localStorage pseudo-database
+  const { data: societies = [] } = societyResource.useList();
+  const { data: warehouses = [] } = warehouseResource.useList();
+  const { data: employees = [] } = employeeResource.useList();
+  const { data: vendors = [] } = vendorResource.useList();
+  const { data: leadsData = {} } = leadResource.useList();
+  const { data: orders = [] } = orderResource.useList();
+  const { data: procurementLogs = [] } = procurementResource.useList();
+  const { data: products = [] } = productResource.useList();
+  const { data: categories = [] } = categoryResource.useList();
+  const { data: withdrawals = [] } = usePayouts();
+
+  const store = React.useMemo(() => ({
+    societies: Array.isArray(societies) ? societies : [],
+    warehouses: Array.isArray(warehouses) ? warehouses : [],
+    employees: Array.isArray(employees) ? employees : [],
+    vendors: Array.isArray(vendors) ? vendors : [],
+    societyRequests: leadsData?.leads || (Array.isArray(leadsData) ? leadsData : []),
+    orders: Array.isArray(orders) ? orders : [],
+    procurementLogs: Array.isArray(procurementLogs) ? procurementLogs : [],
+    products: Array.isArray(products) ? products : [],
+    categories: Array.isArray(categories) ? categories : [],
+    withdrawals: Array.isArray(withdrawals) ? withdrawals : [],
+    users: [],
+  }), [societies, warehouses, employees, vendors, leadsData, orders, procurementLogs, products, categories, withdrawals]);
 
   const [currentRoleId, setCurrentRoleId] = useState(() => {
     return localStorage.getItem('freshioz_admin_role') || 'SUPER_ADMIN';

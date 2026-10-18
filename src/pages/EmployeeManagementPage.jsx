@@ -25,39 +25,19 @@ import {
 } from 'lucide-react';
 import { useAdminRole, ROLES } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
-import { updateLocalFreshiozStore, generateId, generateUUID } from '../shared/freshiozStore';
-import { employeeService } from '../services/employeeService';
+import { employees as employeeResource, warehouses as warehouseResource } from '../hooks/resources';
 import { exportToExcel } from '../utils/excelExporter';
 import AdminPagination from '../components/common/AdminPagination';
 
 export default function EmployeeManagementPage() {
-  const { store, currentUser } = useAdminRole();
+  const { currentUser } = useAdminRole();
   const { showToast } = useToast();
-  const [apiEmployees, setApiEmployees] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    let isMounted = true;
-    async function loadEmployees() {
-      try {
-        setIsLoading(true);
-        const data = await employeeService.getAll();
-        if (isMounted && Array.isArray(data)) {
-          setApiEmployees(data);
-          updateLocalFreshiozStore(prev => ({ ...prev, employees: data }));
-        }
-      } catch (err) {
-        console.warn('Backend employees load note:', err);
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    }
-    loadEmployees();
-    return () => { isMounted = false; };
-  }, []);
+  const { data: employees = [], isLoading } = employeeResource.useList();
+  const { data: warehouses = [] } = warehouseResource.useList();
 
-  const employees = apiEmployees.length > 0 ? apiEmployees : (store.employees || []);
-  const warehouses = store.warehouses || [];
+  const createEmployeeMutation = employeeResource.useCreate();
+  const updateEmployeeMutation = employeeResource.useUpdate();
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('ALL');
   const [facilityFilter, setFacilityFilter] = useState('ALL'); // 'ALL' | 'WAREHOUSE' | 'CITYWIDE'
@@ -223,21 +203,10 @@ export default function EmployeeManagementPage() {
 
     if (editingEmployee) {
       try {
-        const updated = await employeeService.update(editingEmployee.id, payload);
-        const canonical = {
-          ...editingEmployee,
-          ...(updated || {}),
-          ...payload,
-          lastEditedAt: new Date().toISOString(),
-          lastEditedBy: currentUser?.name || 'Super Admin',
-          lastEditedById: currentUser?.id || 'emp-101'
-        };
-
-        setApiEmployees(prev => prev.map(e => e.id === editingEmployee.id ? canonical : e));
-        updateLocalFreshiozStore(prev => ({
-          ...prev,
-          employees: prev.employees.map(e => e.id === editingEmployee.id ? canonical : e)
-        }));
+        await updateEmployeeMutation.mutateAsync({
+          id: editingEmployee.id,
+          data: payload,
+        });
         showToast(`✓ Updated employee "${formData.name}"`, 'success');
         setIsConfirmModalOpen(false);
         setIsModalOpen(false);
@@ -248,25 +217,10 @@ export default function EmployeeManagementPage() {
       }
     } else {
       try {
-        const created = await employeeService.create({
+        await createEmployeeMutation.mutateAsync({
           ...payload,
-          id: generateId('FRZ_EMP'),
+          id: `FRZ_EMP_${Date.now()}`,
         });
-
-        const canonical = {
-          ...payload,
-          ...(created || {}),
-          createdAt: new Date().toISOString(),
-          createdBy: currentUser?.name || 'Super Admin',
-          createdById: currentUser?.id || 'emp-101',
-          dateJoined: new Date().toISOString().slice(0, 10)
-        };
-
-        setApiEmployees(prev => [canonical, ...prev.filter(e => e.id !== canonical.id)]);
-        updateLocalFreshiozStore(prev => ({
-          ...prev,
-          employees: [canonical, ...(prev.employees || []).filter(e => e.id !== canonical.id)]
-        }));
         showToast(`✓ Added new employee "${formData.name}"`, 'success');
         setIsConfirmModalOpen(false);
         setIsModalOpen(false);
@@ -284,12 +238,10 @@ export default function EmployeeManagementPage() {
     const newStatus = target.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
 
     try {
-      const updated = await employeeService.update(empId, { status: newStatus });
-      setApiEmployees(prev => prev.map(e => e.id === empId ? { ...e, ...(updated || {}), status: newStatus } : e));
-      updateLocalFreshiozStore(prev => ({
-        ...prev,
-        employees: prev.employees.map(e => e.id === empId ? { ...e, ...(updated || {}), status: newStatus } : e)
-      }));
+      await updateEmployeeMutation.mutateAsync({
+        id: empId,
+        data: { status: newStatus },
+      });
       showToast('Employee account status updated on server', 'info');
     } catch (err) {
       console.error('Backend employee status update failed:', err);
@@ -304,12 +256,10 @@ export default function EmployeeManagementPage() {
     }
     if (confirm('Are you sure you want to deactivate and remove this employee from active duty?')) {
       try {
-        await employeeService.update(empId, { status: 'INACTIVE' });
-        setApiEmployees(prev => prev.filter(e => e.id !== empId));
-        updateLocalFreshiozStore(prev => ({
-          ...prev,
-          employees: prev.employees.filter(e => e.id !== empId)
-        }));
+        await updateEmployeeMutation.mutateAsync({
+          id: empId,
+          data: { status: 'INACTIVE' },
+        });
         showToast('Employee removed from directory', 'info');
       } catch (err) {
         console.error('Backend employee removal failed:', err);

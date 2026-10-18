@@ -4,11 +4,11 @@ import { UserCheck, Clock, LogOut, User } from 'lucide-react';
 import FreshiozLogo from '../common/FreshiozLogo';
 import { useAdminRole, ROLES } from '../../context/AdminRoleContext';
 import { useToast } from '../../context/ToastContext';
-import { API_BASE_URL } from '../../shared/freshiozStore';
+import { API_BASE_URL } from '../../api/client';
 
 export default function AdminTopBar({ onMobileMenuClick }) {
   const navigate = useNavigate();
-  const { currentRoleId, setRole, store, currentUser, requestLogout, allowedRoles, canSwitchRoles } = useAdminRole();
+  const { currentRoleId, setRole, currentUser, requestLogout, allowedRoles, canSwitchRoles } = useAdminRole();
   const { showToast } = useToast();
   const [isBackendOnline, setIsBackendOnline] = React.useState(true);
 
