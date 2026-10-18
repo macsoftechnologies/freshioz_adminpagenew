@@ -2,11 +2,12 @@ import { apiClient } from '../api/client';
 
 export const orderService = {
   async getAll(params = {}) {
+    const safeParams = params || {};
     const query = new URLSearchParams();
-    if (params.status) query.set('status', params.status);
-    if (params.societyId) query.set('societyId', params.societyId);
-    if (params.phone) query.set('phone', params.phone);
-    if (params.warehouseId) query.set('warehouseId', params.warehouseId);
+    if (safeParams.status) query.set('status', safeParams.status);
+    if (safeParams.societyId) query.set('societyId', safeParams.societyId);
+    if (safeParams.phone) query.set('phone', safeParams.phone);
+    if (safeParams.warehouseId) query.set('warehouseId', safeParams.warehouseId);
     const qs = query.toString();
     return apiClient(`/orders${qs ? `?${qs}` : ''}`);
   },

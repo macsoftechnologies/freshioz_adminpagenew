@@ -26,7 +26,7 @@ function makeResource(key, service, { refetchMs = 0 } = {}) {
     useList: (params, options = {}) =>
       useQuery({
         queryKey: [key, params ?? {}],
-        queryFn: () => service.getAll(params),
+        queryFn: () => service.getAll(params ?? {}),
         placeholderData: keepPreviousData,
         staleTime: 15_000,
         refetchInterval: refetchMs || false,
@@ -88,7 +88,7 @@ export function useAdjustStock() {
 }
 
 export function usePayouts(params, options = {}) {
-  return useQuery({ queryKey: ['payouts', params ?? {}], queryFn: () => societyService.listPayouts(params), ...options });
+  return useQuery({ queryKey: ['payouts', params ?? {}], queryFn: () => societyService.listPayouts(params ?? {}), ...options });
 }
 
 export function useApprovePayout() {

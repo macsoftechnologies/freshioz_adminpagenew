@@ -26,9 +26,10 @@ export const societyService = {
     });
   },
   async listPayouts(params = {}) {
+    const safeParams = params || {};
     const query = new URLSearchParams();
-    if (params.societyId) query.set('societyId', params.societyId);
-    if (params.status) query.set('status', params.status);
+    if (safeParams.societyId) query.set('societyId', safeParams.societyId);
+    if (safeParams.status) query.set('status', safeParams.status);
     const qs = query.toString();
     return apiClient(`/societies/payouts${qs ? `?${qs}` : ''}`);
   },

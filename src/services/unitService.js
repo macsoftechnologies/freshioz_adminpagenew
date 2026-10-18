@@ -2,8 +2,9 @@ import { apiClient } from '../api/client';
 
 export const unitService = {
   async getAll(params = {}) {
+    const safeParams = params || {};
     const query = new URLSearchParams();
-    if (params.status) query.set('status', params.status);
+    if (safeParams.status) query.set('status', safeParams.status);
     const qs = query.toString();
     return apiClient(`/units${qs ? `?${qs}` : ''}`);
   },

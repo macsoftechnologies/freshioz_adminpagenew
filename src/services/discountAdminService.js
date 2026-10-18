@@ -2,9 +2,10 @@ import { apiClient } from '../api/client';
 
 export const discountAdminService = {
   async getAll(params = {}) {
+    const safeParams = params || {};
     const query = new URLSearchParams();
-    if (params.status) query.set('status', params.status);
-    if (params.userId) query.set('userId', params.userId);
+    if (safeParams.status) query.set('status', safeParams.status);
+    if (safeParams.userId) query.set('userId', safeParams.userId);
     const qs = query.toString();
     return apiClient(`/customer-discounts/admin${qs ? `?${qs}` : ''}`);
   },
