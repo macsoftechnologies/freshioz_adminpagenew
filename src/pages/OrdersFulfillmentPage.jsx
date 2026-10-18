@@ -20,19 +20,27 @@ import {
   Phone,
   ExternalLink,
   DollarSign,
-  Calendar
+  Calendar,
+  RefreshCw
 } from 'lucide-react';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
-import { saveFreshiozStore, API_BASE_URL } from '../shared/freshiozStore';
+import { orders as orderResource, societies as societyResource, warehouses as warehouseResource, useUpdateOrderStatus } from '../hooks/resources';
 import { exportToExcel } from '../utils/excelExporter';
 
 export default function OrdersFulfillmentPage() {
-  const { store, currentUser, currentRoleId } = useAdminRole();
+  const { currentUser, currentRoleId } = useAdminRole();
   const { showToast } = useToast();
-  const orders = store.orders || [];
-  const societies = store.societies || [];
-  const warehouses = store.warehouses || [];
+
+  const { data: rawOrders = [], isLoading: isLoadingOrders } = orderResource.useList();
+  const { data: rawSocieties = [] } = societyResource.useList();
+  const { data: rawWarehouses = [] } = warehouseResource.useList();
+
+  const orders = Array.isArray(rawOrders) ? rawOrders : [];
+  const societies = Array.isArray(rawSocieties) ? rawSocieties : [];
+  const warehouses = Array.isArray(rawWarehouses) ? rawWarehouses : [];
+
+  const updateOrderStatusMutation = useUpdateOrderStatus();
 
   // URL Hash synchronization (#packing, #dispatch, #delivered, etc.)
   const getInitialStatusFilter = () => {
@@ -194,61 +202,13 @@ export default function OrdersFulfillmentPage() {
     }
 
     try {
-      const token = localStorage.getItem('freshioz_auth_token');
-      const res = await fetch(`${API_BASE_URL}/orders/${orderId}/status`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({
-          status: newStatus,
-          paymentStatus: (isCod && newStatus === 'DELIVERED') ? 'PAID' : undefined,
-          codCollectedAmount: (isCod && newStatus === 'DELIVERED') ? (targetOrder.totalAmount || 0) : undefined,
-          codCollectedBy: currentUser?.name || 'Delivery Partner'
-        })
-      });
-
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.message || `Server rejected order status update (${res.status})`);
-      }
-
-      // ONLY upon confirmed server update, mutate state and show success toast
-      saveFreshiozStore(prev => {
-        const isNewlyDelivered = newStatus === 'DELIVERED' && targetOrder?.status !== 'DELIVERED';
-        const commEarned = (isNewlyDelivered && targetOrder?.societyCommissionEarned) ? targetOrder.societyCommissionEarned : 0;
-
-        const updatedSocieties = isNewlyDelivered ? (prev.societies || []).map(s => {
-          if (s.id === targetOrder?.societyId || s.name === targetOrder?.societyName) {
-            return {
-              ...s,
-              balanceEarned: Number(((s.balanceEarned || 0) + commEarned).toFixed(2)),
-              totalOrdersDelivered: (s.totalOrdersDelivered || 0) + 1
-            };
-          }
-          return s;
-        }) : prev.societies;
-
-        return {
-          ...prev,
-          societies: updatedSocieties,
-          orders: prev.orders.map(o => o.id === orderId ? {
-            ...o,
-            status: newStatus,
-            paymentStatus: (isCod && newStatus === 'DELIVERED') ? 'PAID' : (o.paymentStatus || 'PAID'),
-            codPaymentReceived: (isCod && newStatus === 'DELIVERED') ? true : o.codPaymentReceived,
-            codReceivedMode: paymentCollectionData?.mode || (isCod ? 'CASH' : null),
-            codCollectedAmount: (isCod && newStatus === 'DELIVERED') ? (targetOrder.totalAmount || 0) : o.codCollectedAmount,
-            codCollectedAt: (isCod && newStatus === 'DELIVERED') ? new Date().toISOString() : o.codCollectedAt,
-            codCollectedBy: currentUser?.name || 'Delivery Partner',
-            lastStatusUpdate: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            lastStatusUpdateAt: new Date().toISOString(),
-            lastStatusUpdateBy: currentUser?.name || 'Operations Lead',
-            lastStatusUpdateById: currentUser?.id || 'emp-101',
-            deliveredAt: newStatus === 'DELIVERED' ? new Date().toISOString() : o.deliveredAt
-          } : o)
-        };
+      await updateOrderStatusMutation.mutateAsync({
+        id: orderId,
+        status: newStatus,
+        paymentStatus: (isCod && newStatus === 'DELIVERED') ? 'PAID' : undefined,
+        codCollectedAmount: (isCod && newStatus === 'DELIVERED') ? (targetOrder.totalAmount || 0) : undefined,
+        codCollectedBy: currentUser?.name || 'Delivery Partner',
+        codReceivedMode: paymentCollectionData?.mode || (isCod ? 'CASH' : null),
       });
 
       if (newStatus === 'DELIVERED') {
@@ -267,104 +227,56 @@ export default function OrdersFulfillmentPage() {
   };
 
   // Dedicated COD Payment Recorder (can be invoked independently or as part of delivery)
-  const handleRecordCodPayment = (orderId, mode = 'CASH', alsoDeliver = false) => {
+  const handleRecordCodPayment = async (orderId, mode = 'CASH', alsoDeliver = false) => {
     const targetOrder = (orders || []).find(o => o.id === orderId);
     if (!targetOrder) return;
 
     if (alsoDeliver) {
-      handleUpdateOrderStatus(orderId, 'DELIVERED', { mode, amount: targetOrder.totalAmount });
+      await handleUpdateOrderStatus(orderId, 'DELIVERED', { mode, amount: targetOrder.totalAmount });
       setCodModalOrder(null);
       return;
     }
 
     try {
-      const token = localStorage.getItem('freshioz_auth_token');
-      fetch(`${API_BASE_URL}/orders/${orderId}/status`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({
-          paymentStatus: 'PAID',
-          codCollectedAmount: targetOrder.totalAmount || 0,
-          codCollectedBy: currentUser?.name || 'Delivery Partner'
-        })
-      }).catch(e => console.warn('COD status update background note:', e));
-    } catch (err) {
-      console.warn('COD recording note:', err);
-    }
-
-    saveFreshiozStore(prev => ({
-      ...prev,
-      orders: (prev.orders || []).map(o => o.id === orderId ? {
-        ...o,
+      await updateOrderStatusMutation.mutateAsync({
+        id: orderId,
         paymentStatus: 'PAID',
-        codPaymentReceived: true,
-        codReceivedMode: mode,
         codCollectedAmount: targetOrder.totalAmount || 0,
-        codCollectedAt: new Date().toISOString(),
         codCollectedBy: currentUser?.name || 'Delivery Partner',
-        lastStatusUpdate: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        lastStatusUpdateAt: new Date().toISOString(),
-        lastStatusUpdateBy: currentUser?.name || 'Delivery Partner'
-      } : o)
-    }));
-
-    showToast(`✅ Payment of ₹${(targetOrder.totalAmount || 0).toLocaleString()} recorded as received via ${mode === 'UPI_QR' ? 'UPI QR' : 'Cash'}!`, 'success');
-    setCodModalOrder(null);
+        codReceivedMode: mode,
+      });
+      showToast(`✅ Payment of ₹${(targetOrder.totalAmount || 0).toLocaleString()} recorded as received via ${mode === 'UPI_QR' ? 'UPI QR' : 'Cash'}!`, 'success');
+    } catch (err) {
+      console.error('COD recording error:', err);
+      showToast(err.message || 'Failed to record COD payment on server.', 'error');
+    } finally {
+      setCodModalOrder(null);
+    }
   };
 
   // Society Batch Update Handler (Accrues commissions on batch DELIVERED)
-  const handleBatchUpdateSociety = (e) => {
+  const handleBatchUpdateSociety = async (e) => {
     e.preventDefault();
     if (!batchSociety) return;
 
-    let updatedCount = 0;
-    saveFreshiozStore(prev => {
-      let batchCommissionAccrued = 0;
-      let newlyDeliveredCount = 0;
+    const targetOrders = orders.filter(o => o.societyName === batchSociety && o.status !== 'CANCELLED' && o.status !== batchTargetStatus);
+    if (targetOrders.length === 0) {
+      showToast(`No pending orders found for "${batchSociety}" to set to ${batchTargetStatus}.`);
+      return;
+    }
 
-      const updatedOrders = prev.orders.map(o => {
-        // Guard: Do NOT overwrite CANCELLED orders during batch update
-        if (o.societyName === batchSociety && o.status !== 'CANCELLED') {
-          updatedCount++;
-          if (batchTargetStatus === 'DELIVERED' && o.status !== 'DELIVERED') {
-            batchCommissionAccrued += (o.societyCommissionEarned || 0);
-            newlyDeliveredCount++;
-          }
-          return {
-            ...o,
-            status: batchTargetStatus,
-            lastStatusUpdate: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            lastStatusUpdateAt: new Date().toISOString(),
-            lastStatusUpdateBy: currentUser?.name || 'Operations Lead',
-            lastStatusUpdateById: currentUser?.id || 'emp-101',
-            deliveredAt: batchTargetStatus === 'DELIVERED' ? new Date().toISOString() : o.deliveredAt
-          };
-        }
-        return o;
-      });
-
-      const updatedSocieties = (batchTargetStatus === 'DELIVERED' && newlyDeliveredCount > 0) ? prev.societies.map(s => {
-        if (s.name === batchSociety) {
-          return {
-            ...s,
-            balanceEarned: Number(((s.balanceEarned || 0) + batchCommissionAccrued).toFixed(2)),
-            totalOrdersDelivered: (s.totalOrdersDelivered || 0) + newlyDeliveredCount
-          };
-        }
-        return s;
-      }) : prev.societies;
-
-      return {
-        ...prev,
-        societies: updatedSocieties,
-        orders: updatedOrders
-      };
-    });
-
-    showToast(`Batch Update: Set ${updatedCount} orders for "${batchSociety}" to ${batchTargetStatus}!`, 'success');
+    try {
+      await Promise.all(targetOrders.map(o => updateOrderStatusMutation.mutateAsync({
+        id: o.id,
+        status: batchTargetStatus,
+        paymentStatus: (batchTargetStatus === 'DELIVERED' && (o.paymentMethod || '').includes('PAY_ON_DELIVERY')) ? 'PAID' : undefined,
+        codCollectedAmount: (batchTargetStatus === 'DELIVERED' && (o.paymentMethod || '').includes('PAY_ON_DELIVERY')) ? (o.totalAmount || 0) : undefined,
+        codCollectedBy: currentUser?.name || 'Operations Lead',
+      })));
+      showToast(`Batch Update: Set ${targetOrders.length} orders for "${batchSociety}" to ${batchTargetStatus}!`, 'success');
+    } catch (err) {
+      showToast(err.message || 'Failed some batch order status updates.', 'error');
+    }
   };
 
   // Export Delivery Manifest Excel
@@ -428,23 +340,25 @@ export default function OrdersFulfillmentPage() {
     .filter(o => o.status !== 'DELIVERED' && (o.paymentMethod || '').includes('PAY_ON_DELIVERY'))
     .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
 
-  const handleClaimRun = () => {
-    saveFreshiozStore(prev => ({
-      ...prev,
-      orders: (prev.orders || []).map(o => {
-        if (o.status === 'OUT_FOR_DELIVERY' || o.status === 'PACKED') {
-          return {
-            ...o,
-            deliveryPartnerId: currentUser?.id || 'FRZ_EMP_105',
-            deliveryPartnerName: currentUser?.name || 'Society Gate Delivery Rider',
-            deliveryPartnerPhone: currentUser?.phone || '9845033333',
-            status: 'OUT_FOR_DELIVERY'
-          };
-        }
-        return o;
-      })
-    }));
-    showToast(`Claimed ${countRiderPending} active deliveries for ${currentUser?.name || 'Rider'}!`, 'success');
+  const handleClaimRun = async () => {
+    const claimableOrders = orders.filter(o => o.status === 'OUT_FOR_DELIVERY' || o.status === 'PACKED');
+    if (claimableOrders.length === 0) {
+      showToast('No active orders available to claim.', 'info');
+      return;
+    }
+
+    try {
+      await Promise.all(claimableOrders.map(o => updateOrderStatusMutation.mutateAsync({
+        id: o.id,
+        status: 'OUT_FOR_DELIVERY',
+        deliveryPartnerId: currentUser?.id || 'FRZ_EMP_105',
+        deliveryPartnerName: currentUser?.name || 'Society Gate Delivery Rider',
+        deliveryPartnerPhone: currentUser?.phone || '9845033333',
+      })));
+      showToast(`Claimed ${claimableOrders.length} active deliveries for ${currentUser?.name || 'Rider'}!`, 'success');
+    } catch (err) {
+      showToast(err.message || 'Failed to claim deliveries.', 'error');
+    }
   };
 
   // Filtered Orders
@@ -987,7 +901,12 @@ export default function OrdersFulfillmentPage() {
       {isDeliveryExecutive ? (
         /* RIDER DELIVERY MANIFEST CARDS VIEW (NO TABLE, NO REVERSAL DROPDOWNS) */
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          {filteredOrders.length === 0 ? (
+          {isLoadingOrders ? (
+            <div style={{ background: '#FFF', borderRadius: '12px', border: '1.5px solid #E2E8F0', padding: '36px 20px', textAlign: 'center', color: '#64748B' }}>
+              <RefreshCw size={24} style={{ margin: '0 auto 12px', display: 'block', animation: 'spin 1s linear infinite' }} />
+              <div style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A' }}>Loading Delivery Stops...</div>
+            </div>
+          ) : filteredOrders.length === 0 ? (
             <div className="admin-empty-state" style={{ background: '#FFF', borderRadius: '12px', border: '1.5px solid #E2E8F0', padding: '36px 20px', textAlign: 'center' }}>
               <div className="admin-empty-state-icon" style={{ margin: '0 auto 12px' }}>
                 <Package size={26} color="#059669" />
@@ -1310,7 +1229,14 @@ export default function OrdersFulfillmentPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredOrders.length === 0 ? (
+                {isLoadingOrders ? (
+                  <tr>
+                    <td colSpan="7" style={{ textAlign: 'center', padding: '40px' }}>
+                      <RefreshCw size={24} style={{ margin: '0 auto 10px', display: 'block', animation: 'spin 1s linear infinite', color: '#0284C7' }} />
+                      <div style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A' }}>Loading Orders Pipeline...</div>
+                    </td>
+                  </tr>
+                ) : filteredOrders.length === 0 ? (
                   <tr>
                     <td colSpan="7">
                       <div className="admin-empty-state">

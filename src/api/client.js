@@ -24,11 +24,17 @@ export async function apiClient(endpoint, options = {}) {
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      window.dispatchEvent(new CustomEvent('freshioz_auth_expired'));
+    }
     const errorBody = await response.json().catch(() => ({}));
     const message = errorBody.message || `Request failed with status ${response.status}`;
     const error = new Error(Array.isArray(message) ? message.join(', ') : message);
     error.status = response.status;
     error.data = errorBody;
+    if (response.status === 409) {
+      error.isConflict = true;
+    }
     throw error;
   }
 

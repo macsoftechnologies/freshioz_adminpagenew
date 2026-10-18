@@ -19,37 +19,24 @@ import {
   HelpCircle
 } from 'lucide-react';
 import { useAdminRole } from '../context/AdminRoleContext';
-import { saveFreshiozStore, generateId, generateUUID } from '../shared/freshiozStore';
-import { warehouseService } from '../services/warehouseService';
+import { warehouses as warehouseResource, societies as societyResource } from '../hooks/resources';
 import { useToast } from '../context/ToastContext';
 import { exportToExcel } from '../utils/excelExporter';
 import AdminWarehouseLocationMapPicker from '../components/common/AdminWarehouseLocationMapPicker';
 
 export default function WarehousesPage() {
-  const { store, currentUser } = useAdminRole();
+  const { currentUser } = useAdminRole();
   const { showToast } = useToast();
-  const warehouses = store.warehouses || [];
-  const societies = store.societies || [];
 
-  const [isLoading, setIsLoading] = useState(!store.warehouses || store.warehouses.length === 0);
+  const { data: rawWarehouses = [], isLoading: isLoadingWarehouses } = warehouseResource.useList();
+  const { data: rawSocieties = [] } = societyResource.useList();
 
-  useEffect(() => {
-    let isMounted = true;
-    async function loadWarehouses() {
-      try {
-        const res = await warehouseService.getAll();
-        if (isMounted && Array.isArray(res) && res.length > 0) {
-          saveFreshiozStore(prev => ({ ...prev, warehouses: res }));
-        }
-      } catch (err) {
-        console.warn('Initial warehouses load note:', err);
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    }
-    loadWarehouses();
-    return () => { isMounted = false; };
-  }, []);
+  const warehouses = Array.isArray(rawWarehouses) ? rawWarehouses : [];
+  const societies = Array.isArray(rawSocieties) ? rawSocieties : [];
+  const isLoading = isLoadingWarehouses;
+
+  const createWarehouseMutation = warehouseResource.useCreate();
+  const updateWarehouseMutation = warehouseResource.useUpdate();
 
   // Modals state
   const [isWarehouseModalOpen, setIsWarehouseModalOpen] = useState(false);
@@ -160,69 +147,34 @@ export default function WarehousesPage() {
     setIsConfirmModalOpen(true);
   };
 
-  // Step 2: User clicked "Yes, Confirm & Save" in pop-up -> actually commits to store and disk
+  // Step 2: User clicked "Yes, Confirm & Save" in pop-up -> commits to server and automatically invalidates query
   const handleConfirmCommitSave = async () => {
     if (editingWarehouse) {
       try {
-        const updated = await warehouseService.update(editingWarehouse.id, warehouseForm);
-
-        const canonicalRecord = {
-          ...editingWarehouse,
-          ...(updated || {}),
-          ...warehouseForm,
-          lastEditedAt: new Date().toISOString(),
-          lastEditedBy: currentUser?.name || 'Super Admin',
-          lastEditedById: currentUser?.id || 'emp-101'
-        };
-
-        saveFreshiozStore(prev => ({
-          ...prev,
-          warehouses: prev.warehouses.map(w => w.id === editingWarehouse.id ? canonicalRecord : w)
-        }));
+        await updateWarehouseMutation.mutateAsync({
+          id: editingWarehouse.id,
+          data: warehouseForm,
+        });
         showToast(`✓ Warehouse "${warehouseForm.name}" updated successfully.`, 'success');
         setIsConfirmModalOpen(false);
         setIsWarehouseModalOpen(false);
       } catch (err) {
         console.error('Backend warehouse update failed:', err);
         showToast(`Failed to update warehouse on server: ${err?.message || 'Server error'}`, 'error');
-        return;
       }
     } else {
       try {
-        const created = await warehouseService.create({
+        const payload = {
           ...warehouseForm,
           code: warehouseForm.code || warehouseForm.name.toUpperCase().replace(/\s+/g, '_').slice(0, 10),
-        });
-
-        // Use canonical server record returned by API response
-        const canonicalRecord = {
-          ...created,
-          name: created?.name || warehouseForm.name,
-          code: created?.code || warehouseForm.code,
-          location: created?.location || warehouseForm.location,
-          cutoffTime: created?.cutoffTime || warehouseForm.cutoffTime || '21:00',
-          openTime: created?.openTime || warehouseForm.openTime || '05:00',
-          capacityTons: created?.capacityTons || warehouseForm.capacityTons || 40,
-          managerName: created?.managerName || warehouseForm.managerName,
-          managerPhone: created?.managerPhone || warehouseForm.managerPhone,
-          status: created?.status || warehouseForm.status || 'ACTIVE',
-          slots: created?.slots || [
-            { id: 'slot-morning', label: 'Morning Fresh Slot', timeWindow: '06:30 AM - 08:30 AM', desc: 'Direct to Society Drop Desk' },
-            { id: 'slot-evening', label: 'Evening Fresh Slot', timeWindow: '05:00 PM - 07:30 PM', desc: 'Evening Return Drop' }
-          ]
         };
-
-        saveFreshiozStore(prev => ({
-          ...prev,
-          warehouses: [...(prev.warehouses || []).filter(w => w.id !== canonicalRecord.id), canonicalRecord]
-        }));
-        showToast(`✓ New Warehouse "${canonicalRecord.name}" registered and activated.`, 'success');
+        await createWarehouseMutation.mutateAsync(payload);
+        showToast(`✓ New Warehouse "${warehouseForm.name}" registered and activated.`, 'success');
         setIsConfirmModalOpen(false);
         setIsWarehouseModalOpen(false);
       } catch (err) {
         console.error('Backend warehouse create failed:', err);
         showToast(`Failed to register warehouse on server: ${err?.message || 'Server error'}`, 'error');
-        return;
       }
     }
   };

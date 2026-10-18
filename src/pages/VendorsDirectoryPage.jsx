@@ -19,39 +19,20 @@ import {
 } from 'lucide-react';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
-import { saveFreshiozStore, generateId, generateUUID } from '../shared/freshiozStore';
-import { vendorService } from '../services/vendorService';
+import { vendors as vendorResource } from '../hooks/resources';
 import AdminPagination from '../components/common/AdminPagination';
 import AdminWarehouseLocationMapPicker from '../components/common/AdminWarehouseLocationMapPicker';
 
 export default function VendorsDirectoryPage() {
   const { store, currentUser } = useAdminRole();
   const { showToast } = useToast();
-  const [apiVendors, setApiVendors] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    let isMounted = true;
-    async function loadVendors() {
-      try {
-        setIsLoading(true);
-        const data = await vendorService.getAll();
-        if (isMounted && Array.isArray(data)) {
-          setApiVendors(data);
-          saveFreshiozStore(prev => ({ ...prev, vendors: data }));
-        }
-      } catch (err) {
-        console.warn('Backend vendors load note:', err);
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    }
-    loadVendors();
-    return () => { isMounted = false; };
-  }, []);
+  const { data: rawVendors = [], isLoading } = vendorResource.useList();
+  const vendors = Array.isArray(rawVendors) ? rawVendors : [];
+  const procurementLogs = store?.procurementLogs || [];
 
-  const vendors = apiVendors.length > 0 ? apiVendors : (store.vendors || []);
-  const procurementLogs = store.procurementLogs || [];
+  const createVendorMutation = vendorResource.useCreate();
+  const updateVendorMutation = vendorResource.useUpdate();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
@@ -164,21 +145,10 @@ export default function VendorsDirectoryPage() {
 
     if (editingVendor) {
       try {
-        const updated = await vendorService.update(editingVendor.id, vendorPayload);
-        const canonical = {
-          ...editingVendor,
-          ...(updated || {}),
-          ...vendorPayload,
-          updatedAt: new Date().toISOString(),
-          updatedBy: currentUser?.name || 'Super Admin',
-          updatedById: currentUser?.id || 'emp-101'
-        };
-
-        setApiVendors(prev => prev.map(v => v.id === editingVendor.id ? canonical : v));
-        saveFreshiozStore(prev => ({
-          ...prev,
-          vendors: (prev.vendors || []).map(v => v.id === editingVendor.id ? canonical : v)
-        }));
+        await updateVendorMutation.mutateAsync({
+          id: editingVendor.id,
+          data: vendorPayload,
+        });
 
         setIsModalOpen(false);
         resetForm();
@@ -186,25 +156,10 @@ export default function VendorsDirectoryPage() {
       } catch (err) {
         console.error('Backend vendor update failed:', err);
         showToast(`Failed to update vendor on server: ${err?.message || 'Server error'}`, 'error');
-        return;
       }
     } else {
       try {
-        const created = await vendorService.create(vendorPayload);
-        const canonical = {
-          ...vendorPayload,
-          ...(created || {}),
-          id: created?.id || vendorPayload.id,
-          createdAt: new Date().toISOString(),
-          createdBy: currentUser?.name || 'Super Admin',
-          createdById: currentUser?.id || 'emp-101'
-        };
-
-        setApiVendors(prev => [canonical, ...prev.filter(v => v.id !== canonical.id)]);
-        saveFreshiozStore(prev => ({
-          ...prev,
-          vendors: [canonical, ...(prev.vendors || []).filter(v => v.id !== canonical.id)]
-        }));
+        await createVendorMutation.mutateAsync(vendorPayload);
 
         setIsModalOpen(false);
         resetForm();
@@ -212,7 +167,6 @@ export default function VendorsDirectoryPage() {
       } catch (err) {
         console.error('Backend vendor creation failed:', err);
         showToast(`Failed to register vendor on server: ${err?.message || 'Server error'}`, 'error');
-        return;
       }
     }
   };
@@ -220,12 +174,10 @@ export default function VendorsDirectoryPage() {
   const handleConfirmDelete = async () => {
     if (!vendorToDelete) return;
     try {
-      await vendorService.update(vendorToDelete.id, { status: 'INACTIVE' });
-      setApiVendors(prev => prev.filter(v => v.id !== vendorToDelete.id));
-      saveFreshiozStore(prev => ({
-        ...prev,
-        vendors: (prev.vendors || []).filter(v => v.id !== vendorToDelete.id)
-      }));
+      await updateVendorMutation.mutateAsync({
+        id: vendorToDelete.id,
+        data: { status: 'INACTIVE' },
+      });
       showToast(`Vendor ${vendorToDelete.name} deactivated on server.`, 'info');
       setVendorToDelete(null);
     } catch (err) {
