@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { 
   Truck, 
@@ -91,21 +91,26 @@ export default function ProcurementEntryPage() {
   const selectedWh = (warehouses || []).find(w => w.id === queryWarehouseId) || warehouses[0];
   const activeWhId = selectedWh?.id || warehouses[0]?.id || '';
 
+  const targetWhParam = (queryWarehouseId && queryWarehouseId !== 'ALL') ? queryWarehouseId : undefined;
   const { 
     data: rawInventory = [], 
     isError: isInventoryError, 
     error: inventoryError, 
     refetch: refetchInventory 
-  } = useInventory(activeWhId);
+  } = useInventory(targetWhParam);
   const warehouseStock = useMemo(() => {
     const stockMap = {};
     if (Array.isArray(rawInventory)) {
       rawInventory.forEach(item => {
         const name = item.productName || item.product?.name || item.name;
-        if (name) stockMap[name] = item.quantity ?? item.stockQty ?? 0;
+        const qty = Number(item.currentQty ?? item.availableQty ?? item.quantity ?? item.stockQty) || 0;
+        if (name) {
+          stockMap[name.toLowerCase()] = (stockMap[name.toLowerCase()] || 0) + qty;
+        }
+        if (item.productId) {
+          stockMap[item.productId.toLowerCase()] = (stockMap[item.productId.toLowerCase()] || 0) + qty;
+        }
       });
-    } else if (rawInventory && typeof rawInventory === 'object') {
-      return rawInventory;
     }
     return stockMap;
   }, [rawInventory]);
@@ -156,6 +161,7 @@ export default function ProcurementEntryPage() {
 
         aggregatedDemandMap[itemName] = {
           name: itemName,
+          productId: prod.id || item.id || '',
           unit: 'kg',
           grossQty: 0,
           rate: benchmarkRate
@@ -173,16 +179,21 @@ export default function ProcurementEntryPage() {
     if (querySlot !== 'ALL' && log.slot) {
       if (!log.slot.toLowerCase().includes(querySlot.toLowerCase())) return false;
     }
-    if (queryDate !== 'ALL' && log.deliveryDate) {
-      if (log.deliveryDate !== queryDate) return false;
+    if (queryDate !== 'ALL') {
+      const logDate = log.deliveryDate || log.procuredAtFormatted;
+      if (logDate && logDate !== queryDate) return false;
     }
     return true;
   });
 
-  const alreadyProcuredMap = {};
-  matchingProcLogs.forEach(log => {
-    (log.items || []).forEach(it => {
-      if (it.name) {
+  const alreadyProcuredMap = useMemo(() => {
+    const map = {};
+    const demandKeys = Object.keys(aggregatedDemandMap);
+
+    matchingProcLogs.forEach(log => {
+      (log.items || []).forEach(it => {
+        const cropName = it.name;
+        if (!cropName) return;
         const unitWeight = parseUnitWeightInKg(it.unit);
         let numQty = 0;
         if (typeof it.qty === 'string') {
@@ -192,15 +203,39 @@ export default function ProcurementEntryPage() {
           numQty = Number(it.qty) || 0;
         }
         const itemKg = Number((unitWeight * numQty).toFixed(2));
-        alreadyProcuredMap[it.name] = (alreadyProcuredMap[it.name] || 0) + itemKg;
-      }
+
+        let matchedKey = demandKeys.find(k => k.toLowerCase() === cropName.toLowerCase());
+        if (!matchedKey) {
+          const prod = products.find(p => p.name.toLowerCase() === cropName.toLowerCase());
+          if (prod && aggregatedDemandMap[prod.name]) {
+            matchedKey = prod.name;
+          }
+        }
+        if (!matchedKey) {
+          matchedKey = demandKeys.find(k => 
+            k.toLowerCase().startsWith(cropName.toLowerCase()) ||
+            cropName.toLowerCase().startsWith(k.toLowerCase())
+          );
+        }
+        if (!matchedKey) {
+          matchedKey = demandKeys.find(k => 
+            k.toLowerCase().includes(cropName.toLowerCase()) ||
+            cropName.toLowerCase().includes(k.toLowerCase())
+          );
+        }
+        matchedKey = matchedKey || cropName;
+
+        map[matchedKey.toLowerCase()] = Number(((map[matchedKey.toLowerCase()] || 0) + itemKg).toFixed(2));
+      });
     });
-  });
+
+    return map;
+  }, [matchingProcLogs, aggregatedDemandMap, products]);
 
   // Calculate net quantities needed with opening stock & already procured reconciliation
   const unprocuredItemsList = Object.values(aggregatedDemandMap).map(item => {
-    const rawStock = Number(warehouseStock[item.name] || 0);
-    const alreadyBought = Number(alreadyProcuredMap[item.name] || 0);
+    const rawStock = Number(warehouseStock[item.name.toLowerCase()] ?? warehouseStock[item.productId?.toLowerCase()] ?? 0);
+    const alreadyBought = Number(alreadyProcuredMap[item.name.toLowerCase()] || 0);
     const openingStock = Math.max(0, Number((rawStock - alreadyBought).toFixed(2)));
     const totalCovered = Number((openingStock + alreadyBought).toFixed(2));
     const netQty = Math.max(0, Number((item.grossQty - totalCovered).toFixed(2)));
@@ -246,6 +281,15 @@ export default function ProcurementEntryPage() {
   const [paymentMode, setPaymentMode] = useState('IMPS_TRANSFER');
   const [transportCharge, setTransportCharge] = useState(0);
   const [items, setItems] = useState(initialItems);
+  const [itemsInitialized, setItemsInitialized] = useState(false);
+
+  // Automatically sync pending items when server data resolves
+  useEffect(() => {
+    if (!itemsInitialized && computedInitialItems.length > 0) {
+      setItems(computedInitialItems);
+      setItemsInitialized(true);
+    }
+  }, [computedInitialItems, itemsInitialized]);
   const [receiptPhoto, setReceiptPhoto] = useState(null);
   const [previewPhotoModal, setPreviewPhotoModal] = useState(false);
 
@@ -305,7 +349,7 @@ export default function ProcurementEntryPage() {
   };
 
   // Recalculate invoice totals
-  const totalWeight = items.reduce((acc, i) => acc + (Number(i.qty) || 0), 0);
+  const totalWeight = Number(items.reduce((acc, i) => acc + (parseUnitWeightInKg(i.unit) * (Number(i.qty) || 0)), 0).toFixed(2));
   const produceAmount = items.reduce((acc, i) => acc + ((Number(i.qty) || 0) * (Number(i.rate) || 0)), 0);
   const totalAmount = produceAmount + Number(transportCharge || 0);
 
@@ -401,6 +445,8 @@ export default function ProcurementEntryPage() {
         destinationWarehouseId: destWh?.id || warehouses[0]?.id || 'FRZ_WH_01',
         destinationName: destWh ? destWh.name : (warehouses[0]?.name || 'Regional Hub'),
         paymentMode: paymentMode,
+        slot: querySlot !== 'ALL' ? querySlot : 'Morning Fresh Slot',
+        deliveryDate: queryDate !== 'ALL' ? queryDate : undefined,
         totalWeightKg: Number(totalWeight) || 0,
         produceAmount: Number(produceAmount) || 0,
         transportAmount: Number(transportCharge) || 0,

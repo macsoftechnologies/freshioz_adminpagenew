@@ -129,11 +129,12 @@ export default function ProcurementDemandPage() {
     if (Array.isArray(rawInventory)) {
       rawInventory.forEach(item => {
         const pName = item.productName || item.product?.name;
+        const stockVal = Number(item.currentQty ?? item.availableQty ?? item.quantity ?? item.stockQty) || 0;
         if (pName) {
-          map[pName.toLowerCase()] = (map[pName.toLowerCase()] || 0) + (Number(item.quantity) || 0);
+          map[pName.toLowerCase()] = (map[pName.toLowerCase()] || 0) + stockVal;
         }
         if (item.productId) {
-          map[item.productId.toLowerCase()] = (map[item.productId.toLowerCase()] || 0) + (Number(item.quantity) || 0);
+          map[item.productId.toLowerCase()] = (map[item.productId.toLowerCase()] || 0) + stockVal;
         }
       });
     }
@@ -247,8 +248,9 @@ export default function ProcurementDemandPage() {
       if (selectedSlot !== 'ALL' && log.slot) {
         if (!log.slot.toLowerCase().includes(selectedSlot.toLowerCase())) return false;
       }
-      if (selectedDate !== 'ALL' && log.deliveryDate) {
-        if (log.deliveryDate !== selectedDate) return false;
+      if (selectedDate !== 'ALL') {
+        const logDate = log.deliveryDate || log.procuredAtFormatted;
+        if (logDate && logDate !== selectedDate) return false;
       }
       return true;
     });
