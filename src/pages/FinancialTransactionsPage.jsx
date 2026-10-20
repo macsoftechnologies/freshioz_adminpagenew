@@ -67,6 +67,7 @@ export default function FinancialTransactionsPage() {
 
   const [activeTab, setActiveTab] = useState(getTabFromHash);
   const [confirmDepositModal, setConfirmDepositModal] = useState(null); // { name, pendingHandoverAmount, totalStops, orderIds }
+  const [isSettling, setIsSettling] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMode, setFilterMode] = useState('ALL'); // 'ALL' | 'ONLINE' | 'COD_CASH' | 'COD_UPI' | 'MANDI_EXPENSE'
   const [filterSociety, setFilterSociety] = useState('ALL');
@@ -355,27 +356,40 @@ export default function FinancialTransactionsPage() {
   const totalRiderCashPendingDeposit = riderCashSettlementSummary.reduce((sum, r) => sum + r.pendingHandoverAmount, 0);
 
   // Mark Rider Cash Settled to Hub Desk
-  const handleSettleRiderCash = async (riderName) => {
-    const matchedOrders = orders.filter(o => {
-      const isMatchedRider = (o.codCollectedBy || 'Assigned Delivery Partner') === riderName;
-      const isCodCash = ((o.paymentMethod || '').includes('PAY_ON_DELIVERY') || o.paymentMethod === 'COD') && (o.codReceivedMode === 'CASH' || !o.codReceivedMode);
-      return isMatchedRider && isCodCash && !o.codSettledToHub;
-    });
+  const handleSettleRiderCash = async (rider) => {
+    const riderName = typeof rider === 'string' ? rider : rider?.name;
+    const targetOrderIds = rider?.orderIds;
+
+    let matchedOrders = [];
+    if (Array.isArray(targetOrderIds) && targetOrderIds.length > 0) {
+      matchedOrders = orders.filter(o => targetOrderIds.includes(o.id) && !o.codSettledToHub);
+    } else {
+      matchedOrders = orders.filter(o => {
+        const isMatchedRider = (o.codCollectedBy || 'Assigned Delivery Partner') === riderName;
+        const isCodCash = ((o.paymentMethod || '').includes('PAY_ON_DELIVERY') || o.paymentMethod === 'COD') && (o.codReceivedMode === 'CASH' || !o.codReceivedMode);
+        return isMatchedRider && isCodCash && !o.codSettledToHub;
+      });
+    }
 
     if (matchedOrders.length === 0) {
       showToast(`No pending COD cash to settle for ${riderName}.`);
+      setConfirmDepositModal(null);
       return;
     }
 
     try {
+      setIsSettling(true);
       await Promise.all(matchedOrders.map(o => updateOrderStatusMutation.mutateAsync({
         id: o.id,
         codSettledToHub: true,
         codSettledBy: currentUser?.name || 'Hub Cashier Desk'
       })));
       showToast(`✓ Cash collected by ${riderName} successfully reconciled and deposited at Hub Cashier Desk!`, 'success');
+      setConfirmDepositModal(null);
     } catch (err) {
       showToast(err.message || 'Failed to settle rider cash on server.', 'error');
+    } finally {
+      setIsSettling(false);
     }
   };
 
@@ -1506,20 +1520,18 @@ export default function FinancialTransactionsPage() {
 
               <button
                 type="button"
-                onClick={() => {
-                  handleSettleRiderCash(confirmDepositModal.name);
-                  setConfirmDepositModal(null);
-                }}
+                disabled={isSettling}
+                onClick={() => handleSettleRiderCash(confirmDepositModal)}
                 className="admin-btn-accent"
                 style={{
                   padding: '9px 20px',
                   borderRadius: '8px',
-                  background: '#059669',
+                  background: isSettling ? '#94A3B8' : '#059669',
                   color: '#FFFFFF',
                   fontWeight: 800,
                   fontSize: '13px',
                   border: 'none',
-                  cursor: 'pointer',
+                  cursor: isSettling ? 'not-allowed' : 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px',
@@ -1527,7 +1539,7 @@ export default function FinancialTransactionsPage() {
                 }}
               >
                 <CheckCircle2 size={16} />
-                <span>✓ Confirm Cash Received & Settle (₹{confirmDepositModal.pendingHandoverAmount.toLocaleString()})</span>
+                <span>{isSettling ? 'Reconciling & Settling...' : `✓ Confirm Cash Received & Settle (₹${confirmDepositModal.pendingHandoverAmount.toLocaleString()})`}</span>
               </button>
             </div>
           </div>
