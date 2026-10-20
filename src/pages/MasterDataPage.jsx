@@ -25,6 +25,7 @@ import { uploadService } from '../services/uploadService';
 import { exportToExcel } from '../utils/excelExporter';
 import { resolveImageUrl, handleImageError } from '../utils/imageUtils';
 import AdminPagination from '../components/common/AdminPagination';
+import { generateId, generateUUID } from '../utils/idGenerator';
 
 export { resolveImageUrl };
 

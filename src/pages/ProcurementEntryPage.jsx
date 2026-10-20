@@ -26,6 +26,7 @@ import {
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
 import { warehouses as warehouseResource, vendors as vendorResource, products as productResource, orders as orderResource, procurement as procurementResource, useInventory } from '../hooks/resources';
+import { generateId, generateUUID } from '../utils/idGenerator';
 
 // Robust helper to parse weights in kg from packaging units
 const parseUnitWeightInKg = (unitStr) => {
