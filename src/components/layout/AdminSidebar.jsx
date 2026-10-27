@@ -188,24 +188,16 @@ export default function AdminSidebar() {
             {openGroups.procurement && (
               <div className="sidebar-sub-menu">
                 <NavLink 
-                  to="/procurement-demand#pending" 
-                  className={`sidebar-sub-item ${location.pathname === '/procurement-demand' && (location.hash === '#pending' || !location.hash) ? 'active' : ''}`}
+                  to="/procurement-demand" 
+                  className={({ isActive }) => `sidebar-sub-item ${isActive ? 'active' : ''}`}
                 >
                   <ClipboardList size={14} />
-                  <span>Pending Demand Indent</span>
-                </NavLink>
-
-                <NavLink 
-                  to="/procurement-demand#mandi" 
-                  className={`sidebar-sub-item ${location.pathname === '/procurement-demand' && location.hash === '#mandi' ? 'active' : ''}`}
-                >
-                  <FileText size={14} />
-                  <span>Logged Mandi Bills</span>
+                  <span>Mandi Demand & Indent</span>
                 </NavLink>
 
                 <NavLink 
                   to="/procurement-entry" 
-                  className={`sidebar-sub-item ${location.pathname === '/procurement-entry' ? 'active' : ''}`}
+                  className={({ isActive }) => `sidebar-sub-item ${isActive ? 'active' : ''}`}
                 >
                   <FilePlus size={14} />
                   <span>Log Mandi Bill & Slip</span>
@@ -460,24 +452,16 @@ export default function AdminSidebar() {
             {openGroups.procurement && (
               <div className="sidebar-sub-menu">
                 <NavLink 
-                  to="/procurement-demand#pending" 
-                  className={`sidebar-sub-item ${location.pathname === '/procurement-demand' && (location.hash === '#pending' || !location.hash) ? 'active' : ''}`}
+                  to="/procurement-demand" 
+                  className={({ isActive }) => `sidebar-sub-item ${isActive ? 'active' : ''}`}
                 >
                   <ClipboardList size={14} />
-                  <span>Sourcing Demand Indent</span>
-                </NavLink>
-
-                <NavLink 
-                  to="/procurement-demand#mandi" 
-                  className={`sidebar-sub-item ${location.pathname === '/procurement-demand' && location.hash === '#mandi' ? 'active' : ''}`}
-                >
-                  <FileText size={14} />
-                  <span>Logged Mandi Bills</span>
+                  <span>Mandi Demand & Sourcing</span>
                 </NavLink>
 
                 <NavLink 
                   to="/procurement-entry" 
-                  className={`sidebar-sub-item ${location.pathname === '/procurement-entry' ? 'active' : ''}`}
+                  className={({ isActive }) => `sidebar-sub-item ${isActive ? 'active' : ''}`}
                 >
                   <FilePlus size={14} />
                   <span>Log Mandi Bill & Slip</span>
@@ -485,7 +469,7 @@ export default function AdminSidebar() {
 
                 <NavLink 
                   to="/procurement-logs" 
-                  className={`sidebar-sub-item ${location.pathname === '/procurement-logs' ? 'active' : ''}`}
+                  className={({ isActive }) => `sidebar-sub-item ${isActive ? 'active' : ''}`}
                 >
                   <Receipt size={14} />
                   <span>Purchases Audit Ledger</span>
@@ -493,7 +477,7 @@ export default function AdminSidebar() {
 
                 <NavLink 
                   to="/vendors" 
-                  className={`sidebar-sub-item ${location.pathname === '/vendors' ? 'active' : ''}`}
+                  className={({ isActive }) => `sidebar-sub-item ${location.pathname === '/vendors' ? 'active' : ''}`}
                 >
                   <Store size={14} />
                   <span>Vendors & Farmers</span>
@@ -504,11 +488,6 @@ export default function AdminSidebar() {
             <div style={{ fontSize: '10.5px', textTransform: 'uppercase', color: '#94A3B8', fontWeight: 800, padding: '12px 14px 4px', letterSpacing: '0.6px' }}>
               Hub Operations
             </div>
-            <NavLink to="/daily-pricing" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
-              <Coins size={18} />
-              <span>Daily Pricing & GST Master</span>
-            </NavLink>
-
             <NavLink to="/warehouse-crating" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
               <PackageCheck size={18} />
               <span>Packing & Lot Dispatch</span>

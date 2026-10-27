@@ -262,27 +262,18 @@ export default function AdminMobileDrawer() {
               {openGroups.procurement && (
                 <div className="sidebar-sub-menu">
                   <NavLink 
-                    to="/procurement-demand#pending" 
+                    to="/procurement-demand" 
                     onClick={handleClose}
-                    className={`sidebar-sub-item ${location.pathname === '/procurement-demand' && (location.hash === '#pending' || !location.hash) ? 'active' : ''}`}
+                    className={({ isActive }) => `sidebar-sub-item ${isActive ? 'active' : ''}`}
                   >
                     <ClipboardList size={14} />
-                    <span>Pending Demand Indent</span>
-                  </NavLink>
-
-                  <NavLink 
-                    to="/procurement-demand#mandi" 
-                    onClick={handleClose}
-                    className={`sidebar-sub-item ${location.pathname === '/procurement-demand' && location.hash === '#mandi' ? 'active' : ''}`}
-                  >
-                    <FileText size={14} />
-                    <span>Logged Mandi Bills</span>
+                    <span>Mandi Demand & Indent</span>
                   </NavLink>
 
                   <NavLink 
                     to="/procurement-entry" 
                     onClick={handleClose}
-                    className={`sidebar-sub-item ${location.pathname === '/procurement-entry' ? 'active' : ''}`}
+                    className={({ isActive }) => `sidebar-sub-item ${isActive ? 'active' : ''}`}
                   >
                     <FilePlus size={14} />
                     <span>Log Mandi Bill & Slip</span>
@@ -528,27 +519,18 @@ export default function AdminMobileDrawer() {
               {openGroups.procurement && (
                 <div className="sidebar-sub-menu">
                   <NavLink 
-                    to="/procurement-demand#pending" 
+                    to="/procurement-demand" 
                     onClick={handleClose}
-                    className={`sidebar-sub-item ${location.pathname === '/procurement-demand' && (location.hash === '#pending' || !location.hash) ? 'active' : ''}`}
+                    className={({ isActive }) => `sidebar-sub-item ${isActive ? 'active' : ''}`}
                   >
                     <ClipboardList size={14} />
-                    <span>Sourcing Demand Indent</span>
-                  </NavLink>
-
-                  <NavLink 
-                    to="/procurement-demand#mandi" 
-                    onClick={handleClose}
-                    className={`sidebar-sub-item ${location.pathname === '/procurement-demand' && location.hash === '#mandi' ? 'active' : ''}`}
-                  >
-                    <FileText size={14} />
-                    <span>Logged Mandi Bills</span>
+                    <span>Mandi Demand & Sourcing</span>
                   </NavLink>
 
                   <NavLink 
                     to="/procurement-entry" 
                     onClick={handleClose}
-                    className={`sidebar-sub-item ${location.pathname === '/procurement-entry' ? 'active' : ''}`}
+                    className={({ isActive }) => `sidebar-sub-item ${isActive ? 'active' : ''}`}
                   >
                     <FilePlus size={14} />
                     <span>Log Mandi Bill & Slip</span>
@@ -557,7 +539,7 @@ export default function AdminMobileDrawer() {
                   <NavLink 
                     to="/procurement-logs" 
                     onClick={handleClose}
-                    className={`sidebar-sub-item ${location.pathname === '/procurement-logs' ? 'active' : ''}`}
+                    className={({ isActive }) => `sidebar-sub-item ${isActive ? 'active' : ''}`}
                   >
                     <Receipt size={14} />
                     <span>Purchases Audit Ledger</span>
@@ -566,7 +548,7 @@ export default function AdminMobileDrawer() {
                   <NavLink 
                     to="/vendors" 
                     onClick={handleClose}
-                    className={`sidebar-sub-item ${location.pathname === '/vendors' ? 'active' : ''}`}
+                    className={({ isActive }) => `sidebar-sub-item ${location.pathname === '/vendors' ? 'active' : ''}`}
                   >
                     <Store size={14} />
                     <span>Vendors & Farmers</span>
@@ -575,10 +557,6 @@ export default function AdminMobileDrawer() {
               )}
 
               <div className="drawer-nav-section-title">Hub Operations</div>
-              <NavLink to="/daily-pricing" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
-                <Coins size={17} />
-                <span>Daily Pricing & GST Master</span>
-              </NavLink>
               <NavLink to="/warehouse-crating" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
                 <PackageCheck size={17} />
                 <span>Packing & Lot Dispatch</span>
