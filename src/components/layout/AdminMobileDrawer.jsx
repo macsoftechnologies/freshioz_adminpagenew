@@ -214,7 +214,7 @@ export default function AdminMobileDrawer() {
                   <NavLink 
                     to="/master-data#produce" 
                     onClick={handleClose}
-                    className={`sidebar-sub-item ${location.pathname === '/master-data' && (location.hash === '#produce' || !location.hash) ? 'active' : ''}`}
+                    className={() => `sidebar-sub-item ${location.pathname === '/master-data' && (location.hash === '#produce' || !location.hash) ? 'active' : ''}`}
                   >
                     <Apple size={14} />
                     <span style={{ flex: 1 }}>Produce Catalog</span>
@@ -226,7 +226,7 @@ export default function AdminMobileDrawer() {
                   <NavLink 
                     to="/master-data#categories" 
                     onClick={handleClose}
-                    className={`sidebar-sub-item ${location.pathname === '/master-data' && location.hash === '#categories' ? 'active' : ''}`}
+                    className={() => `sidebar-sub-item ${location.pathname === '/master-data' && location.hash === '#categories' ? 'active' : ''}`}
                   >
                     <Layers size={14} />
                     <span style={{ flex: 1 }}>Categories</span>
@@ -238,7 +238,7 @@ export default function AdminMobileDrawer() {
                   <NavLink 
                     to="/master-data#units" 
                     onClick={handleClose}
-                    className={`sidebar-sub-item ${location.pathname === '/master-data' && location.hash === '#units' ? 'active' : ''}`}
+                    className={() => `sidebar-sub-item ${location.pathname === '/master-data' && location.hash === '#units' ? 'active' : ''}`}
                   >
                     <Scale size={14} />
                     <span style={{ flex: 1 }}>Packing Units</span>
@@ -491,45 +491,10 @@ export default function AdminMobileDrawer() {
           {currentRoleId === 'WAREHOUSE_STAFF' && (
             <>
               <div className="drawer-nav-section-title">Produce Sorting & Packing Desk</div>
-
-              {/* Collapsible: Crating & Society Packing */}
-              <button 
-                type="button" 
-                onClick={() => toggleGroup('packer')} 
-                className={`sidebar-nav-group-btn ${location.pathname.startsWith('/warehouse-crating') ? 'active-group' : ''}`}
-              >
+              <NavLink to="/warehouse-crating" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
                 <PackageCheck size={17} />
-                <span style={{ flex: 1 }}>Crating & Bagging</span>
-                <ChevronDown 
-                  size={14} 
-                  style={{ 
-                    transform: openGroups.packer ? 'rotate(180deg)' : 'rotate(0deg)', 
-                    transition: 'transform 0.2s ease' 
-                  }} 
-                />
-              </button>
-
-              {openGroups.packer && (
-                <div className="sidebar-sub-menu">
-                  <NavLink 
-                    to="/warehouse-crating#packing" 
-                    onClick={handleClose}
-                    className={`sidebar-sub-item ${location.pathname === '/warehouse-crating' && (location.hash === '#packing' || !location.hash) ? 'active' : ''}`}
-                  >
-                    <PackageCheck size={14} />
-                    <span>Order Bagging Stations</span>
-                  </NavLink>
-
-                  <NavLink 
-                    to="/warehouse-crating#dispatch" 
-                    onClick={handleClose}
-                    className={`sidebar-sub-item ${location.pathname === '/warehouse-crating' && location.hash === '#dispatch' ? 'active' : ''}`}
-                  >
-                    <Building2 size={14} />
-                    <span>Society Crate Lots</span>
-                  </NavLink>
-                </div>
-              )}
+                <span>Crating & Society Packing</span>
+              </NavLink>
 
               <NavLink to="/orders-fulfillment" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
                 <Truck size={17} />
@@ -624,47 +589,12 @@ export default function AdminMobileDrawer() {
           {currentRoleId === 'DELIVERY_EXECUTIVE' && (
             <>
               <div className="drawer-nav-section-title">Rider Delivery Desk</div>
-
-              {/* Collapsible: Delivery Runs & Manifest */}
-              <button 
-                type="button" 
-                onClick={() => toggleGroup('rider')} 
-                className={`sidebar-nav-group-btn ${location.pathname.startsWith('/orders-fulfillment') ? 'active-group' : ''}`}
-              >
+              <NavLink to="/orders-fulfillment" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
                 <Truck size={17} />
-                <span style={{ flex: 1 }}>Delivery Manifest</span>
-                <ChevronDown 
-                  size={14} 
-                  style={{ 
-                    transform: openGroups.rider ? 'rotate(180deg)' : 'rotate(0deg)', 
-                    transition: 'transform 0.2s ease' 
-                  }} 
-                />
-              </button>
+                <span style={{ flex: 1 }}>My Delivery Manifest</span>
+              </NavLink>
 
-              {openGroups.rider && (
-                <div className="sidebar-sub-menu">
-                  <NavLink 
-                    to="/orders-fulfillment#pending" 
-                    onClick={handleClose}
-                    className={`sidebar-sub-item ${location.pathname === '/orders-fulfillment' && (location.hash === '#pending' || !location.hash) ? 'active' : ''}`}
-                  >
-                    <Truck size={14} />
-                    <span>Pending Doorstep Drops</span>
-                  </NavLink>
-
-                  <NavLink 
-                    to="/orders-fulfillment#delivered" 
-                    onClick={handleClose}
-                    className={`sidebar-sub-item ${location.pathname === '/orders-fulfillment' && location.hash === '#delivered' ? 'active' : ''}`}
-                  >
-                    <CheckCircle size={14} />
-                    <span>Completed Delivered Runs</span>
-                  </NavLink>
-                </div>
-              )}
-
-              <NavLink to="/warehouse-crating#dispatch" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
+              <NavLink to="/warehouse-crating" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
                 <PackageCheck size={17} />
                 <span>Society Drop Crates Handover</span>
               </NavLink>
