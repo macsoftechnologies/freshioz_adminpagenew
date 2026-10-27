@@ -144,6 +144,69 @@ button {
   font-weight: 700;
 }
 
+/* Collapsible Dropdown Nav Group */
+.sidebar-nav-group-btn {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.sidebar-nav-group-btn:hover {
+  background: #F1F5F9;
+  color: #0F172A;
+}
+
+.sidebar-nav-group-btn.active-group {
+  color: #166534;
+  font-weight: 700;
+}
+
+.sidebar-sub-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-left: 14px;
+  padding-left: 12px;
+  border-left: 1.5px solid #E2E8F0;
+  margin-top: 2px;
+  margin-bottom: 6px;
+}
+
+.sidebar-sub-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  color: #64748B;
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.sidebar-sub-item:hover {
+  background: #F8FAFC;
+  color: #0F172A;
+}
+
+.sidebar-sub-item.active {
+  background: #ECFDF5;
+  color: #15803D;
+  font-weight: 700;
+}
+
 /* Main Content Panel */
 .admin-main-panel {
   flex: 1;
@@ -320,6 +383,52 @@ button {
   font-weight: 800;
   padding: 12px 14px 4px;
   letter-spacing: 0.6px;
+}
+
+.admin-drawer-sidebar .sidebar-nav-item {
+  color: #CBD5E1;
+}
+
+.admin-drawer-sidebar .sidebar-nav-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #FFFFFF;
+}
+
+.admin-drawer-sidebar .sidebar-nav-item.active {
+  background: rgba(120, 177, 89, 0.2);
+  color: #86EFAC;
+  border-color: rgba(134, 239, 172, 0.3);
+}
+
+.admin-drawer-sidebar .sidebar-nav-group-btn {
+  color: #E2E8F0;
+}
+
+.admin-drawer-sidebar .sidebar-nav-group-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #FFFFFF;
+}
+
+.admin-drawer-sidebar .sidebar-nav-group-btn.active-group {
+  color: #86EFAC;
+}
+
+.admin-drawer-sidebar .sidebar-sub-menu {
+  border-left-color: rgba(255, 255, 255, 0.15);
+}
+
+.admin-drawer-sidebar .sidebar-sub-item {
+  color: #94A3B8;
+}
+
+.admin-drawer-sidebar .sidebar-sub-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #FFFFFF;
+}
+
+.admin-drawer-sidebar .sidebar-sub-item.active {
+  color: #86EFAC;
+  background: rgba(120, 177, 89, 0.15);
 }
 
 @keyframes fadeInDrawer {

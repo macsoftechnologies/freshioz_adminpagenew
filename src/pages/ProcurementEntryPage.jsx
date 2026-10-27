@@ -278,6 +278,7 @@ export default function ProcurementEntryPage() {
   const [mandiLocation, setMandiLocation] = useState(activeVendor?.mandiLocation || '');
   const [destinationWarehouseId, setDestinationWarehouseId] = useState(selectedWh?.id || warehouses[0]?.id || '');
   const [billNumber, setBillNumber] = useState(`APMC/KLR/2026/${Math.floor(1000 + Math.random() * 9000)}`);
+  const [showDemandReference, setShowDemandReference] = useState(false);
   const [paymentMode, setPaymentMode] = useState('IMPS_TRANSFER');
   const [transportCharge, setTransportCharge] = useState(0);
   const [items, setItems] = useState(initialItems);
@@ -687,62 +688,74 @@ export default function ProcurementEntryPage() {
               </div>
             </div>
           ) : (
-            /* CONTRIBUTING CUSTOMERS CARD */
+            /* COMPACT COLLAPSIBLE DEMAND REFERENCE */
             <div style={{
               background: '#F0FDF4',
               border: '1.5px solid #BBF7D0',
-              borderRadius: '10px',
-              padding: '14px 16px',
-              marginBottom: '18px'
+              borderRadius: '8px',
+              padding: '8px 12px',
+              marginBottom: '16px'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+              <div 
+                onClick={() => setShowDemandReference(prev => !prev)}
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between', 
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  flexWrap: 'wrap',
+                  gap: '8px'
+                }}
+              >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Users size={18} color="#166534" />
-                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#166534' }}>
-                    Remaining Mandi Demand for {unprocuredOrders.length} Active Customer Orders
+                  <Users size={16} color="#166534" />
+                  <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#166534' }}>
+                    Remaining Produce Demand for {unprocuredOrders.length} Active Customer Orders
+                  </span>
+                  <span style={{ fontSize: '11px', background: '#DCFCE7', color: '#15803D', fontWeight: 700, padding: '1px 6px', borderRadius: '4px' }}>
+                    {unprocuredItemsList.filter(i => i.qty > 0).length} Crops Needed
                   </span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  {querySlot !== 'ALL' && (
-                    <span style={{ fontSize: '11px', background: querySlot.includes('Evening') ? '#FEF3C7' : '#E0F2FE', color: querySlot.includes('Evening') ? '#92400E' : '#0369A1', fontWeight: 700, padding: '2px 8px', borderRadius: '4px' }}>
-                      {querySlot.includes('Evening') ? '🌇 Evening Run' : '🌅 Morning Run'}
-                    </span>
-                  )}
-                  <span style={{ fontSize: '11.5px', background: '#DCFCE7', color: '#15803D', fontWeight: 800, padding: '2px 8px', borderRadius: '4px' }}>
-                    {contributingSocietiesList.join(', ')}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '11px', color: '#15803D', fontWeight: 700, background: '#FFFFFF', padding: '2px 8px', borderRadius: '4px', border: '1px solid #BBF7D0' }}>
+                    {showDemandReference ? '▲ Hide Demand Checklist' : '▼ View Demand Checklist'}
                   </span>
                 </div>
               </div>
 
-              <div style={{ fontSize: '12px', color: '#374151', lineHeight: 1.5, marginBottom: '8px' }}>
-                Net produce demand aggregated across confirmed customer orders (less opening inventory & previous purchases):
-              </div>
-
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                {unprocuredItemsList.filter(i => i.qty > 0).map((crop, idx) => (
-                  <span key={idx} style={{
-                    fontSize: '12px',
-                    background: '#FFFFFF',
-                    border: '1px solid #86EFAC',
-                    padding: '4px 10px',
-                    borderRadius: '6px',
-                    color: '#14532D',
-                    fontWeight: 700,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
-                  }}>
-                    <span>{crop.name}:</span>
-                    <strong style={{ color: '#15803D' }}>{crop.qty} kg</strong>
-                    {crop.openingStock > 0 && (
-                      <span style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 500 }}>
-                        ({crop.openingStock}kg in stock)
+              {showDemandReference && (
+                <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #DCFCE7' }}>
+                  <div style={{ fontSize: '11.5px', color: '#374151', lineHeight: 1.4, marginBottom: '8px' }}>
+                    Net produce demand aggregated across confirmed customer orders (less opening inventory & previous purchases):
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {unprocuredItemsList.filter(i => i.qty > 0).map((crop, idx) => (
+                      <span key={idx} style={{
+                        fontSize: '11.5px',
+                        background: '#FFFFFF',
+                        border: '1px solid #86EFAC',
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        color: '#14532D',
+                        fontWeight: 700,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                      }}>
+                        <span>{crop.name}:</span>
+                        <strong style={{ color: '#15803D' }}>{crop.qty} kg</strong>
+                        {crop.openingStock > 0 && (
+                          <span style={{ fontSize: '10px', color: '#64748B', fontWeight: 500 }}>
+                            ({crop.openingStock}kg stock)
+                          </span>
+                        )}
                       </span>
-                    )}
-                  </span>
-                ))}
-              </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
