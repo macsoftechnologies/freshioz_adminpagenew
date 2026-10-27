@@ -544,7 +544,7 @@ export default function MasterDataPage() {
 
   return (
     <div className="admin-page-container">
-      {/* High-Density Compact Header Strip (Under 55px) */}
+      {/* High-Density Compact Header Strip */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -556,12 +556,43 @@ export default function MasterDataPage() {
         marginBottom: '12px'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <h1 style={{ fontSize: '18px', color: '#0F172A', fontWeight: 800, margin: 0 }}>
-            Master Data Catalog
-          </h1>
-          <span style={{ fontSize: '11px', color: '#64748B' }}>
-            Taxonomies for Produce, Categories & Packing Units
-          </span>
+          <div style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '8px',
+            background: '#F0FDF4',
+            border: '1px solid #DCFCE7',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#166534'
+          }}>
+            {activeTab === 'PRODUCTS' ? <Apple size={18} /> : activeTab === 'CATEGORIES' ? <Layers size={18} /> : <Scale size={18} />}
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h1 style={{ fontSize: '18px', color: '#0F172A', fontWeight: 800, margin: 0 }}>
+                {activeTab === 'PRODUCTS' ? 'Produce Catalog' : activeTab === 'CATEGORIES' ? 'Produce Categories' : 'Packaging & Wholesale Units'}
+              </h1>
+              <span style={{ 
+                fontSize: '11px', 
+                background: '#F1F5F9', 
+                color: '#475569', 
+                padding: '1px 8px', 
+                borderRadius: '12px', 
+                fontWeight: 700 
+              }}>
+                {activeTab === 'PRODUCTS' ? `${products.length} Items` : activeTab === 'CATEGORIES' ? `${categories.length} Categories` : `${units.length} Units`}
+              </span>
+            </div>
+            <span style={{ fontSize: '11px', color: '#64748B' }}>
+              {activeTab === 'PRODUCTS' 
+                ? 'Manage catalog fruits, vegetables, shelf life, specifications & image assets' 
+                : activeTab === 'CATEGORIES' 
+                ? 'Define taxonomy hierarchy and storefront display collections' 
+                : 'Configure standard retail weights, crating sizes and wholesale bundles'}
+            </span>
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -677,7 +708,7 @@ export default function MasterDataPage() {
         </div>
       </div>
 
-      {/* Compact High-Density Tabs & Search Bar (Unified in single row!) */}
+      {/* Compact Search & Filter Toolbar (In-page pill tabs removed in favor of left sidebar navigation) */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -686,79 +717,14 @@ export default function MasterDataPage() {
         gap: '10px',
         marginBottom: '12px'
       }}>
-        {/* Sleek Pill Tab Switcher */}
-        <div style={{ display: 'inline-flex', background: '#F1F5F9', padding: '3px', borderRadius: '8px', gap: '3px' }}>
-          <button
-            type="button"
-            onClick={() => handleTabSwitch('PRODUCTS')}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 14px',
-              borderRadius: '6px',
-              border: 'none',
-              fontSize: '12.5px',
-              fontWeight: 800,
-              cursor: 'pointer',
-              background: activeTab === 'PRODUCTS' ? '#234B3C' : 'transparent',
-              color: activeTab === 'PRODUCTS' ? '#FFFFFF' : '#475569'
-            }}
-          >
-            <Apple size={14} />
-            <span>Produce Catalog</span>
-            <span style={{ fontSize: '10.5px', background: activeTab === 'PRODUCTS' ? 'rgba(255,255,255,0.2)' : '#E2E8F0', padding: '1px 6px', borderRadius: '10px' }}>
-              {products.length}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleTabSwitch('CATEGORIES')}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 14px',
-              borderRadius: '6px',
-              border: 'none',
-              fontSize: '12.5px',
-              fontWeight: 800,
-              cursor: 'pointer',
-              background: activeTab === 'CATEGORIES' ? '#234B3C' : 'transparent',
-              color: activeTab === 'CATEGORIES' ? '#FFFFFF' : '#475569'
-            }}
-          >
-            <Layers size={14} />
-            <span>Categories</span>
-            <span style={{ fontSize: '10.5px', background: activeTab === 'CATEGORIES' ? 'rgba(255,255,255,0.2)' : '#E2E8F0', padding: '1px 6px', borderRadius: '10px' }}>
-              {categories.length}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleTabSwitch('UNITS')}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 14px',
-              borderRadius: '6px',
-              border: 'none',
-              fontSize: '12.5px',
-              fontWeight: 800,
-              cursor: 'pointer',
-              background: activeTab === 'UNITS' ? '#234B3C' : 'transparent',
-              color: activeTab === 'UNITS' ? '#FFFFFF' : '#475569'
-            }}
-          >
-            <Scale size={14} />
-            <span>Packing Units</span>
-            <span style={{ fontSize: '10.5px', background: activeTab === 'UNITS' ? 'rgba(255,255,255,0.2)' : '#E2E8F0', padding: '1px 6px', borderRadius: '10px' }}>
-              {units.length}
-            </span>
-          </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>
+            {activeTab === 'PRODUCTS' 
+              ? `Showing ${filteredProducts.length} of ${products.length} produce items` 
+              : activeTab === 'CATEGORIES' 
+              ? `Showing ${filteredCategories.length} categories` 
+              : `Showing ${filteredUnits.length} packaging units`}
+          </span>
         </div>
 
         {/* Compact Search */}
@@ -767,25 +733,49 @@ export default function MasterDataPage() {
           alignItems: 'center',
           gap: '6px',
           background: '#FFFFFF',
-          border: '1px solid #CBD5E1',
-          borderRadius: '6px',
-          padding: '5px 10px',
-          minWidth: '240px'
+          border: '1.5px solid #CBD5E1',
+          borderRadius: '8px',
+          padding: '6px 12px',
+          minWidth: '260px'
         }}>
           <Search size={14} color="#64748B" />
           <input
             type="text"
             placeholder={
               activeTab === 'PRODUCTS' 
-                ? 'Search fruit/vegetable, origin...'
-                : activeTab === 'CATEGORIES'
-                ? 'Search categories...'
-                : 'Search units (kg, crate...)...'
+                ? 'Search fruit/vegetable, origin...' 
+                : activeTab === 'CATEGORIES' 
+                ? 'Search category name or slug...' 
+                : 'Search packaging unit name...'
             }
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{ border: 'none', outline: 'none', fontSize: '12px', width: '100%' }}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setCurrentPage(1);
+            }}
+            style={{
+              border: 'none',
+              outline: 'none',
+              fontSize: '12.5px',
+              width: '100%',
+              background: 'transparent'
+            }}
           />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              style={{
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                padding: '2px',
+                color: '#94A3B8'
+              }}
+            >
+              <X size={13} />
+            </button>
+          )}
         </div>
       </div>
 
