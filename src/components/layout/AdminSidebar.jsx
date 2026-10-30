@@ -22,7 +22,8 @@ import {
   MessageSquareQuote,
   ChevronDown,
   Apple,
-  Scale
+  Scale,
+  CreditCard
 } from 'lucide-react';
 import FreshiozLogo from '../common/FreshiozLogo';
 import { useAdminRole } from '../../context/AdminRoleContext';
@@ -118,6 +119,19 @@ export default function AdminSidebar() {
                 MAIN
               </span>
             </NavLink>
+
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent('open_payment_gateway_settings'))}
+              className="sidebar-nav-item"
+              style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer' }}
+            >
+              <CreditCard size={18} />
+              <span style={{ flex: 1 }}>Payment Gateway</span>
+              <span style={{ background: '#E6F4EA', color: '#137333', fontSize: '10px', fontWeight: 800, padding: '1px 6px', borderRadius: '4px' }}>
+                RZP
+              </span>
+            </button>
 
             {/* Collapsible: Master Data Catalog */}
             <button 

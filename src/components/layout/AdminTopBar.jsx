@@ -1,7 +1,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UserCheck, Clock, LogOut, User } from 'lucide-react';
+import { UserCheck, Clock, LogOut, User, CreditCard } from 'lucide-react';
 import FreshiozLogo from '../common/FreshiozLogo';
+import PaymentGatewaySettingsModal from '../common/PaymentGatewaySettingsModal';
 import { useAdminRole, ROLES } from '../../context/AdminRoleContext';
 import { useToast } from '../../context/ToastContext';
 import { API_BASE_URL } from '../../api/client';
@@ -20,12 +21,19 @@ export default function AdminTopBar({ onMobileMenuClick }) {
     refetchAll
   } = useAdminRole();
   const { showToast } = useToast();
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = React.useState(false);
   const [healthStatus, setHealthStatus] = React.useState({
     isOnline: true,
     isDatabaseConnected: true,
     latencyMs: 0,
     message: 'NestJS Live (IST)'
   });
+
+  React.useEffect(() => {
+    const handleOpenPaymentModal = () => setIsPaymentModalOpen(true);
+    window.addEventListener('open_payment_gateway_settings', handleOpenPaymentModal);
+    return () => window.removeEventListener('open_payment_gateway_settings', handleOpenPaymentModal);
+  }, []);
 
   React.useEffect(() => {
     let mounted = true;
@@ -216,6 +224,32 @@ export default function AdminTopBar({ onMobileMenuClick }) {
           </div>
         )}
 
+        {/* Super Admin Payment Gateway Settings */}
+        {currentRoleId === 'SUPER_ADMIN' && (
+          <button
+            type="button"
+            onClick={() => setIsPaymentModalOpen(true)}
+            title="Configure Razorpay Payment Gateway & API Keys"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 12px',
+              borderRadius: '8px',
+              background: '#F0FDF4',
+              color: '#166534',
+              fontSize: '12px',
+              fontWeight: 700,
+              border: '1px solid #BBF7D0',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+          >
+            <CreditCard size={14} color="#166534" />
+            <span>Payment Gateway</span>
+          </button>
+        )}
+
         {/* Current User Chip */}
         <div style={{
           display: 'flex',
@@ -269,6 +303,11 @@ export default function AdminTopBar({ onMobileMenuClick }) {
           <span>Logout</span>
         </button>
       </div>
+
+      <PaymentGatewaySettingsModal
+        isOpen={isPaymentModalOpen}
+        onClose={() => setIsPaymentModalOpen(false)}
+      />
     </header>
   );
 }
