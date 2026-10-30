@@ -23,7 +23,8 @@ import {
   ChevronDown,
   Apple,
   Scale,
-  CreditCard
+  CreditCard,
+  Settings
 } from 'lucide-react';
 import FreshiozLogo from '../common/FreshiozLogo';
 import { useAdminRole } from '../../context/AdminRoleContext';
@@ -126,8 +127,8 @@ export default function AdminSidebar() {
               className="sidebar-nav-item"
               style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer' }}
             >
-              <CreditCard size={18} />
-              <span style={{ flex: 1 }}>Payment Gateway</span>
+              <Settings size={18} />
+              <span style={{ flex: 1 }}>Settings & Gateway</span>
               <span style={{ background: '#E6F4EA', color: '#137333', fontSize: '10px', fontWeight: 800, padding: '1px 6px', borderRadius: '4px' }}>
                 RZP
               </span>

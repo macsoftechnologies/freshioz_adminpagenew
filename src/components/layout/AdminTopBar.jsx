@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UserCheck, Clock, LogOut, User, CreditCard } from 'lucide-react';
+import { UserCheck, Clock, LogOut, User, CreditCard, Settings } from 'lucide-react';
 import FreshiozLogo from '../common/FreshiozLogo';
 import PaymentGatewaySettingsModal from '../common/PaymentGatewaySettingsModal';
 import { useAdminRole, ROLES } from '../../context/AdminRoleContext';
@@ -245,8 +245,8 @@ export default function AdminTopBar({ onMobileMenuClick }) {
               transition: 'all 0.2s'
             }}
           >
-            <CreditCard size={14} color="#166534" />
-            <span>Payment Gateway</span>
+            <Settings size={14} color="#166534" />
+            <span>Settings & Gateway</span>
           </button>
         )}
 
