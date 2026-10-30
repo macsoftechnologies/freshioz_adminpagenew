@@ -628,3 +628,4 @@ export default function PaymentGatewaySettingsModal({ isOpen, onClose }) {
     </div>
   );
 }
+
