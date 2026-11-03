@@ -206,7 +206,6 @@ export default function AdminMobileDrawer() {
                 <span style={{ background: '#0284C7', color: '#FFF', fontSize: '9.5px', fontWeight: 800, padding: '1px 5px', borderRadius: '4px' }}>
                   RZP
                 </span>
-                </span>
               </NavLink>
 
               {/* Collapsible: Master Data Catalog */}
