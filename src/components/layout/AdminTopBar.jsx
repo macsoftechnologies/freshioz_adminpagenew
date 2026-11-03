@@ -224,35 +224,6 @@ export default function AdminTopBar({ onMobileMenuClick }) {
                     <ExternalLink size={14} color="#234B3C" />
                   </button>
                 )}
-
-                {/* Settings & Payment Gateway */}
-                {currentRoleId === 'SUPER_ADMIN' && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsProfileDropdownOpen(false);
-                      setIsPaymentModalOpen(true);
-                    }}
-                    style={{
-                      width: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '9px 10px',
-                      borderRadius: '8px',
-                      color: '#334155',
-                      fontSize: '12.5px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = '#F8FAFC'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                  >
-                    <Settings size={15} color="#64748B" />
-                    <span>Payment Gateway Settings</span>
-                  </button>
-                )}
               </div>
 
               {/* Sign Out Action */}

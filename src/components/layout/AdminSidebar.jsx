@@ -102,13 +102,6 @@ export default function AdminSidebar() {
               <LayoutDashboard size={18} />
               <span>Analytics Dashboard</span>
             </NavLink>
-            <NavLink to="/executive-mis" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
-              <TrendingUp size={18} />
-              <span style={{ flex: 1 }}>Executive MIS & Spreads</span>
-              <span style={{ background: '#16A34A', color: '#FFF', fontSize: '9.5px', fontWeight: 800, padding: '1px 5px', borderRadius: '4px' }}>
-                LIVE
-              </span>
-            </NavLink>
             <div style={{ fontSize: '10.5px', textTransform: 'uppercase', color: '#94A3B8', fontWeight: 800, padding: '12px 14px 4px', letterSpacing: '0.6px' }}>
               Master Management
             </div>
