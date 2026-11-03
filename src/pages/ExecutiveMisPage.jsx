@@ -345,21 +345,6 @@ export default function ExecutiveMisPage() {
               }}>
                 Super Admin Privilege
               </span>
-              <span style={{
-                background: C.citrusSurface,
-                color: C.citrusDark,
-                border: `1px solid ${C.citrusBorder}`,
-                padding: '3px 8px',
-                borderRadius: '6px',
-                fontSize: '11px',
-                fontWeight: 700,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '5px',
-              }}>
-                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: C.citrus }} />
-                PostgreSQL Live Sync: {new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-              </span>
             </div>
             <p style={{
               margin: '4px 0 0',
