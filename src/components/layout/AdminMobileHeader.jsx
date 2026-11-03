@@ -1,6 +1,6 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { LogOut, Menu } from 'lucide-react';
+import { useNavigate, NavLink } from 'react-router-dom';
+import { LogOut, Menu, TrendingUp } from 'lucide-react';
 import FreshiozLogo from '../common/FreshiozLogo';
 import { useAdminRole, ROLES } from '../../context/AdminRoleContext';
 import { useToast } from '../../context/ToastContext';
@@ -40,6 +40,30 @@ export default function AdminMobileHeader() {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {/* Executive MIS Mobile/Tablet Direct Launcher */}
+        {currentRoleId === 'SUPER_ADMIN' && (
+          <NavLink
+            to="/executive-mis"
+            title="Open Executive MIS & Spreads"
+            style={{
+              background: '#ECFDF5',
+              border: '1.5px solid #A7F3D0',
+              color: '#047857',
+              padding: '5px 10px',
+              borderRadius: '8px',
+              fontSize: '11px',
+              fontWeight: 800,
+              textDecoration: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+          >
+            <TrendingUp size={13} />
+            <span>MIS</span>
+          </NavLink>
+        )}
+
         {canSwitchRoles ? (
           <select
             value={currentRoleId}

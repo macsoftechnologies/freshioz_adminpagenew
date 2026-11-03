@@ -25,7 +25,9 @@ import {
   Apple,
   Scale,
   Layers,
-  MessageSquareQuote
+  MessageSquareQuote,
+  TrendingUp,
+  Settings
 } from 'lucide-react';
 import FreshiozLogo from '../common/FreshiozLogo';
 import { useAdminRole, ROLES } from '../../context/AdminRoleContext';
@@ -180,7 +182,14 @@ export default function AdminMobileDrawer() {
               <div className="drawer-nav-section-title">Executive Analytics</div>
               <NavLink to="/dashboard" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
                 <LayoutDashboard size={17} />
-                <span>Operations Graphs</span>
+                <span>Analytics Dashboard</span>
+              </NavLink>
+              <NavLink to="/executive-mis" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
+                <TrendingUp size={17} />
+                <span style={{ flex: 1 }}>Executive MIS & Spreads</span>
+                <span style={{ background: '#16A34A', color: '#FFF', fontSize: '9.5px', fontWeight: 800, padding: '1px 5px', borderRadius: '4px' }}>
+                  LIVE
+                </span>
               </NavLink>
 
               <div className="drawer-nav-section-title">Master Management</div>
@@ -189,6 +198,14 @@ export default function AdminMobileDrawer() {
                 <span style={{ flex: 1 }}>Staff & Multi-Roles</span>
                 <span style={{ background: '#78B159', color: '#13281E', fontSize: '9.5px', fontWeight: 800, padding: '1px 5px', borderRadius: '4px' }}>
                   MAIN
+                </span>
+              </NavLink>
+              <NavLink to="/settings" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
+                <Settings size={17} />
+                <span style={{ flex: 1 }}>Settings & Gateway</span>
+                <span style={{ background: '#0284C7', color: '#FFF', fontSize: '9.5px', fontWeight: 800, padding: '1px 5px', borderRadius: '4px' }}>
+                  RZP
+                </span>
                 </span>
               </NavLink>
 

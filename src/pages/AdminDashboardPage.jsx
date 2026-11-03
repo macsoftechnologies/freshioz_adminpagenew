@@ -667,14 +667,7 @@ return (
   <div className="admin-page-container">
 
       {/* ================= 1. TOP HEADER BAR ================= */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '14px',
-        marginBottom: '20px'
-      }}>
+      <div className="admin-dash-header-bar">
         {/* Title, Subtitle & Live System Pill */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           <div style={{
@@ -719,7 +712,7 @@ return (
         </div>
 
         {/* Top Right Controls: Warehouse Hub Filter, Time Range, DB Sync, Excel Export */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <div className="admin-dash-controls">
 
             {/* Dynamic Warehouse Hub Selector */}
             <div style={{
@@ -854,12 +847,7 @@ return (
         </div>
 
         {/* ================= 2. TOP 4 KPI CARDS (MATCHING EXECUTIVE MIS & APP THEME) ================= */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-          gap: '14px',
-          marginBottom: '20px'
-        }}>
+        <div className="admin-dash-kpi-grid">
           {/* Card 1: Total Sales */}
           <div style={{
             background: '#FFFFFF',
@@ -982,12 +970,7 @@ return (
         </div>
 
                         {/* ================= 3. MIDDLE SECTION: SALES OVERVIEW SPLINE & TOP PRODUCTS ================= */}
-                        <div style={{
-                          display: 'grid',
-                          gridTemplateColumns: 'minmax(0, 1.8fr) minmax(0, 1.1fr)',
-                          gap: '18px',
-                          marginBottom: '20px'
-                        }}>
+                        <div className="admin-dash-middle-grid">
                           {/* Left Column: Sales Overview Dual Spline Area Chart */}
                           <div style={{
                             background: '#FFFFFF',
@@ -1216,12 +1199,7 @@ return (
                         </div>
 
                         {/* ================= 4. THIRD ROW: CATEGORY DONUT, TOP MONTH & SALES BY DAY ================= */}
-                        <div style={{
-                          display: 'grid',
-                          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-                          gap: '16px',
-                          marginBottom: '20px'
-                        }}>
+                        <div className="admin-dash-row3-grid">
                           {/* Card 1: Sales by Category (Interactive Donut) */}
                           <div style={{
                             background: '#FFFFFF',
@@ -1409,13 +1387,8 @@ return (
                           </div>
                         </div>
 
-                        {/* ================= 5. FOURTH ROW: REGION, DELIVERY & PROMO BANNER ================= */}
                         {/* ================= 5. FOURTH ROW: WAREHOUSE HUBS, DELIVERY & PROMO BANNER ================= */}
-                        <div style={{
-                          display: 'grid',
-                          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-                          gap: '16px'
-                        }}>
+                        <div className="admin-dash-row4-grid">
                           {/* Card 1: 100% Dynamic Warehouse Fulfillment Hubs */}
                           <div style={{
                             background: '#FFFFFF',

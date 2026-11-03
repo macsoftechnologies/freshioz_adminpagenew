@@ -858,3 +858,113 @@ select.form-input-control {
   border-color: #059669;
   color: #34D399;
 }
+
+
+/* ==========================================================================
+   RESPONSIVE DASHBOARD & MIS GRID BREAKPOINTS (MOBILE & TABLET VIEWS)
+   ========================================================================== */
+
+.admin-dash-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.admin-dash-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+  .admin-dash-header-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .admin-dash-controls {
+    width: 100%;
+  }
+  .admin-dash-controls > * {
+    flex: 1 1 auto;
+  }
+}
+
+.admin-dash-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 1024px) {
+  .admin-dash-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  .admin-dash-kpi-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}
+
+.admin-dash-middle-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(0, 1.1fr);
+  gap: 18px;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 1024px) {
+  .admin-dash-middle-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+.admin-dash-row3-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 1024px) {
+  .admin-dash-row3-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+}
+
+.admin-dash-row4-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 1024px) {
+  .admin-dash-row4-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+}
+
+/* Standalone Executive MIS Viewport on Mobile & Tablet */
+.admin-mis-standalone-viewport {
+  min-height: 100vh;
+  background: #FFFFFF;
+  padding: 16px 20px;
+}
+
+@media (max-width: 768px) {
+  .admin-mis-standalone-viewport {
+    padding: 12px;
+  }
+}

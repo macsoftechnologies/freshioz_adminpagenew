@@ -31,7 +31,7 @@ export default function AdminMobileDock() {
         <>
           <NavLink to="/dashboard" className={({ isActive }) => `admin-dock-item ${isActive ? 'active' : ''}`}>
             <LayoutDashboard size={18} />
-            <span>Graphs</span>
+            <span>Dashboard</span>
           </NavLink>
           <NavLink to="/employees" className={({ isActive }) => `admin-dock-item ${isActive ? 'active' : ''}`}>
             <Users size={18} />
