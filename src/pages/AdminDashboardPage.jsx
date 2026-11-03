@@ -664,7 +664,7 @@ const handleExportConsolidatedExcel = () => {
 };
 
 return (
-  <div className="admin-page-container" style={{ padding: '16px 22px', maxWidth: '1620px', margin: '0 auto', background: '#F8FAFC' }}>
+  <div className="admin-page-container">
 
       {/* ================= 1. TOP HEADER BAR ================= */}
       <div style={{
@@ -680,16 +680,16 @@ return (
           <div style={{
             width: '46px',
             height: '46px',
-            borderRadius: '14px',
-            background: 'linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%)',
-            border: '1px solid #A7F3D0',
-            color: '#16A34A',
+            borderRadius: '12px',
+            background: '#EBF2EE',
+            border: '1px solid #A7C4B8',
+            color: '#234B3C',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            boxShadow: '0 2px 8px rgba(22, 163, 74, 0.15)'
+            boxShadow: '0 1px 3px rgba(35, 75, 60, 0.12)'
           }}>
-            <BarChart2 size={24} color="#16A34A" />
+            <BarChart2 size={24} color="#234B3C" />
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -718,7 +718,7 @@ return (
           </div>
         </div>
 
-        {/* Top Right Controls: Warehouse Hub Filter, Time Range, DB Sync, Excel Export, User Chip */}
+        {/* Top Right Controls: Warehouse Hub Filter, Time Range, DB Sync, Excel Export */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
 
             {/* Dynamic Warehouse Hub Selector */}
@@ -728,11 +728,11 @@ return (
               gap: '8px',
               background: '#FFFFFF',
               border: '1.5px solid #E2E8F0',
-              borderRadius: '10px',
+              borderRadius: '8px',
               padding: '6px 12px',
               boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
             }}>
-              <Warehouse size={15} color="#16A34A" />
+              <Warehouse size={15} color="#234B3C" />
               {warehouses.length > 0 ? (
                 <select
                   value={selectedWarehouseId}
@@ -758,7 +758,7 @@ return (
                   style={{
                     fontSize: '12px',
                     fontWeight: 700,
-                    color: '#16A34A',
+                    color: '#234B3C',
                     textDecoration: 'none',
                     display: 'flex',
                     alignItems: 'center',
@@ -777,7 +777,7 @@ return (
               gap: '8px',
               background: '#FFFFFF',
               border: '1.5px solid #E2E8F0',
-              borderRadius: '10px',
+              borderRadius: '8px',
               padding: '6px 12px',
               boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
             }}>
@@ -788,7 +788,6 @@ return (
                 style={{
                   border: 'none',
                   background: 'transparent',
-                  fontSize: '13px',
                   fontSize: '12.5px',
                   fontWeight: 700,
                   color: '#1E293B',
@@ -813,7 +812,7 @@ return (
                 alignItems: 'center',
                 gap: '6px',
                 padding: '7px 12px',
-                borderRadius: '10px',
+                borderRadius: '8px',
                 background: '#FFFFFF',
                 border: '1.5px solid #E2E8F0',
                 color: '#334155',
@@ -837,7 +836,7 @@ return (
                 alignItems: 'center',
                 gap: '6px',
                 padding: '7px 12px',
-                borderRadius: '10px',
+                borderRadius: '8px',
                 background: '#FFFFFF',
                 border: '1.5px solid #E2E8F0',
                 color: '#334155',
@@ -851,294 +850,133 @@ return (
               <Download size={14} />
               <span>Export</span>
             </button>
-
-            {/* Notification Bell */}
-            <div style={{
-              width: '38px',
-              height: '38px',
-              borderRadius: '50%',
-              background: '#FFFFFF',
-              border: '1.5px solid #E2E8F0',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              position: 'relative',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
-            }}>
-              <Bell size={17} color="#475569" />
-              {societies.filter(s => s.status === 'PENDING').length > 0 && (
-                <span style={{
-                  position: 'absolute',
-                  top: '-2px',
-                  right: '-2px',
-                  width: '16px',
-                  height: '16px',
-                  borderRadius: '50%',
-                  background: '#EF4444',
-                  color: '#FFF',
-                  fontSize: '10px',
-                  fontWeight: 800,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  {societies.filter(s => s.status === 'PENDING').length}
-                </span>
-              )}
-            </div>
-
-            {/* Admin Avatar Chip */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              background: '#FFFFFF',
-              border: '1.5px solid #E2E8F0',
-              borderRadius: '9999px',
-              padding: '4px 12px 4px 5px',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
-            }}>
-              <div style={{
-                width: '28px',
-                height: '28px',
-                borderRadius: '50%',
-                background: '#234B3C',
-                color: '#FFF',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '12px',
-                fontWeight: 800
-              }}>
-                SA
-              </div>
-              <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#0F172A' }}>
-                Super Admin
-              </span>
-            </div>
           </div>
         </div>
 
-        {/* ================= 2. TOP 4 KPI CARDS (STRICT SINGLE ROW ON DESKTOP) ================= */}
+        {/* ================= 2. TOP 4 KPI CARDS (MATCHING EXECUTIVE MIS & APP THEME) ================= */}
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-          gap: '16px',
+          gap: '14px',
           marginBottom: '20px'
         }}>
           {/* Card 1: Total Sales */}
           <div style={{
-            background: 'linear-gradient(180deg, #FFFFFF 0%, #FAFCFF 100%)',
+            background: '#FFFFFF',
             border: '1.5px solid #E2E8F0',
-            borderRadius: '16px',
+            borderRadius: '12px',
             padding: '16px 18px',
             boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            position: 'relative'
+            position: 'relative',
+            overflow: 'hidden'
           }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                <div style={{
-                  width: '34px',
-                  height: '34px',
-                  borderRadius: '10px',
-                  background: '#DCFCE7',
-                  color: '#16A34A',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <ShoppingBag size={18} />
-                </div>
-                <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#475569' }}>Total Sales</span>
-              </div>
-              <div style={{ fontSize: '22px', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em' }}>
-                ₹{totalGrossSales.toLocaleString()}
-              </div>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '4px', fontSize: '11.5px', fontWeight: 800, color: '#16A34A' }}>
-                <span>↑ {salesTrendDelta}</span>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3.5px', background: '#16A34A' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 800, color: '#166534', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Total Sales (GMV)
+              </span>
+              <div style={{ padding: '6px', borderRadius: '8px', background: '#DCFCE7', color: '#16A34A', display: 'flex' }}>
+                <ShoppingBag size={16} />
               </div>
             </div>
-
-            {/* Green Smooth Wave Sparkline */}
-            <div style={{ width: '76px', height: '40px' }}>
-              <svg viewBox="0 0 100 50" style={{ width: '100%', height: '100%' }}>
-                {totalGrossSales > 0 ? (
-                  <path
-                    d="M 5,38 Q 30,48 55,24 T 95,14"
-                    fill="none"
-                    stroke="#16A34A"
-                    strokeWidth="2.8"
-                    strokeLinecap="round"
-                  />
-                ) : (
-                  <line x1="5" y1="36" x2="95" y2="36" stroke="#86EFAC" strokeWidth="2.5" strokeDasharray="3 3" />
-                )}
-              </svg>
+            <div style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.02em', marginBottom: '6px' }}>
+              ₹{totalGrossSales.toLocaleString('en-IN')}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', color: '#64748B' }}>
+              <span>Live Resident Inflow</span>
+              <span style={{ color: '#16A34A', fontWeight: 800, background: '#F0FDF4', padding: '1px 6px', borderRadius: '4px', border: '1px solid #BBF7D0' }}>
+                ↑ {salesTrendDelta}
+              </span>
             </div>
           </div>
 
           {/* Card 2: Total Orders */}
           <div style={{
-            background: 'linear-gradient(180deg, #FFFFFF 0%, #FAFCFF 100%)',
+            background: '#FFFFFF',
             border: '1.5px solid #E2E8F0',
-            borderRadius: '16px',
+            borderRadius: '12px',
             padding: '16px 18px',
             boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            position: 'relative'
+            position: 'relative',
+            overflow: 'hidden'
           }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                <div style={{
-                  width: '34px',
-                  height: '34px',
-                  borderRadius: '10px',
-                  background: '#DBEAFE',
-                  color: '#2563EB',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <ShoppingCart size={18} />
-                </div>
-                <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#475569' }}>Total Orders</span>
-              </div>
-              <div style={{ fontSize: '22px', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em' }}>
-                {totalOrdersCount.toLocaleString()}
-              </div>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '4px', fontSize: '11.5px', fontWeight: 800, color: '#2563EB' }}>
-                <span>↑ {ordersTrendDelta}</span>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3.5px', background: '#2563EB' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 800, color: '#1E40AF', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Total Orders
+              </span>
+              <div style={{ padding: '6px', borderRadius: '8px', background: '#DBEAFE', color: '#2563EB', display: 'flex' }}>
+                <ShoppingCart size={16} />
               </div>
             </div>
-
-            {/* Blue Smooth Wave Sparkline */}
-            <div style={{ width: '76px', height: '40px' }}>
-              <svg viewBox="0 0 100 50" style={{ width: '100%', height: '100%' }}>
-                {totalOrdersCount > 0 ? (
-                  <path
-                    d="M 5,36 Q 30,45 55,22 T 95,12"
-                    fill="none"
-                    stroke="#2563EB"
-                    strokeWidth="2.8"
-                    strokeLinecap="round"
-                  />
-                ) : (
-                  <line x1="5" y1="36" x2="95" y2="36" stroke="#93C5FD" strokeWidth="2.5" strokeDasharray="3 3" />
-                )}
-              </svg>
+            <div style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.02em', marginBottom: '6px' }}>
+              {totalOrdersCount.toLocaleString('en-IN')}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', color: '#64748B' }}>
+              <span>Fulfillment Dispatches</span>
+              <span style={{ color: '#2563EB', fontWeight: 800, background: '#EFF6FF', padding: '1px 6px', borderRadius: '4px', border: '1px solid #BFDBFE' }}>
+                ↑ {ordersTrendDelta}
+              </span>
             </div>
           </div>
 
           {/* Card 3: Active Customers */}
           <div style={{
-            background: 'linear-gradient(180deg, #FFFFFF 0%, #FAFCFF 100%)',
+            background: '#FFFFFF',
             border: '1.5px solid #E2E8F0',
-            borderRadius: '16px',
+            borderRadius: '12px',
             padding: '16px 18px',
             boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            position: 'relative'
+            position: 'relative',
+            overflow: 'hidden'
           }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                <div style={{
-                  width: '34px',
-                  height: '34px',
-                  borderRadius: '10px',
-                  background: '#FFEDD5',
-                  color: '#EA580C',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <Users size={18} />
-                </div>
-                <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#475569' }}>Active Customers</span>
-              </div>
-              <div style={{ fontSize: '22px', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em' }}>
-                {activeCustomersCount.toLocaleString()}
-              </div>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '4px', fontSize: '11.5px', fontWeight: 800, color: '#EA580C' }}>
-                <span>↑ {customersTrendDelta}</span>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3.5px', background: '#EA580C' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 800, color: '#9A3412', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Active Customers
+              </span>
+              <div style={{ padding: '6px', borderRadius: '8px', background: '#FFEDD5', color: '#EA580C', display: 'flex' }}>
+                <Users size={16} />
               </div>
             </div>
-
-            {/* Orange Smooth Wave Sparkline */}
-            <div style={{ width: '76px', height: '40px' }}>
-              <svg viewBox="0 0 100 50" style={{ width: '100%', height: '100%' }}>
-                {activeCustomersCount > 0 ? (
-                  <path
-                    d="M 5,34 Q 35,46 60,26 T 95,16"
-                    fill="none"
-                    stroke="#EA580C"
-                    strokeWidth="2.8"
-                    strokeLinecap="round"
-                  />
-                ) : (
-                  <line x1="5" y1="36" x2="95" y2="36" stroke="#FDBA74" strokeWidth="2.5" strokeDasharray="3 3" />
-                )}
-              </svg>
+            <div style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.02em', marginBottom: '6px' }}>
+              {activeCustomersCount.toLocaleString('en-IN')}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', color: '#64748B' }}>
+              <span>Verified Society Residents</span>
+              <span style={{ color: '#EA580C', fontWeight: 800, background: '#FFF7ED', padding: '1px 6px', borderRadius: '4px', border: '1px solid #FED7AA' }}>
+                ↑ {customersTrendDelta}
+              </span>
             </div>
           </div>
 
           {/* Card 4: Avg. Order Value */}
           <div style={{
-            background: 'linear-gradient(180deg, #FFFFFF 0%, #FAFCFF 100%)',
+            background: '#FFFFFF',
             border: '1.5px solid #E2E8F0',
-            borderRadius: '16px',
+            borderRadius: '12px',
             padding: '16px 18px',
             boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            position: 'relative'
+            position: 'relative',
+            overflow: 'hidden'
           }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                <div style={{
-                  width: '34px',
-                  height: '34px',
-                  borderRadius: '10px',
-                  background: '#F3E8FF',
-                  color: '#9333EA',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <IndianRupee size={18} />
-                </div>
-                <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#475569' }}>Avg. Order Value</span>
-              </div>
-              <div style={{ fontSize: '22px', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em' }}>
-                ₹{avgOrderValue.toLocaleString()}
-              </div>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '4px', fontSize: '11.5px', fontWeight: 800, color: '#9333EA' }}>
-                <span>↑ {aovTrendDelta}</span>
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3.5px', background: '#234B3C' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 800, color: '#234B3C', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Avg. Basket Size (AOV)
+              </span>
+              <div style={{ padding: '6px', borderRadius: '8px', background: '#EBF2EE', color: '#234B3C', display: 'flex' }}>
+                <IndianRupee size={16} />
               </div>
             </div>
-
-            {/* Purple Smooth Wave Sparkline */}
-            <div style={{ width: '76px', height: '40px' }}>
-              <svg viewBox="0 0 100 50" style={{ width: '100%', height: '100%' }}>
-                {avgOrderValue > 0 ? (
-                  <path
-                    d="M 5,36 Q 30,44 55,20 T 95,12"
-                    fill="none"
-                    stroke="#9333EA"
-                    strokeWidth="2.8"
-                    strokeLinecap="round"
-                  />
-                ) : (
-                  <line x1="5" y1="36" x2="95" y2="36" stroke="#D8B4FE" strokeWidth="2.5" strokeDasharray="3 3" />
-                )}
-              </svg>
+            <div style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.02em', marginBottom: '6px' }}>
+              ₹{avgOrderValue.toLocaleString('en-IN')}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', color: '#64748B' }}>
+              <span>Per Household Basket</span>
+              <span style={{ color: '#234B3C', fontWeight: 800, background: '#EBF2EE', padding: '1px 6px', borderRadius: '4px', border: '1px solid #A7C4B8' }}>
+                ↑ {aovTrendDelta}
+              </span>
             </div>
           </div>
         </div>
@@ -1154,7 +992,7 @@ return (
                           <div style={{
                             background: '#FFFFFF',
                             border: '1.5px solid #E2E8F0',
-                            borderRadius: '16px',
+                            borderRadius: '12px',
                             padding: '20px 22px',
                             boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
                           }}>
@@ -1295,7 +1133,7 @@ return (
                           <div style={{
                             background: '#FFFFFF',
                             border: '1.5px solid #E2E8F0',
-                            borderRadius: '16px',
+                            borderRadius: '12px',
                             padding: '20px 22px',
                             boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
                             display: 'flex',
@@ -1388,7 +1226,7 @@ return (
                           <div style={{
                             background: '#FFFFFF',
                             border: '1.5px solid #E2E8F0',
-                            borderRadius: '16px',
+                            borderRadius: '12px',
                             padding: '20px 22px',
                             boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
                           }}>
@@ -1458,7 +1296,7 @@ return (
                           <div style={{
                             background: '#FFFFFF',
                             border: '1.5px solid #E2E8F0',
-                            borderRadius: '16px',
+                            borderRadius: '12px',
                             padding: '20px 22px',
                             boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
                             display: 'flex',
@@ -1517,7 +1355,7 @@ return (
                           <div style={{
                             background: '#FFFFFF',
                             border: '1.5px solid #E2E8F0',
-                            borderRadius: '16px',
+                            borderRadius: '12px',
                             padding: '20px 22px',
                             boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
                           }}>
@@ -1582,7 +1420,7 @@ return (
                           <div style={{
                             background: '#FFFFFF',
                             border: '1.5px solid #E2E8F0',
-                            borderRadius: '16px',
+                            borderRadius: '12px',
                             padding: '20px 22px',
                             boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
                             display: 'flex',
@@ -1678,7 +1516,7 @@ return (
                                 <div style={{
                                   background: '#FFFFFF',
                                   border: '1.5px solid #E2E8F0',
-                                  borderRadius: '16px',
+                                  borderRadius: '12px',
                                   padding: '20px 22px',
                                   boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
                                   display: 'flex',
@@ -1743,7 +1581,7 @@ return (
                                 <div style={{
                                   background: 'linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%)',
                                   border: '1.5px solid #A7F3D0',
-                                  borderRadius: '16px',
+                                  borderRadius: '12px',
                                   padding: '20px 22px',
                                   boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
                                   display: 'flex',

@@ -505,25 +505,6 @@ export default function AdminSidebar() {
           </>
         )}
       </nav>
-      {/* Next Day Delivery Brand Card (matching user reference inspiration) */}
-      <div style={{
-        margin: '10px 12px 14px',
-        padding: '12px 14px',
-        borderRadius: '12px',
-        background: 'linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%)',
-        border: '1.5px solid #BBF7D0',
-        position: 'relative',
-        overflow: 'hidden',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '3px' }}>
-          <span style={{ fontSize: '20px' }}>🚚</span>
-          <strong style={{ fontSize: '12.5px', color: '#166534', fontWeight: 800 }}>Next Day Delivery</strong>
-        </div>
-        <p style={{ fontSize: '11px', color: '#15803D', margin: 0, lineHeight: 1.35, fontWeight: 500 }}>
-          Farm-fresh at dawn, at your society desk before 7:00 AM!
-        </p>
-      </div>
     </aside>
   );
 }
