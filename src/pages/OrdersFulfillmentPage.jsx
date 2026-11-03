@@ -19,7 +19,7 @@ import {
   MapPin,
   Phone,
   ExternalLink,
-  DollarSign,
+  IndianRupee,
   Calendar,
   RefreshCw
 } from 'lucide-react';
@@ -1819,7 +1819,7 @@ export default function OrdersFulfillmentPage() {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', borderBottom: '1.5px solid #F1F5F9', paddingBottom: '12px' }}>
               <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#FEF3C7', border: '1px solid #FDE68A', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#D97706' }}>
-                <DollarSign size={22} />
+                <IndianRupee size={22} />
               </div>
               <div>
                 <h3 style={{ fontSize: '16px', fontWeight: 900, color: '#0F172A', margin: 0 }}>

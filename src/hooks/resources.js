@@ -14,6 +14,7 @@ import { procurementService } from '../services/procurementService';
 import { inventoryService } from '../services/inventoryService';
 import { inboundService } from '../services/inboundService';
 import { pricingService } from '../services/pricingService';
+import { misService } from '../services/misService';
 
 function useInvalidate() {
   const qc = useQueryClient();
@@ -110,4 +111,23 @@ export function useRejectPayout() {
 export function usePublishPrices() {
   const inv = useInvalidate();
   return useMutation({ mutationFn: (batch) => pricingService.publishPrices(batch), onSuccess: () => inv('products') });
+}
+
+export function useMisAnalytics(params, options = {}) {
+  return useQuery({
+    queryKey: ['mis-analytics', params ?? {}],
+    queryFn: () => misService.getExecutiveSummary(params ?? {}),
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    ...options,
+  });
+}
+
+export function useReconcileRiderCash() {
+  const inv = useInvalidate();
+  return useMutation({
+    mutationFn: (dto) => misService.reconcileRiderCash(dto),
+    onSuccess: () => inv('mis-analytics', 'orders'),
+  });
 }

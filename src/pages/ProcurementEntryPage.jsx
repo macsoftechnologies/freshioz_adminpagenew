@@ -4,7 +4,7 @@ import {
   Truck, 
   MapPin, 
   FileText, 
-  DollarSign, 
+  IndianRupee, 
   Camera, 
   CheckCircle2, 
   Send,

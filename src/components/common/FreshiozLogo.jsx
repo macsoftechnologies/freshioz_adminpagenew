@@ -23,7 +23,7 @@ export default function FreshiozLogo({ height = 44, className = '', showTagline 
       }}
     >
       <img
-        src="/freshioz-logo.png"
+        src={`${(import.meta.env.BASE_URL || "/admin/").replace(/\/+$/, "")}/freshioz-logo.png`}
         alt="Freshioz - Fruits, Vegetables & More"
         style={{
           height: `${height}px`,

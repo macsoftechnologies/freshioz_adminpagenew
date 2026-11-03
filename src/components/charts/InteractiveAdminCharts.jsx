@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { TrendingUp, DollarSign, BarChart3, PieChart, Layers, CheckCircle2, AlertCircle } from 'lucide-react';
+import { TrendingUp, BarChart3, PieChart, Layers, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useAdminRole } from '../../context/AdminRoleContext';
 
 export function RevenueMarginChart({ store: propStore }) {
@@ -11,7 +11,7 @@ export function RevenueMarginChart({ store: propStore }) {
   const procurementLogs = store.procurementLogs || [];
 
   const totalSales = orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
-  const totalProcurement = procurementLogs.reduce((sum, l) => sum + (l.totalSpend || 0), 0);
+  const totalProcurement = procurementLogs.reduce((sum, l) => sum + (Number(l.totalAmountPaid) || Number(l.totalSpend) || Number(l.totalAmount) || 0), 0);
   const hasData = orders.length > 0 || procurementLogs.length > 0;
 
   // 7-day distribution (if data exists, map recent days; if clean, 0 baseline)

@@ -24,16 +24,15 @@ import {
   Apple,
   Scale,
   CreditCard,
-  Settings
+  Settings,
+  TrendingUp
 } from 'lucide-react';
 import FreshiozLogo from '../common/FreshiozLogo';
 import { useAdminRole } from '../../context/AdminRoleContext';
-
 export default function AdminSidebar() {
   const { currentRoleId, store } = useAdminRole();
   const location = useLocation();
   const isWarehouseRoute = location.pathname.startsWith('/warehouse');
-
   const pendingSocietiesCount = (store.societies || []).filter(s => s.status === 'PENDING').length;
   const pendingWithdrawalsCount = (store.withdrawals || []).filter(w => w.status === 'PENDING_APPROVAL').length;
   const totalEmployeesCount = (store.employees || []).length;
@@ -42,7 +41,6 @@ export default function AdminSidebar() {
   const totalProductsCount = (store.products || []).length;
   const totalCategoriesCount = (store.categories || []).length;
   const totalUnitsCount = (store.units || []).length;
-
   const [openGroups, setOpenGroups] = useState({
     masterData: location.pathname.startsWith('/master-data'),
     procurement: location.pathname.startsWith('/procurement'),
@@ -52,7 +50,6 @@ export default function AdminSidebar() {
     packer: location.pathname.startsWith('/warehouse-crating'),
     rider: location.pathname.startsWith('/orders-fulfillment')
   });
-
   useEffect(() => {
     if (location.pathname.startsWith('/master-data')) {
       setOpenGroups(prev => ({ ...prev, masterData: true }));
@@ -76,16 +73,13 @@ export default function AdminSidebar() {
       setOpenGroups(prev => ({ ...prev, rider: true }));
     }
   }, [location.pathname]);
-
   const toggleGroup = (key) => {
     setOpenGroups(prev => ({ ...prev, [key]: !prev[key] }));
   };
-
   const isMasterDataActive = location.pathname.startsWith('/master-data');
   const isProcurementActive = location.pathname.startsWith('/procurement');
   const isLogisticsActive = isWarehouseRoute || location.pathname.startsWith('/orders') || location.pathname.startsWith('/vendors');
   const isSocietiesActive = location.pathname.startsWith('/societies') || location.pathname.startsWith('/approvals') || location.pathname.startsWith('/payouts') || location.pathname.startsWith('/inbound-leads') || location.pathname.startsWith('/sales');
-
   return (
     <aside className="admin-sidebar">
       {/* Sidebar Top Branding */}
@@ -96,7 +90,6 @@ export default function AdminSidebar() {
           <strong>{currentRoleId.replace(/_/g, ' ')}</strong>
         </div>
       </div>
-
       {/* Role-Specific Navigation Menu */}
       <nav className="sidebar-nav-list">
         {/* ================= SUPER ADMIN ONLY ================= */}
@@ -109,7 +102,6 @@ export default function AdminSidebar() {
               <LayoutDashboard size={18} />
               <span>Operations Graphs</span>
             </NavLink>
-
             <div style={{ fontSize: '10.5px', textTransform: 'uppercase', color: '#94A3B8', fontWeight: 800, padding: '12px 14px 4px', letterSpacing: '0.6px' }}>
               Master Management
             </div>
@@ -120,20 +112,13 @@ export default function AdminSidebar() {
                 MAIN
               </span>
             </NavLink>
-
-            <button
-              type="button"
-              onClick={() => window.dispatchEvent(new CustomEvent('open_payment_gateway_settings'))}
-              className="sidebar-nav-item"
-              style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer' }}
-            >
+            <NavLink to="/settings" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
               <Settings size={18} />
               <span style={{ flex: 1 }}>Settings & Gateway</span>
               <span style={{ background: '#E6F4EA', color: '#137333', fontSize: '10px', fontWeight: 800, padding: '1px 6px', borderRadius: '4px' }}>
                 RZP
               </span>
-            </button>
-
+            </NavLink>
             {/* Collapsible: Master Data Catalog */}
             <button 
               type="button" 
@@ -150,7 +135,6 @@ export default function AdminSidebar() {
                 }} 
               />
             </button>
-
             {openGroups.masterData && (
               <div className="sidebar-sub-menu">
                 <NavLink 
@@ -163,7 +147,6 @@ export default function AdminSidebar() {
                     {totalProductsCount}
                   </span>
                 </NavLink>
-
                 <NavLink 
                   to="/master-data#categories" 
                   className={() => `sidebar-sub-item ${location.pathname === '/master-data' && location.hash === '#categories' ? 'active' : ''}`}
@@ -174,7 +157,6 @@ export default function AdminSidebar() {
                     {totalCategoriesCount}
                   </span>
                 </NavLink>
-
                 <NavLink 
                   to="/master-data#units" 
                   className={() => `sidebar-sub-item ${location.pathname === '/master-data' && location.hash === '#units' ? 'active' : ''}`}
@@ -187,7 +169,6 @@ export default function AdminSidebar() {
                 </NavLink>
               </div>
             )}
-
             {/* Collapsible: Mandi Procurement */}
             <div style={{ fontSize: '10.5px', textTransform: 'uppercase', color: '#94A3B8', fontWeight: 800, padding: '12px 14px 4px', letterSpacing: '0.6px' }}>
               Mandi Procurement & Sourcing
@@ -207,7 +188,6 @@ export default function AdminSidebar() {
                 }} 
               />
             </button>
-
             {openGroups.procurement && (
               <div className="sidebar-sub-menu">
                 <NavLink 
@@ -217,7 +197,6 @@ export default function AdminSidebar() {
                   <ClipboardList size={14} />
                   <span>Mandi Demand & Indent</span>
                 </NavLink>
-
                 <NavLink 
                   to="/procurement-entry" 
                   className={({ isActive }) => `sidebar-sub-item ${isActive ? 'active' : ''}`}
@@ -225,7 +204,6 @@ export default function AdminSidebar() {
                   <FilePlus size={14} />
                   <span>Log Mandi Bill & Slip</span>
                 </NavLink>
-
                 <NavLink 
                   to="/procurement-logs" 
                   className={`sidebar-sub-item ${location.pathname === '/procurement-logs' ? 'active' : ''}`}
@@ -235,7 +213,6 @@ export default function AdminSidebar() {
                 </NavLink>
               </div>
             )}
-
             {/* Collapsible: Logistics & Hub Operations */}
             <div style={{ fontSize: '10.5px', textTransform: 'uppercase', color: '#94A3B8', fontWeight: 800, padding: '12px 14px 4px', letterSpacing: '0.6px' }}>
               Logistics & Hub Operations
@@ -255,7 +232,6 @@ export default function AdminSidebar() {
                 }} 
               />
             </button>
-
             {openGroups.logistics && (
               <div className="sidebar-sub-menu">
                 <NavLink 
@@ -265,7 +241,6 @@ export default function AdminSidebar() {
                   <PackageCheck size={14} />
                   <span>Packing & Lot Dispatch</span>
                 </NavLink>
-
                 <NavLink 
                   to="/orders-fulfillment" 
                   className={`sidebar-sub-item ${location.pathname === '/orders-fulfillment' ? 'active' : ''}`}
@@ -273,7 +248,6 @@ export default function AdminSidebar() {
                   <Truck size={14} />
                   <span>Orders Fulfillment Queue</span>
                 </NavLink>
-
                 <NavLink 
                   to="/warehouse-settings" 
                   className={`sidebar-sub-item ${location.pathname === '/warehouse-settings' ? 'active' : ''}`}
@@ -281,7 +255,6 @@ export default function AdminSidebar() {
                   <Warehouse size={14} />
                   <span>Warehouses & Hubs</span>
                 </NavLink>
-
                 <NavLink 
                   to="/vendors" 
                   className={`sidebar-sub-item ${location.pathname === '/vendors' ? 'active' : ''}`}
@@ -294,7 +267,6 @@ export default function AdminSidebar() {
                 </NavLink>
               </div>
             )}
-
             {/* Collapsible: Field & Community Networks */}
             <div style={{ fontSize: '10.5px', textTransform: 'uppercase', color: '#94A3B8', fontWeight: 800, padding: '12px 14px 4px', letterSpacing: '0.6px' }}>
               Field & Community Networks
@@ -319,7 +291,6 @@ export default function AdminSidebar() {
                 }} 
               />
             </button>
-
             {openGroups.societies && (
               <div className="sidebar-sub-menu">
                 <NavLink 
@@ -332,7 +303,6 @@ export default function AdminSidebar() {
                     {store.societies?.length || 0}
                   </span>
                 </NavLink>
-
                 <NavLink 
                   to="/approvals" 
                   className={`sidebar-sub-item ${location.pathname === '/approvals' ? 'active' : ''}`}
@@ -345,7 +315,6 @@ export default function AdminSidebar() {
                     </span>
                   )}
                 </NavLink>
-
                 <NavLink 
                   to="/payouts" 
                   className={`sidebar-sub-item ${location.pathname === '/payouts' ? 'active' : ''}`}
@@ -358,7 +327,6 @@ export default function AdminSidebar() {
                     </span>
                   )}
                 </NavLink>
-
                 <NavLink 
                   to="/inbound-leads" 
                   className={`sidebar-sub-item ${location.pathname === '/inbound-leads' ? 'active' : ''}`}
@@ -373,7 +341,6 @@ export default function AdminSidebar() {
                 </NavLink>
               </div>
             )}
-
             <div style={{ fontSize: '10.5px', textTransform: 'uppercase', color: '#94A3B8', fontWeight: 800, padding: '12px 14px 4px', letterSpacing: '0.6px' }}>
               Pricing & Audits
             </div>
@@ -381,12 +348,10 @@ export default function AdminSidebar() {
               <Tags size={18} />
               <span>Daily Rates & GST</span>
             </NavLink>
-
             <NavLink to="/transactions" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
               <Receipt size={18} />
               <span>Payment & Spent Ledger</span>
             </NavLink>
-
             <div style={{ fontSize: '10.5px', textTransform: 'uppercase', color: '#94A3B8', fontWeight: 800, padding: '12px 14px 4px', letterSpacing: '0.6px' }}>
               Feedback & Customer Care
             </div>
@@ -396,7 +361,6 @@ export default function AdminSidebar() {
             </NavLink>
           </>
         )}
-
         {/* ================= FIELD SALES OFFICER ONLY ================= */}
         {currentRoleId === 'SALES_OFFICER' && (
           <>
@@ -407,17 +371,14 @@ export default function AdminSidebar() {
               <Building2 size={18} />
               <span>Societies & Resident Directory</span>
             </NavLink>
-
             <NavLink to="/sales-onboarding" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
               <FilePlus size={18} />
               <span>Onboard Society / Hostel</span>
             </NavLink>
-
             <NavLink to="/sales-my-societies" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
               <Building2 size={18} />
               <span>My Submitted Societies</span>
             </NavLink>
-
             <NavLink to="/inbound-leads" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
               <Users size={18} />
               <span style={{ flex: 1 }}>Resident Inbound Requests</span>
@@ -429,7 +390,6 @@ export default function AdminSidebar() {
             </NavLink>
           </>
         )}
-
         {/* ================= WAREHOUSE STAFF / PACKER ONLY ================= */}
         {currentRoleId === 'WAREHOUSE_STAFF' && (
           <>
@@ -440,21 +400,18 @@ export default function AdminSidebar() {
               <PackageCheck size={18} />
               <span>Crating & Society Packing</span>
             </NavLink>
-
             <NavLink to="/orders-fulfillment" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
               <Truck size={18} />
               <span>Live Orders Packing Queue</span>
             </NavLink>
           </>
         )}
-
         {/* ================= WAREHOUSE & PROCUREMENT MANAGER ================= */}
         {(currentRoleId === 'WAREHOUSE_MANAGER' || currentRoleId === 'PROCUREMENT_OFFICER') && (
           <>
             <div style={{ fontSize: '10.5px', textTransform: 'uppercase', color: '#94A3B8', fontWeight: 800, padding: '8px 14px', letterSpacing: '0.6px' }}>
               Warehouse & Procurement Operations
             </div>
-
             {/* Collapsible: Mandi Procurement */}
             <button 
               type="button" 
@@ -471,7 +428,6 @@ export default function AdminSidebar() {
                 }} 
               />
             </button>
-
             {openGroups.procurement && (
               <div className="sidebar-sub-menu">
                 <NavLink 
@@ -481,7 +437,6 @@ export default function AdminSidebar() {
                   <ClipboardList size={14} />
                   <span>Mandi Demand & Sourcing</span>
                 </NavLink>
-
                 <NavLink 
                   to="/procurement-entry" 
                   className={({ isActive }) => `sidebar-sub-item ${isActive ? 'active' : ''}`}
@@ -489,7 +444,6 @@ export default function AdminSidebar() {
                   <FilePlus size={14} />
                   <span>Log Mandi Bill & Slip</span>
                 </NavLink>
-
                 <NavLink 
                   to="/procurement-logs" 
                   className={({ isActive }) => `sidebar-sub-item ${isActive ? 'active' : ''}`}
@@ -497,7 +451,6 @@ export default function AdminSidebar() {
                   <Receipt size={14} />
                   <span>Purchases Audit Ledger</span>
                 </NavLink>
-
                 <NavLink 
                   to="/vendors" 
                   className={({ isActive }) => `sidebar-sub-item ${location.pathname === '/vendors' ? 'active' : ''}`}
@@ -507,7 +460,6 @@ export default function AdminSidebar() {
                 </NavLink>
               </div>
             )}
-
             <div style={{ fontSize: '10.5px', textTransform: 'uppercase', color: '#94A3B8', fontWeight: 800, padding: '12px 14px 4px', letterSpacing: '0.6px' }}>
               Hub Operations
             </div>
@@ -515,24 +467,20 @@ export default function AdminSidebar() {
               <PackageCheck size={18} />
               <span>Packing & Lot Dispatch</span>
             </NavLink>
-
             <NavLink to="/orders-fulfillment" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
               <Truck size={18} />
               <span>Live Order Tracking</span>
             </NavLink>
-
             <NavLink to="/transactions" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
               <Receipt size={18} />
               <span>Payment & Spent Ledger</span>
             </NavLink>
-
             <NavLink to="/warehouse-settings" className={({ isActive }) => `sidebar-nav-item ${isActive || isWarehouseRoute ? 'active' : ''}`}>
               <Warehouse size={18} />
               <span>Cut-Off Time & Hub Slots</span>
             </NavLink>
           </>
         )}
-
         {/* ================= DELIVERY EXECUTIVE (RIDER) ONLY ================= */}
         {currentRoleId === 'DELIVERY_EXECUTIVE' && (
           <>
@@ -543,7 +491,6 @@ export default function AdminSidebar() {
               <Truck size={18} />
               <span style={{ flex: 1 }}>My Delivery Manifest</span>
             </NavLink>
-
             <NavLink to="/warehouse-crating" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
               <PackageCheck size={18} />
               <span>Society Drop Crates Handover</span>
@@ -551,6 +498,25 @@ export default function AdminSidebar() {
           </>
         )}
       </nav>
+      {/* Next Day Delivery Brand Card (matching user reference inspiration) */}
+      <div style={{
+        margin: '10px 12px 14px',
+        padding: '12px 14px',
+        borderRadius: '12px',
+        background: 'linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%)',
+        border: '1.5px solid #BBF7D0',
+        position: 'relative',
+        overflow: 'hidden',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '3px' }}>
+          <span style={{ fontSize: '20px' }}>🚚</span>
+          <strong style={{ fontSize: '12.5px', color: '#166534', fontWeight: 800 }}>Next Day Delivery</strong>
+        </div>
+        <p style={{ fontSize: '11px', color: '#15803D', margin: 0, lineHeight: 1.35, fontWeight: 500 }}>
+          Farm-fresh at dawn, at your society desk before 7:00 AM!
+        </p>
+      </div>
     </aside>
   );
 }

@@ -14,7 +14,7 @@ import {
   Trash2, 
   Copy, 
   ExternalLink,
-  DollarSign,
+  IndianRupee,
   AlertTriangle
 } from 'lucide-react';
 import { useAdminRole } from '../context/AdminRoleContext';

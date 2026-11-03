@@ -1,11 +1,18 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UserCheck, Clock, LogOut, User, CreditCard, Settings } from 'lucide-react';
+import { 
+  UserCheck, 
+  LogOut, 
+  User, 
+  CreditCard, 
+  Settings, 
+  TrendingUp, 
+  ExternalLink, 
+  ChevronDown
+} from 'lucide-react';
 import FreshiozLogo from '../common/FreshiozLogo';
 import PaymentGatewaySettingsModal from '../common/PaymentGatewaySettingsModal';
 import { useAdminRole, ROLES } from '../../context/AdminRoleContext';
-import { useToast } from '../../context/ToastContext';
-import { API_BASE_URL } from '../../api/client';
 
 export default function AdminTopBar({ onMobileMenuClick }) {
   const navigate = useNavigate();
@@ -16,87 +23,42 @@ export default function AdminTopBar({ onMobileMenuClick }) {
     requestLogout, 
     allowedRoles, 
     canSwitchRoles,
-    hasApiError,
-    apiErrorMessage,
-    refetchAll
   } = useAdminRole();
-  const { showToast } = useToast();
-  const [isPaymentModalOpen, setIsPaymentModalOpen] = React.useState(false);
-  const [healthStatus, setHealthStatus] = React.useState({
-    isOnline: true,
-    isDatabaseConnected: true,
-    latencyMs: 0,
-    message: 'NestJS Live (IST)'
-  });
 
-  React.useEffect(() => {
-    const handleOpenPaymentModal = () => setIsPaymentModalOpen(true);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsProfileDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const handleOpenPaymentModal = () => navigate('/settings');
     window.addEventListener('open_payment_gateway_settings', handleOpenPaymentModal);
     return () => window.removeEventListener('open_payment_gateway_settings', handleOpenPaymentModal);
   }, []);
 
-  React.useEffect(() => {
-    let mounted = true;
-    const checkHealth = async () => {
-      try {
-        // Probe /health/ready which specifically asserts database connectivity
-        const res = await fetch(`${API_BASE_URL}/health/ready`, { signal: AbortSignal.timeout(6000) });
-        if (res.ok) {
-          const data = await res.json().catch(() => ({}));
-          if (mounted) {
-            setHealthStatus({
-              isOnline: true,
-              isDatabaseConnected: data.database === 'connected',
-              latencyMs: data.latencyMs || 0,
-              message: 'NestJS Live (IST)'
-            });
-          }
-        } else {
-          // If readiness fails (e.g. 503 DB down or other error), check liveness to distinguish process vs DB
-          const liveRes = await fetch(`${API_BASE_URL}/health/live`, { signal: AbortSignal.timeout(3000) }).catch(() => null);
-          if (mounted) {
-            if (liveRes && liveRes.ok) {
-              setHealthStatus({
-                isOnline: true,
-                isDatabaseConnected: false,
-                latencyMs: 0,
-                message: 'PostgreSQL Disconnected'
-              });
-            } else {
-              setHealthStatus({
-                isOnline: false,
-                isDatabaseConnected: false,
-                latencyMs: 0,
-                message: 'Backend Offline'
-              });
-            }
-          }
-        }
-      } catch (e) {
-        if (mounted) {
-          setHealthStatus({
-            isOnline: false,
-            isDatabaseConnected: false,
-            latencyMs: 0,
-            message: 'Backend Offline'
-          });
-        }
-      }
-    };
-    checkHealth();
-    const interval = setInterval(checkHealth, 30000);
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
-  }, []);
-
   const handleLogout = () => {
+    setIsProfileDropdownOpen(false);
     requestLogout();
+  };
+
+  const handleOpenExecutiveMis = () => {
+    setIsProfileDropdownOpen(false);
+    window.open('/admin/executive-mis', '_blank');
   };
 
   return (
     <header className="admin-topbar">
+      {/* Left Branding */}
       <div className="topbar-left" style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
         <FreshiozLogo height={40} showTagline={false} />
         <div style={{ borderLeft: '1.5px solid #CBD5E1', paddingLeft: '12px' }}>
@@ -109,84 +71,9 @@ export default function AdminTopBar({ onMobileMenuClick }) {
         </div>
       </div>
 
-      <div className="topbar-right" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-        {/* Dynamic Live Backend & Database Indicator Badge */}
-        <div
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            background: !healthStatus.isOnline 
-              ? '#FEF2F2' 
-              : (!healthStatus.isDatabaseConnected ? '#FFFBEB' : '#ECFDF5'),
-            border: !healthStatus.isOnline 
-              ? '1px solid #FECACA' 
-              : (!healthStatus.isDatabaseConnected ? '1px solid #FCD34D' : '1px solid #A7F3D0'),
-            color: !healthStatus.isOnline 
-              ? '#991B1B' 
-              : (!healthStatus.isDatabaseConnected ? '#92400E' : '#065F46'),
-            padding: '3px 9px',
-            borderRadius: '9999px',
-            fontSize: '11px',
-            fontWeight: 700
-          }}
-          title={
-            !healthStatus.isOnline
-              ? 'Backend Offline - Cannot reach NestJS API server on :5000'
-              : (!healthStatus.isDatabaseConnected
-                  ? 'PostgreSQL Disconnected - Database connection check failed'
-                  : `Backend: NestJS on :5000 | PostgreSQL Connected (${healthStatus.latencyMs}ms) | Asia/Kolkata (IST)`)
-          }
-        >
-          <span
-            style={{
-              width: '7px',
-              height: '7px',
-              borderRadius: '50%',
-              background: !healthStatus.isOnline 
-                ? '#EF4444' 
-                : (!healthStatus.isDatabaseConnected ? '#D97706' : '#10B981'),
-              display: 'inline-block',
-              boxShadow: !healthStatus.isOnline 
-                ? '0 0 6px #EF4444' 
-                : (!healthStatus.isDatabaseConnected ? '0 0 6px #D97706' : '0 0 6px #10B981'),
-            }}
-          />
-          <span>{healthStatus.message}</span>
-        </div>
-
-        {hasApiError && (
-          <div
-            onClick={() => refetchAll && refetchAll()}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              background: '#FEF2F2',
-              border: '1px solid #FECACA',
-              color: '#991B1B',
-              padding: '3px 9px',
-              borderRadius: '9999px',
-              fontSize: '11px',
-              fontWeight: 700,
-              cursor: 'pointer'
-            }}
-            title={`API Outage Detected: ${apiErrorMessage || 'Failed to fetch live records'}. Click to retry.`}
-          >
-            <span
-              style={{
-                width: '7px',
-                height: '7px',
-                borderRadius: '50%',
-                background: '#EF4444',
-                display: 'inline-block',
-                boxShadow: '0 0 6px #EF4444',
-              }}
-            />
-            <span>API Outage Detected (Retry)</span>
-          </div>
-        )}
-        {/* Dynamic Role Switcher Pill - ONLY visible to multi-role or Super Admin users */}
+      {/* Right Controls */}
+      <div className="topbar-right" style={{ display: 'flex', alignItems: 'center', gap: '12px', position: 'relative' }}>
+        {/* Dynamic Role Switcher Pill - visible to multi-role or Super Admin users */}
         {canSwitchRoles ? (
           <div className="role-switcher-box" title="Switch between your assigned operational workdesks">
             <UserCheck size={15} color="#234B3C" />
@@ -224,62 +111,180 @@ export default function AdminTopBar({ onMobileMenuClick }) {
           </div>
         )}
 
-        {/* Super Admin Payment Gateway Settings */}
-        {currentRoleId === 'SUPER_ADMIN' && (
+        {/* Interactive User Profile Chip & Dropdown Menu */}
+        <div ref={dropdownRef} style={{ position: 'relative' }}>
           <button
             type="button"
-            onClick={() => setIsPaymentModalOpen(true)}
-            title="Configure Razorpay Payment Gateway & API Keys"
+            onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
             style={{
-              display: 'inline-flex',
+              display: 'flex',
               alignItems: 'center',
-              gap: '6px',
-              padding: '6px 12px',
-              borderRadius: '8px',
-              background: '#F0FDF4',
-              color: '#166534',
-              fontSize: '12px',
-              fontWeight: 700,
-              border: '1px solid #BBF7D0',
+              gap: '8px',
+              background: isProfileDropdownOpen ? '#E2E8F0' : '#F8FAFC',
+              border: '1px solid #CBD5E1',
+              borderRadius: '9999px',
+              padding: '4px 12px 4px 5px',
               cursor: 'pointer',
-              transition: 'all 0.2s'
+              transition: 'background 0.2s',
             }}
+            title="Account & Executive Menu"
           >
-            <Settings size={14} color="#166534" />
-            <span>Settings & Gateway</span>
+            <div style={{
+              width: '28px',
+              height: '28px',
+              borderRadius: '50%',
+              background: '#234B3C',
+              color: '#FFF',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '11px',
+              fontWeight: 800
+            }}>
+              {currentUser?.avatar || 'SA'}
+            </div>
+            <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#0F172A', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {currentUser?.name?.split(' ')[0] || 'Super Admin'}
+            </div>
+            <ChevronDown size={14} color="#64748B" style={{ transform: isProfileDropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
           </button>
-        )}
 
-        {/* Current User Chip */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          background: '#F8FAFC',
-          border: '1px solid #E2E8F0',
-          borderRadius: '9999px',
-          padding: '3px 10px 3px 4px'
-        }}>
-          <div style={{
-            width: '26px',
-            height: '26px',
-            borderRadius: '50%',
-            background: '#234B3C',
-            color: '#FFF',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '11px',
-            fontWeight: 800
-          }}>
-            {currentUser?.avatar || 'VR'}
-          </div>
-          <div style={{ fontSize: '12px', fontWeight: 700, color: '#0F172A', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {currentUser?.name?.split(' ')[0] || 'User'}
-          </div>
+          {/* Profile Dropdown Menu */}
+          {isProfileDropdownOpen && (
+            <div style={{
+              position: 'absolute',
+              right: 0,
+              top: 'calc(100% + 8px)',
+              width: '280px',
+              background: '#FFFFFF',
+              borderRadius: '12px',
+              border: '1px solid #E2E8F0',
+              boxShadow: '0 12px 32px rgba(15, 23, 42, 0.16)',
+              zIndex: 9999,
+              padding: '10px',
+              boxSizing: 'border-box',
+            }}>
+              {/* Profile Card Header */}
+              <div style={{ padding: '8px 10px 12px', borderBottom: '1px solid #F1F5F9' }}>
+                <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A' }}>
+                  {currentUser?.name || 'Super Admin'}
+                </div>
+                <div style={{ fontSize: '11px', color: '#64748B', margin: '2px 0 8px' }}>
+                  {currentUser?.email || 'superadmin@gmail.com'}
+                </div>
+                <span style={{
+                  display: 'inline-block',
+                  background: '#ECFDF5',
+                  color: '#065F46',
+                  border: '1px solid #A7F3D0',
+                  padding: '2px 8px',
+                  borderRadius: '9999px',
+                  fontSize: '10px',
+                  fontWeight: 800,
+                  letterSpacing: '0.04em',
+                  textTransform: 'uppercase'
+                }}>
+                  {ROLES[currentRoleId]?.label || 'Super Admin'}
+                </span>
+              </div>
+
+              {/* Menu Links */}
+              <div style={{ padding: '8px 0' }}>
+                {/* Executive MIS Command Center Link */}
+                {(currentRoleId === 'SUPER_ADMIN' || currentRoleId === 'WAREHOUSE_MANAGER') && (
+                  <button
+                    type="button"
+                    onClick={handleOpenExecutiveMis}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '10px',
+                      borderRadius: '8px',
+                      background: 'rgba(35, 75, 60, 0.06)',
+                      border: '1px solid rgba(35, 75, 60, 0.15)',
+                      color: '#234B3C',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      marginBottom: '6px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <TrendingUp size={16} color="#234B3C" />
+                      <div>
+                        <div>Executive Analytics & MIS ↗</div>
+                        <div style={{ fontSize: '10.5px', color: '#64748B', fontWeight: 500 }}>
+                          Opens in New Browser Tab
+                        </div>
+                      </div>
+                    </div>
+                    <ExternalLink size={14} color="#234B3C" />
+                  </button>
+                )}
+
+                {/* Settings & Payment Gateway */}
+                {currentRoleId === 'SUPER_ADMIN' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsProfileDropdownOpen(false);
+                      setIsPaymentModalOpen(true);
+                    }}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '9px 10px',
+                      borderRadius: '8px',
+                      color: '#334155',
+                      fontSize: '12.5px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = '#F8FAFC'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <Settings size={15} color="#64748B" />
+                    <span>Payment Gateway Settings</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Sign Out Action */}
+              <div style={{ borderTop: '1px solid #F1F5F9', paddingTop: '6px' }}>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '8px 10px',
+                    borderRadius: '8px',
+                    color: '#DC2626',
+                    fontSize: '12.5px',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = '#FEF2F2'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                >
+                  <LogOut size={15} color="#DC2626" />
+                  <span>Sign Out</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Logout Button */}
+        {/* Direct Logout Button */}
         <button
           type="button"
           onClick={handleLogout}

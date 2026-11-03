@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
-  DollarSign, 
+  IndianRupee, 
   ArrowUpRight, 
   ArrowDownLeft, 
   Wallet, 
