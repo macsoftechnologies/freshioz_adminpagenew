@@ -57,6 +57,9 @@ export default function WarehousesPage() {
   const [isWarehouseModalOpen, setIsWarehouseModalOpen] = useState(false);
   const [editingWarehouse, setEditingWarehouse] = useState(null);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [statusTargetWarehouse, setStatusTargetWarehouse] = useState(null);
+  const [hubStatusFilter, setHubStatusFilter] = useState('ALL');
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   // Warehouse Form State with Lat / Lng Coordinates
   const [warehouseForm, setWarehouseForm] = useState({
@@ -109,6 +112,36 @@ export default function WarehousesPage() {
   };
 
   const isSuperAdmin = currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN';
+
+  const filteredWarehouses = warehouses.filter(wh => {
+    if (hubStatusFilter === 'ACTIVE' && wh.status === 'INACTIVE') return false;
+    if (hubStatusFilter === 'INACTIVE' && wh.status !== 'INACTIVE') return false;
+    return true;
+  });
+
+  const handleConfirmToggleWarehouseStatus = async () => {
+    if (!statusTargetWarehouse) return;
+    setIsUpdatingStatus(true);
+    const newStatus = statusTargetWarehouse.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    try {
+      await updateWarehouseMutation.mutateAsync({
+        id: statusTargetWarehouse.id,
+        data: { status: newStatus }
+      });
+      showToast(
+        newStatus === 'ACTIVE'
+          ? `✓ Hub "${statusTargetWarehouse.name}" is now ACTIVE. Deliveries resumed.`
+          : `✓ Hub "${statusTargetWarehouse.name}" is now PAUSED (Inactive). Deliveries paused for mapped societies.`,
+        'success'
+      );
+      setStatusTargetWarehouse(null);
+    } catch (err) {
+      console.error('Hub status toggle failed:', err);
+      showToast(`Failed to update hub status: ${err?.message || 'Server error'}`, 'error');
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
 
   // ================= WAREHOUSE MODAL HANDLERS =================
   const handleOpenAddWarehouse = () => {
@@ -295,8 +328,55 @@ export default function WarehousesPage() {
             </p>
           </div>
 
-          <div style={{ fontSize: '12px', color: '#0369A1', fontWeight: 700, background: '#E0F2FE', padding: '4px 10px', borderRadius: '6px' }}>
-            {warehouses.length} Active Hubs
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <button
+              type="button"
+              onClick={() => setHubStatusFilter('ALL')}
+              style={{
+                padding: '4px 10px',
+                borderRadius: '6px',
+                border: 'none',
+                background: hubStatusFilter === 'ALL' ? '#234B3C' : '#F1F5F9',
+                color: hubStatusFilter === 'ALL' ? '#FFFFFF' : '#64748B',
+                fontSize: '11.5px',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              All Hubs ({warehouses.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setHubStatusFilter('ACTIVE')}
+              style={{
+                padding: '4px 10px',
+                borderRadius: '6px',
+                border: 'none',
+                background: hubStatusFilter === 'ACTIVE' ? '#059669' : '#F1F5F9',
+                color: hubStatusFilter === 'ACTIVE' ? '#FFFFFF' : '#64748B',
+                fontSize: '11.5px',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              Active ({warehouses.filter(w => w.status !== 'INACTIVE').length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setHubStatusFilter('INACTIVE')}
+              style={{
+                padding: '4px 10px',
+                borderRadius: '6px',
+                border: 'none',
+                background: hubStatusFilter === 'INACTIVE' ? '#DC2626' : '#F1F5F9',
+                color: hubStatusFilter === 'INACTIVE' ? '#FFFFFF' : '#64748B',
+                fontSize: '11.5px',
+                fontWeight: 700,
+                cursor: 'pointer'
+              }}
+            >
+              Paused ({warehouses.filter(w => w.status === 'INACTIVE').length})
+            </button>
           </div>
         </div>
 
@@ -325,7 +405,7 @@ export default function WarehousesPage() {
                     </div>
                   </td>
                 </tr>
-              ) : warehouses.length === 0 ? (
+              ) : filteredWarehouses.length === 0 ? (
                 <tr>
                   <td colSpan="9">
                     <div className="admin-empty-state">
@@ -340,7 +420,7 @@ export default function WarehousesPage() {
                   </td>
                 </tr>
               ) : (
-                warehouses.map(wh => {
+                filteredWarehouses.map(wh => {
                 const whSocCount = societies.filter(s => s.warehouseId === wh.id).length;
 
                 return (
@@ -438,8 +518,16 @@ export default function WarehousesPage() {
                     </td>
 
                     <td>
-                      <span className={`status-pill ${wh.status === 'ACTIVE' ? 'approved' : 'rejected'}`}>
-                        {wh.status || 'ACTIVE'}
+                      <span className={`status-pill ${wh.status !== 'INACTIVE' ? 'approved' : 'rejected'}`} style={{ cursor: 'pointer' }}>
+                        <button
+                          type="button"
+                          onClick={() => setStatusTargetWarehouse(wh)}
+                          style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                          title={wh.status === 'INACTIVE' ? 'Click to Activate Hub' : 'Click to Pause Hub'}
+                        >
+                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: wh.status !== 'INACTIVE' ? '#059669' : '#DC2626' }} />
+                          {wh.status !== 'INACTIVE' ? 'ACTIVE' : 'PAUSED'}
+                        </button>
                       </span>
                     </td>
 
@@ -591,15 +679,28 @@ export default function WarehousesPage() {
                 </div>
               </div>
 
-              <div style={{ marginBottom: '14px' }}>
-                <label className="form-label-title">Handling Capacity (Metric Tons)</label>
-                <input
-                  type="number"
-                  className="form-input-control"
-                  placeholder="40"
-                  value={warehouseForm.capacityTons}
-                  onChange={(e) => setWarehouseForm({ ...warehouseForm, capacityTons: Number(e.target.value) })}
-                />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                <div>
+                  <label className="form-label-title">Handling Capacity (Metric Tons)</label>
+                  <input
+                    type="number"
+                    className="form-input-control"
+                    placeholder="40"
+                    value={warehouseForm.capacityTons}
+                    onChange={(e) => setWarehouseForm({ ...warehouseForm, capacityTons: Number(e.target.value) })}
+                  />
+                </div>
+                <div>
+                  <label className="form-label-title">Hub Operational Status *</label>
+                  <select
+                    className="form-input-control"
+                    value={warehouseForm.status || 'ACTIVE'}
+                    onChange={(e) => setWarehouseForm({ ...warehouseForm, status: e.target.value })}
+                  >
+                    <option value="ACTIVE">🟢 ACTIVE (Accepting Orders & Crating)</option>
+                    <option value="INACTIVE">🔴 INACTIVE (Hub Paused / Maintenance)</option>
+                  </select>
+                </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '20px' }}>
@@ -727,6 +828,98 @@ export default function WarehousesPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= HUB STATUS TOGGLE CONFIRMATION POPUP ================= */}
+      {statusTargetWarehouse && (
+        <div 
+          className="admin-modal-overlay" 
+          style={{ zIndex: 1200, background: 'rgba(15, 23, 42, 0.72)' }}
+        >
+          <div 
+            className="admin-modal-card" 
+            style={{ 
+              maxWidth: '480px', 
+              border: '2px solid #E2E8F0',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+              padding: '24px 26px',
+              animation: 'adminModalEnter 0.2s ease-out'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', marginBottom: '18px' }}>
+              <div style={{ 
+                width: '42px', 
+                height: '42px', 
+                borderRadius: '10px', 
+                background: statusTargetWarehouse.status === 'ACTIVE' ? '#FEE2E2' : '#ECFDF5', 
+                color: statusTargetWarehouse.status === 'ACTIVE' ? '#DC2626' : '#059669', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <AlertCircle size={22} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <h3 style={{ fontSize: '17px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                  {statusTargetWarehouse.status === 'ACTIVE' ? 'Pause Fulfillment Hub?' : 'Activate Fulfillment Hub?'}
+                </h3>
+                <p style={{ fontSize: '13px', color: '#475569', marginTop: '6px', marginBottom: 0, lineHeight: 1.45 }}>
+                  {statusTargetWarehouse.status === 'ACTIVE' ? (
+                    <>
+                      Are you sure you want to pause <strong>{statusTargetWarehouse.name}</strong> ({statusTargetWarehouse.code || statusTargetWarehouse.id})? Morning crate deliveries for <strong>{societies.filter(s => s.warehouseId === statusTargetWarehouse.id).length} mapped apartment societies</strong> will be temporarily paused.
+                    </>
+                  ) : (
+                    <>
+                      Are you sure you want to activate <strong>{statusTargetWarehouse.name}</strong> ({statusTargetWarehouse.code || statusTargetWarehouse.id})? Morning crating dispatch and order checkout will immediately resume for all mapped apartment communities.
+                    </>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '22px' }}>
+              <button
+                type="button"
+                onClick={() => setStatusTargetWarehouse(null)}
+                disabled={isUpdatingStatus}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: '8px',
+                  border: '1.5px solid #CBD5E1',
+                  background: '#FFFFFF',
+                  color: '#475569',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmToggleWarehouseStatus}
+                disabled={isUpdatingStatus}
+                style={{
+                  padding: '10px 22px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: statusTargetWarehouse.status === 'ACTIVE' ? '#DC2626' : '#059669',
+                  color: '#FFFFFF',
+                  fontWeight: 800,
+                  fontSize: '13px',
+                  cursor: 'pointer'
+                }}
+              >
+                {isUpdatingStatus 
+                  ? 'Updating...' 
+                  : statusTargetWarehouse.status === 'ACTIVE' 
+                    ? 'Yes, Pause Hub' 
+                    : 'Yes, Activate Hub'}
+              </button>
+            </div>
           </div>
         </div>
       )}

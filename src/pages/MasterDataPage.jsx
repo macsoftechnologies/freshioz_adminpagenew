@@ -152,6 +152,9 @@ export default function MasterDataPage() {
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isUnitModalOpen, setIsUnitModalOpen] = useState(false);
   const [isConfirmProductModalOpen, setIsConfirmProductModalOpen] = useState(false);
+  const [statusTargetProduct, setStatusTargetProduct] = useState(null);
+  const [productStatusFilter, setProductStatusFilter] = useState('ALL');
+  const [isUpdatingProductStatus, setIsUpdatingProductStatus] = useState(false);
 
 
 
@@ -244,6 +247,31 @@ export default function MasterDataPage() {
       console.error('Backend category persistence failed:', err);
       showToast(`Failed to save category on server: ${err?.message || 'Server error'}`, 'error');
       return;
+    }
+  };
+
+  // Toggle Produce Seasonal Status (Active In-Season <-> Inactive Off-Season)
+  const handleConfirmToggleProductStatus = async () => {
+    if (!statusTargetProduct) return;
+    setIsUpdatingProductStatus(true);
+    const newStatus = statusTargetProduct.status === 'INACTIVE' ? 'ACTIVE' : 'INACTIVE';
+    try {
+      await updateProductMutation.mutateAsync({
+        id: statusTargetProduct.id,
+        data: { status: newStatus }
+      });
+      showToast(
+        newStatus === 'ACTIVE'
+          ? `✓ "${statusTargetProduct.name}" is now Live & In-Season in the customer store!`
+          : `✓ "${statusTargetProduct.name}" marked as Off-Season and hidden from shoppers.`,
+        'success'
+      );
+      setStatusTargetProduct(null);
+    } catch (err) {
+      console.error('Failed to update product status:', err);
+      showToast(`Failed to update produce status: ${err?.message || 'Server error'}`, 'error');
+    } finally {
+      setIsUpdatingProductStatus(false);
     }
   };
 
@@ -513,6 +541,8 @@ export default function MasterDataPage() {
 
   // Filtered datasets
   const filteredProducts = products.filter(p => {
+    if (productStatusFilter === 'ACTIVE' && p.status === 'INACTIVE') return false;
+    if (productStatusFilter === 'INACTIVE' && p.status !== 'INACTIVE') return false;
     const pName = String(p.name || '');
     const rawCat = p.category;
     const pCat = typeof rawCat === 'object' && rawCat !== null 
@@ -717,10 +747,62 @@ export default function MasterDataPage() {
         gap: '10px',
         marginBottom: '12px'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          {activeTab === 'PRODUCTS' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <button
+                type="button"
+                onClick={() => { setProductStatusFilter('ALL'); setCurrentPage(1); }}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: productStatusFilter === 'ALL' ? '#234B3C' : '#F1F5F9',
+                  color: productStatusFilter === 'ALL' ? '#FFFFFF' : '#64748B',
+                  fontSize: '11.5px',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                All Produce ({products.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => { setProductStatusFilter('ACTIVE'); setCurrentPage(1); }}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: productStatusFilter === 'ACTIVE' ? '#059669' : '#F1F5F9',
+                  color: productStatusFilter === 'ACTIVE' ? '#FFFFFF' : '#64748B',
+                  fontSize: '11.5px',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                In-Season ({products.filter(p => p.status !== 'INACTIVE').length})
+              </button>
+              <button
+                type="button"
+                onClick={() => { setProductStatusFilter('INACTIVE'); setCurrentPage(1); }}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: productStatusFilter === 'INACTIVE' ? '#D97706' : '#F1F5F9',
+                  color: productStatusFilter === 'INACTIVE' ? '#FFFFFF' : '#64748B',
+                  fontSize: '11.5px',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                Off-Season ({products.filter(p => p.status === 'INACTIVE').length})
+              </button>
+            </div>
+          )}
           <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>
             {activeTab === 'PRODUCTS' 
-              ? `Showing ${filteredProducts.length} of ${products.length} produce items` 
+              ? \u2022 ` items shown` 
               : activeTab === 'CATEGORIES' 
               ? `Showing ${filteredCategories.length} categories` 
               : `Showing ${filteredUnits.length} packaging units`}
@@ -922,8 +1004,16 @@ export default function MasterDataPage() {
                       </td>
 
                       <td>
-                        <span className={`status-pill ${prod.status === 'INACTIVE' ? 'rejected' : 'approved'}`} style={{ fontSize: '10.5px' }}>
-                          {prod.status || 'ACTIVE'}
+                        <span className={`status-pill ${prod.status === 'INACTIVE' ? 'rejected' : 'approved'}`} style={{ fontSize: '10.5px', cursor: 'pointer' }}>
+                        <button
+                          type="button"
+                          onClick={() => setStatusTargetProduct(prod)}
+                          style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                          title={prod.status === 'INACTIVE' ? 'Click to make In-Season (Live)' : 'Click to mark Off-Season (Pause)'}
+                        >
+                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: prod.status === 'INACTIVE' ? '#94A3B8' : '#059669' }} />
+                          {prod.status === 'INACTIVE' ? 'OFF-SEASON' : 'IN-SEASON'}
+                        </button>
                         </span>
                       </td>
 
@@ -1618,7 +1708,7 @@ export default function MasterDataPage() {
                   </div>
                 </div>
 
-                <div style={{ marginBottom: '8px' }}>
+                <div style={{ marginBottom: '14px' }}>
                   <label className="form-label-title" style={{ fontSize: '11px', fontWeight: 700 }}>Freshness Description & Tags</label>
                   <input
                     type="text"
@@ -1627,6 +1717,21 @@ export default function MasterDataPage() {
                     value={productForm.desc}
                     onChange={(e) => setProductForm({ ...productForm, desc: e.target.value })}
                   />
+                </div>
+
+                <div style={{ marginBottom: '14px' }}>
+                  <label className="form-label-title" style={{ fontSize: '11px', fontWeight: 700 }}>Seasonal Availability Status *</label>
+                  <select
+                    className="form-input-control"
+                    value={productForm.status || 'ACTIVE'}
+                    onChange={(e) => setProductForm({ ...productForm, status: e.target.value })}
+                  >
+                    <option value="ACTIVE">🟢 ACTIVE (In-Season & Live in Customer Store)</option>
+                    <option value="INACTIVE">⚪ INACTIVE (Off-Season / Hidden from Shoppers)</option>
+                  </select>
+                  <span style={{ fontSize: '10.5px', color: '#64748B', marginTop: '3px', display: 'block' }}>
+                    Off-season items remain in database with full pricing history, but are hidden from shoppers.
+                  </span>
                 </div>
               </div>
 
@@ -1881,6 +1986,98 @@ export default function MasterDataPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= PRODUCE STATUS TOGGLE CONFIRMATION POPUP ================= */}
+      {statusTargetProduct && (
+        <div 
+          className="admin-modal-overlay" 
+          style={{ zIndex: 1200, background: 'rgba(15, 23, 42, 0.72)' }}
+        >
+          <div 
+            className="admin-modal-card" 
+            style={{ 
+              maxWidth: '480px', 
+              border: '2px solid #E2E8F0',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+              padding: '24px 26px',
+              animation: 'adminModalEnter 0.2s ease-out'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', marginBottom: '18px' }}>
+              <div style={{ 
+                width: '42px', 
+                height: '42px', 
+                borderRadius: '10px', 
+                background: statusTargetProduct.status === 'INACTIVE' ? '#ECFDF5' : '#FEF3C7', 
+                color: statusTargetProduct.status === 'INACTIVE' ? '#059669' : '#D97706', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <AlertCircle size={22} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <h3 style={{ fontSize: '17px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                  {statusTargetProduct.status === 'INACTIVE' ? 'Activate Produce for Live Store?' : 'Mark Produce as Off-Season?'}
+                </h3>
+                <p style={{ fontSize: '13px', color: '#475569', marginTop: '6px', marginBottom: 0, lineHeight: 1.45 }}>
+                  {statusTargetProduct.status === 'INACTIVE' ? (
+                    <>
+                      Are you sure you want to activate <strong>{statusTargetProduct.name}</strong>? It will immediately appear in the customer storefront catalog for next-day society orders.
+                    </>
+                  ) : (
+                    <>
+                      Are you sure you want to mark <strong>{statusTargetProduct.name}</strong> as off-season? It will be immediately hidden from the customer storefront catalog so shoppers cannot order it.
+                    </>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '22px' }}>
+              <button
+                type="button"
+                onClick={() => setStatusTargetProduct(null)}
+                disabled={isUpdatingProductStatus}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: '8px',
+                  border: '1.5px solid #CBD5E1',
+                  background: '#FFFFFF',
+                  color: '#475569',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmToggleProductStatus}
+                disabled={isUpdatingProductStatus}
+                style={{
+                  padding: '10px 22px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: statusTargetProduct.status === 'INACTIVE' ? '#059669' : '#D97706',
+                  color: '#FFFFFF',
+                  fontWeight: 800,
+                  fontSize: '13px',
+                  cursor: 'pointer'
+                }}
+              >
+                {isUpdatingProductStatus 
+                  ? 'Updating...' 
+                  : statusTargetProduct.status === 'INACTIVE' 
+                    ? 'Yes, Make Live & In-Season' 
+                    : 'Yes, Mark Off-Season'}
+              </button>
+            </div>
           </div>
         </div>
       )}
