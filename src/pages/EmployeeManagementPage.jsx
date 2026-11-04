@@ -34,6 +34,9 @@ export default function EmployeeManagementPage() {
   const { currentUser } = useAdminRole();
   const { showToast } = useToast();
 
+  const isSuperAdmin = currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN' || currentUser?.email === 'superadmin@gmail.com';
+  const isWarehouseScoped = !isSuperAdmin && currentUser?.assignedWarehouseId && currentUser.assignedWarehouseId !== 'ALL';
+
   const { data: employees = [], isLoading } = employeeResource.useList();
   const { data: warehouses = [] } = warehouseResource.useList();
 
@@ -90,17 +93,21 @@ export default function EmployeeManagementPage() {
 
   const handleOpenAddModal = () => {
     setEditingEmployee(null);
+    const assignedWh = isWarehouseScoped 
+      ? warehouses.find(w => w.id === currentUser.assignedWarehouseId || w.code === currentUser.assignedWarehouseId)
+      : warehouses[0];
+
     setFormData({
       name: '',
       phone: '',
       email: '',
-      roles: ['WAREHOUSE_MANAGER'],
-      assignedWarehouseId: warehouses[0]?.id || 'ALL',
-      assignedLocationType: warehouses[0] ? 'WAREHOUSE' : 'ALL',
-      assignedLocationName: warehouses[0]?.name || 'All Hubs & Warehouses (Citywide)',
+      roles: isWarehouseScoped ? ['WAREHOUSE_STAFF'] : ['WAREHOUSE_MANAGER'],
+      assignedWarehouseId: isWarehouseScoped ? (assignedWh?.id || currentUser.assignedWarehouseId) : (warehouses[0]?.id || 'ALL'),
+      assignedLocationType: 'WAREHOUSE',
+      assignedLocationName: assignedWh?.name || 'All Hubs & Warehouses (Citywide)',
       status: 'ACTIVE',
       authMethod: 'PASSWORD',
-      password: 'admin123',
+      password: 'Freshioz@123',
       inviteStatus: 'ACTIVE',
       inviteToken: '',
       notes: ''
@@ -310,6 +317,16 @@ export default function EmployeeManagementPage() {
 
   // Filtered List
   const filteredEmployees = employees.filter(emp => {
+    // Warehouse Scope Guard: Staff belonging to a warehouse only see employees belonging to that warehouse
+    if (isWarehouseScoped) {
+      if (emp.assignedWarehouseId !== currentUser.assignedWarehouseId) {
+        return false;
+      }
+      if (emp.roles?.includes('SUPER_ADMIN') || emp.email === 'superadmin@gmail.com') {
+        return false;
+      }
+    }
+
     const matchesQuery = 
       emp.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       emp.phone?.includes(searchQuery) ||
@@ -781,7 +798,7 @@ export default function EmployeeManagementPage() {
                 </label>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px' }}>
-                  {AVAILABLE_ROLES.map(role => {
+                  {AVAILABLE_ROLES.filter(r => !isWarehouseScoped || r.id !== 'SUPER_ADMIN').map(role => {
                     const isSelected = formData.roles?.includes(role.id);
                     return (
                       <div
@@ -828,22 +845,29 @@ export default function EmployeeManagementPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.8fr', gap: '14px', marginBottom: '14px' }}>
                 <div>
                   <label className="form-label-title">Assigned Hub / Regional Warehouse</label>
-                  <select
-                    className="form-input-control"
-                    value={formData.assignedWarehouseId}
-                    onChange={(e) => setFormData({ ...formData, assignedWarehouseId: e.target.value })}
-                  >
-                    <optgroup label="Citywide Access">
-                      <option value="ALL">🌐 All Hubs & Warehouses (Citywide)</option>
-                    </optgroup>
-                    <optgroup label="Regional Warehouse Logistics Hubs">
-                      {warehouses.map(wh => (
-                        <option key={wh.id} value={wh.id}>
-                          🏢 {wh.name} ({wh.code || wh.id})
-                        </option>
-                      ))}
-                    </optgroup>
-                  </select>
+                  {isWarehouseScoped ? (
+                    <div style={{ padding: '8px 12px', borderRadius: '6px', border: '1.5px solid #A7F3D0', background: '#ECFDF5', fontSize: '13px', fontWeight: 800, color: '#065F46', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>🏢 {warehouses.find(w => w.id === currentUser.assignedWarehouseId || w.code === currentUser.assignedWarehouseId)?.name || currentUser.assignedWarehouseId}</span>
+                      <span style={{ fontSize: '10px', background: '#059669', color: '#FFF', padding: '1px 5px', borderRadius: '4px' }}>🔒 Locked to Your Hub</span>
+                    </div>
+                  ) : (
+                    <select
+                      className="form-input-control"
+                      value={formData.assignedWarehouseId}
+                      onChange={(e) => setFormData({ ...formData, assignedWarehouseId: e.target.value })}
+                    >
+                      <optgroup label="Citywide Access">
+                        <option value="ALL">🌐 All Hubs & Warehouses (Citywide)</option>
+                      </optgroup>
+                      <optgroup label="Regional Warehouse Logistics Hubs">
+                        {warehouses.map(wh => (
+                          <option key={wh.id} value={wh.id}>
+                            🏢 {wh.name} ({wh.code || wh.id})
+                          </option>
+                        ))}
+                      </optgroup>
+                    </select>
+                  )}
                 </div>
 
                 <div>

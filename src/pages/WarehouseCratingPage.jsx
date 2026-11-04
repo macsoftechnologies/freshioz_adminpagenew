@@ -174,8 +174,11 @@ export default function WarehouseCratingPage() {
   const isRiderRole = currentUser?.role === 'DELIVERY_EXECUTIVE' && !currentUser?.roles?.includes('SUPER_ADMIN');
 
   // Filter orders based on user's role and assigned warehouse / route / dispatch slot
+  const isSuper = currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN' || currentUser?.email === 'superadmin@gmail.com';
+  const isWarehouseScoped = !isSuper && currentUser?.assignedWarehouseId && currentUser.assignedWarehouseId !== 'ALL';
+
   const visibleOrders = orders.filter(order => {
-    if (currentUser?.role === 'WAREHOUSE_MANAGER' && currentUser?.assignedWarehouseId && currentUser.assignedWarehouseId !== 'ALL') {
+    if (isWarehouseScoped) {
       if (order.warehouseId && order.warehouseId !== currentUser.assignedWarehouseId) return false;
     }
     // Strict Scope Guard: Delivery Executive only sees orders assigned to them!

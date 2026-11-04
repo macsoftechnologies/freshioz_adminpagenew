@@ -23,7 +23,15 @@ export default function ProcurementLogsPage() {
 
   // Filter logs by scope, date, and search query
   const filteredLogs = useMemo(() => {
+    const isSuper = currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN' || currentUser?.email === 'superadmin@gmail.com';
+    const isWarehouseScoped = !isSuper && currentUser?.assignedWarehouseId && currentUser.assignedWarehouseId !== 'ALL';
+
     return allLogs.filter(log => {
+      // Warehouse Scope Guard: Staff assigned to a warehouse only see procurement bills destined for their warehouse
+      if (isWarehouseScoped && log.destinationWarehouseId && log.destinationWarehouseId !== currentUser.assignedWarehouseId) {
+        return false;
+      }
+
       // 1. Scope filter (All vs My bills)
       if (scopeFilter === 'MY' && currentUser) {
         if (log.loggedByOfficerId !== currentUser.id && log.loggedByOfficerName !== currentUser.name) {

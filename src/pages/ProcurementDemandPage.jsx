@@ -71,9 +71,9 @@ export default function ProcurementDemandPage() {
   const allOrders = Array.isArray(rawOrders) ? rawOrders : [];
   const procurementLogs = Array.isArray(rawProcLogs) ? rawProcLogs : [];
 
-  const initialWarehouse = (currentUser?.role === 'WAREHOUSE_MANAGER' && currentUser?.assignedWarehouseId && currentUser.assignedWarehouseId !== 'ALL')
-    ? currentUser.assignedWarehouseId
-    : 'ALL';
+  const isSuperAdmin = currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN' || currentUser?.email === 'superadmin@gmail.com';
+  const isWarehouseScoped = !isSuperAdmin && currentUser?.assignedWarehouseId && currentUser.assignedWarehouseId !== 'ALL';
+  const initialWarehouse = isWarehouseScoped ? currentUser.assignedWarehouseId : 'ALL';
 
   // URL Hash synchronization (#pending vs #mandi)
   const getTabFromHash = () => {
@@ -571,28 +571,46 @@ export default function ProcurementDemandPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
             {/* Hub Selector */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Warehouse size={16} color="#0284C7" />
+              <Warehouse size={16} color={isWarehouseScoped ? "#059669" : "#0284C7"} />
               <label style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>Logistics Hub:</label>
-              <select
-                value={selectedWarehouseId}
-                onChange={(e) => setSelectedWarehouseId(e.target.value)}
-                style={{
+              {isWarehouseScoped ? (
+                <div style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
                   padding: '4px 10px',
                   borderRadius: '6px',
-                  border: '1px solid #CBD5E1',
+                  border: '1.5px solid #A7F3D0',
+                  background: '#ECFDF5',
                   fontSize: '12px',
-                  fontWeight: 700,
-                  color: '#0F172A',
-                  background: '#F8FAFC'
-                }}
-              >
-                <option value="ALL">All Hubs (Citywide Aggregated)</option>
-                {warehouses.map(w => (
-                  <option key={w.id} value={w.id}>
-                    {w.code} — {w.name}
-                  </option>
-                ))}
-              </select>
+                  fontWeight: 800,
+                  color: '#065F46'
+                }}>
+                  <span>{warehouses.find(w => w.id === currentUser.assignedWarehouseId || w.code === currentUser.assignedWarehouseId)?.name || currentUser.assignedWarehouseId}</span>
+                  <span style={{ fontSize: '10px', background: '#059669', color: '#FFF', padding: '1px 5px', borderRadius: '4px' }}>🔒 Assigned Hub</span>
+                </div>
+              ) : (
+                <select
+                  value={selectedWarehouseId}
+                  onChange={(e) => setSelectedWarehouseId(e.target.value)}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid #CBD5E1',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    color: '#0F172A',
+                    background: '#F8FAFC'
+                  }}
+                >
+                  <option value="ALL">All Hubs (Citywide Aggregated)</option>
+                  {warehouses.map(w => (
+                    <option key={w.id} value={w.id}>
+                      {w.code} — {w.name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             {/* Delivery Date Filter */}

@@ -479,6 +479,10 @@ export default function AdminSidebar() {
               <Warehouse size={18} />
               <span>Cut-Off Time & Hub Slots</span>
             </NavLink>
+            <NavLink to="/employees" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
+              <Users size={18} />
+              <span>Hub Staff & Team</span>
+            </NavLink>
           </>
         )}
         {/* ================= DELIVERY EXECUTIVE (RIDER) ONLY ================= */}

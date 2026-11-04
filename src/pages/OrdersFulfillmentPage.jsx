@@ -360,6 +360,8 @@ export default function OrdersFulfillmentPage() {
     exportToExcel('Freshioz_Morning_Delivery_Manifest', headers, rows);
   };
 
+  const isSuperAdmin = currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN' || currentUser?.email === 'superadmin@gmail.com';
+  const isWarehouseScoped = !isSuperAdmin && currentUser?.assignedWarehouseId && currentUser.assignedWarehouseId !== 'ALL';
   const isDeliveryExecutive = currentRoleId === 'DELIVERY_EXECUTIVE' || currentUser?.role === 'DELIVERY_EXECUTIVE';
 
   const isAssignedToCurrentRider = (o) => {
@@ -420,6 +422,11 @@ export default function OrdersFulfillmentPage() {
       if (riderTab === 'PENDING' && o.status === 'DELIVERED') return false;
       if (riderTab === 'DELIVERED' && o.status !== 'DELIVERED') return false;
     } else {
+      // Warehouse Scope Guard: Staff assigned to a warehouse only see orders for their warehouse
+      if (isWarehouseScoped && o.warehouseId && o.warehouseId !== currentUser.assignedWarehouseId) {
+        return false;
+      }
+
       const matchesStatus = statusFilter === 'ALL' || currentStatus === statusFilter;
       if (!matchesStatus) return false;
     }

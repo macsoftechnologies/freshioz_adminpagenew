@@ -133,7 +133,7 @@ export default function App() {
         {/* Page Routes */}
         <Routes>
           <Route path="/dashboard" element={<ProtectedByRole allowedRoles={['SUPER_ADMIN']}><AdminDashboardPage /></ProtectedByRole>} />
-          <Route path="/employees" element={<ProtectedByRole allowedRoles={['SUPER_ADMIN']}><EmployeeManagementPage /></ProtectedByRole>} />
+          <Route path="/employees" element={<ProtectedByRole allowedRoles={['SUPER_ADMIN', 'WAREHOUSE_MANAGER']}><EmployeeManagementPage /></ProtectedByRole>} />
           <Route path="/master-data" element={<ProtectedByRole allowedRoles={['SUPER_ADMIN']}><MasterDataPage /></ProtectedByRole>} />
           <Route path="/warehouse-settings" element={<ProtectedByRole allowedRoles={['SUPER_ADMIN', 'WAREHOUSE_MANAGER']}><WarehousesPage /></ProtectedByRole>} />
           <Route path="/orders-fulfillment" element={<ProtectedByRole allowedRoles={['SUPER_ADMIN', 'WAREHOUSE_MANAGER', 'WAREHOUSE_STAFF', 'DELIVERY_EXECUTIVE']}><OrdersFulfillmentPage /></ProtectedByRole>} />
@@ -151,7 +151,7 @@ export default function App() {
           <Route path="/societies" element={<ProtectedByRole allowedRoles={['SUPER_ADMIN', 'SALES_OFFICER']}><SocietiesDirectoryPage /></ProtectedByRole>} />
           <Route path="/vendors" element={<ProtectedByRole allowedRoles={['SUPER_ADMIN', 'WAREHOUSE_MANAGER', 'PROCUREMENT_OFFICER']}><VendorsDirectoryPage /></ProtectedByRole>} />
           <Route path="/reviews-moderation" element={<ProtectedByRole allowedRoles={['SUPER_ADMIN']}><ReviewsModerationPage /></ProtectedByRole>} />
-          <Route path="/executive-mis" element={<ProtectedByRole allowedRoles={['SUPER_ADMIN', 'WAREHOUSE_MANAGER']}><ExecutiveMisPage /></ProtectedByRole>} />
+          <Route path="/executive-mis" element={<ProtectedByRole allowedRoles={['SUPER_ADMIN']}><ExecutiveMisPage /></ProtectedByRole>} />
           <Route path="/settings" element={<ProtectedByRole allowedRoles={['SUPER_ADMIN']}><SettingsGatewayPage /></ProtectedByRole>} />
 
           

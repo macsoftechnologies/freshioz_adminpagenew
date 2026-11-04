@@ -191,7 +191,7 @@ export default function AdminTopBar({ onMobileMenuClick }) {
               {/* Menu Links */}
               <div style={{ padding: '8px 0' }}>
                 {/* Executive MIS Command Center Link */}
-                {(currentRoleId === 'SUPER_ADMIN' || currentRoleId === 'WAREHOUSE_MANAGER') && (
+                {currentRoleId === 'SUPER_ADMIN' && (
                   <button
                     type="button"
                     onClick={handleOpenExecutiveMis}

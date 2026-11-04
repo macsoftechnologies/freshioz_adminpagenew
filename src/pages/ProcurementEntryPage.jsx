@@ -276,7 +276,10 @@ export default function ProcurementEntryPage() {
 
   const [vendorName, setVendorName] = useState(activeVendor?.name || '');
   const [mandiLocation, setMandiLocation] = useState(activeVendor?.mandiLocation || '');
-  const [destinationWarehouseId, setDestinationWarehouseId] = useState(selectedWh?.id || warehouses[0]?.id || '');
+  const isSuper = currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN' || currentUser?.email === 'superadmin@gmail.com';
+  const isWarehouseScoped = !isSuper && currentUser?.assignedWarehouseId && currentUser.assignedWarehouseId !== 'ALL';
+  const initialDestinationWh = isWarehouseScoped ? currentUser.assignedWarehouseId : (selectedWh?.id || warehouses[0]?.id || '');
+  const [destinationWarehouseId, setDestinationWarehouseId] = useState(initialDestinationWh);
   const [billNumber, setBillNumber] = useState(`APMC/KLR/2026/${Math.floor(1000 + Math.random() * 9000)}`);
   const [showDemandReference, setShowDemandReference] = useState(false);
   const [paymentMode, setPaymentMode] = useState('IMPS_TRANSFER');
@@ -1125,17 +1128,24 @@ export default function ProcurementEntryPage() {
                 <label style={{ fontSize: '12.5px', fontWeight: 700, display: 'block', marginBottom: '4px', color: '#334155' }}>
                   Destination Cold Hub / Warehouse *
                 </label>
-                <select
-                  value={destinationWarehouseId}
-                  onChange={(e) => setDestinationWarehouseId(e.target.value)}
-                  style={{ width: '100%', height: '40px', padding: '0 12px', borderRadius: '8px', border: '1.5px solid #CBD5E1', fontSize: '13px', fontWeight: 700, color: '#0F172A', background: '#FFFFFF' }}
-                >
-                  {warehouses.map(w => (
-                    <option key={w.id} value={w.id}>
-                      {w.name} ({w.code})
-                    </option>
-                  ))}
-                </select>
+                {isWarehouseScoped ? (
+                  <div style={{ width: '100%', height: '40px', padding: '0 12px', borderRadius: '8px', border: '1.5px solid #A7F3D0', background: '#ECFDF5', fontSize: '13px', fontWeight: 800, color: '#065F46', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>🏢 {warehouses.find(w => w.id === currentUser.assignedWarehouseId || w.code === currentUser.assignedWarehouseId)?.name || currentUser.assignedWarehouseId}</span>
+                    <span style={{ fontSize: '10px', background: '#059669', color: '#FFF', padding: '1px 5px', borderRadius: '4px' }}>🔒 Assigned Hub</span>
+                  </div>
+                ) : (
+                  <select
+                    value={destinationWarehouseId}
+                    onChange={(e) => setDestinationWarehouseId(e.target.value)}
+                    style={{ width: '100%', height: '40px', padding: '0 12px', borderRadius: '8px', border: '1.5px solid #CBD5E1', fontSize: '13px', fontWeight: 700, color: '#0F172A', background: '#FFFFFF' }}
+                  >
+                    {warehouses.map(w => (
+                      <option key={w.id} value={w.id}>
+                        {w.name} ({w.code})
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div>

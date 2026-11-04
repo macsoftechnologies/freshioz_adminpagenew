@@ -125,6 +125,7 @@ export default function FinancialTransactionsPage() {
         settledAt: order.codSettledAt,
         settledBy: order.codSettledBy,
         itemsCount: (order.items || []).length,
+        warehouseId: order.warehouseId,
         status: order.status
       };
     });
@@ -149,7 +150,8 @@ export default function FinancialTransactionsPage() {
       receiptPhoto: log.receiptPhoto,
       totalWeightKg: log.totalWeightKg || log.totalQuantityKg || 0,
       items: log.items || [],
-      destinationWarehouse: log.destinationName || 'Central Warehouse Hub'
+      destinationWarehouse: log.destinationName || 'Central Warehouse Hub',
+      destinationWarehouseId: log.destinationWarehouseId
     }));
   }, [procurementLogs]);
 
@@ -197,8 +199,18 @@ export default function FinancialTransactionsPage() {
   }, [customerPayments, procurementExpenses, societyPayoutOutflows]);
 
   // Filtered Ledger
+  const isSuper = currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN' || currentUser?.email === 'superadmin@gmail.com';
+  const isWarehouseScoped = !isSuper && currentUser?.assignedWarehouseId && currentUser.assignedWarehouseId !== 'ALL';
+
   const filteredTransactions = useMemo(() => {
     return allLedgerTransactions.filter(item => {
+      // Warehouse Scope Guard: Staff assigned to a warehouse only see transactions for their hub
+      if (isWarehouseScoped) {
+        if (item.refType === 'SOCIETY_PAYOUT') return false; // Executive payouts hidden
+        if (item.refType === 'CUSTOMER_ORDER' && item.warehouseId && item.warehouseId !== currentUser.assignedWarehouseId) return false;
+        if (item.refType === 'MANDI_PURCHASE' && item.destinationWarehouseId && item.destinationWarehouseId !== currentUser.assignedWarehouseId) return false;
+      }
+
       // Tab filter
       if (activeTab === 'INFLOWS' && item.flowType !== 'INWARD') return false;
       if (activeTab === 'OUTFLOWS' && item.flowType !== 'OUTWARD') return false;

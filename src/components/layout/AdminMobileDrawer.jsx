@@ -598,6 +598,10 @@ export default function AdminMobileDrawer() {
                 <Warehouse size={17} />
                 <span>Cut-Off Time & Slots</span>
               </NavLink>
+              <NavLink to="/employees" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
+                <Users size={17} />
+                <span>Hub Staff & Team</span>
+              </NavLink>
             </>
           )}
 
