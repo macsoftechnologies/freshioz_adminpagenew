@@ -198,7 +198,7 @@ export default function OrdersFulfillmentPage() {
     CANCELLED: 99
   };
 
-  const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN' || currentUser?.roles?.includes('SUPER_ADMIN');
+  const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN' || currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.email === 'superadmin@gmail.com';
 
   // Single Order Status Change (Accrues society commission strictly when becoming DELIVERED)
   const handleUpdateOrderStatus = async (orderId, newStatus, paymentCollectionData = null) => {
@@ -360,7 +360,6 @@ export default function OrdersFulfillmentPage() {
     exportToExcel('Freshioz_Morning_Delivery_Manifest', headers, rows);
   };
 
-  const isSuperAdmin = currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN' || currentUser?.email === 'superadmin@gmail.com';
   const isWarehouseScoped = !isSuperAdmin && currentUser?.assignedWarehouseId && currentUser.assignedWarehouseId !== 'ALL';
   const isDeliveryExecutive = currentRoleId === 'DELIVERY_EXECUTIVE' || currentUser?.role === 'DELIVERY_EXECUTIVE';
 
