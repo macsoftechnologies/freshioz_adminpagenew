@@ -802,7 +802,7 @@ export default function MasterDataPage() {
           )}
           <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>
             {activeTab === 'PRODUCTS' 
-              ? \u2022 ` items shown` 
+              ? `• ${filteredProducts.length} items shown` 
               : activeTab === 'CATEGORIES' 
               ? `Showing ${filteredCategories.length} categories` 
               : `Showing ${filteredUnits.length} packaging units`}
