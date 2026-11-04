@@ -175,17 +175,22 @@ export default function InboundLeadsPage() {
                       </div>
                     </td>
                     <td>
-                      <div style={{ fontSize: '12.5px', fontWeight: 600, color: '#0F172A' }}>{req.requesterName}</div>
+                      <div style={{ fontSize: '12.5px', fontWeight: 600, color: '#0F172A' }}>
+                        {req.contactName || req.requesterName || 'Resident Customer'}
+                      </div>
                       <div style={{ fontSize: '11px', color: '#64748B' }}>
-                        +91 {req.requesterPhone} {req.requesterEmail ? `• ${req.requesterEmail}` : ''}
+                        {(req.contactPhone || req.requesterPhone) 
+                          ? `+91 ${req.contactPhone || req.requesterPhone}`
+                          : 'Phone not provided'}
+                        {(req.requesterEmail || req.email) ? ` • ${req.requesterEmail || req.email}` : ''}
                       </div>
                     </td>
                     <td>
                       <strong style={{ fontSize: '12.5px', color: '#0F172A' }}>
-                        ~{req.estimatedFlats || 150} Flats
+                        ~{req.flatCount || req.estimatedFlats || 150} Flats
                       </strong>
                       <div style={{ fontSize: '10.5px', color: '#64748B' }}>
-                        Lat {req.lat}, Lng {req.lng}
+                        {req.clusterZone || (req.lat && req.lng ? `GPS: ${req.lat}, ${req.lng}` : (req.address || 'Bangalore'))}
                       </div>
                     </td>
                     <td>

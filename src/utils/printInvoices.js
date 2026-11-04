@@ -570,3 +570,4 @@ export function printSocietyDispatchManifest(societyName, ordersList = [], slotN
     printWindow.print();
   }, 250);
 }
+

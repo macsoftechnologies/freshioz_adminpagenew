@@ -151,9 +151,9 @@ export default function SalesOnboardingPage() {
         address: leadReq.address || prev.address,
         lat: leadReq.lat || prev.lat,
         lng: leadReq.lng || prev.lng,
-        totalUnits: leadReq.estimatedFlats || prev.totalUnits,
-        secretaryName: leadReq.requesterName || prev.secretaryName,
-        secretaryPhone: leadReq.requesterPhone || prev.secretaryPhone,
+        totalUnits: leadReq.flatCount || leadReq.estimatedFlats || prev.totalUnits,
+        secretaryName: leadReq.contactName || leadReq.requesterName || prev.secretaryName,
+        secretaryPhone: leadReq.contactPhone || leadReq.requesterPhone || prev.secretaryPhone,
         accountHolder: `${leadReq.societyName} Resident Association`
       }));
     }
