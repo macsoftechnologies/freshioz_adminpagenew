@@ -94,14 +94,20 @@ export function AdminRoleProvider({ children }) {
     currentUser?.roles?.includes('PROCUREMENT_OFFICER') || 
     currentUser?.role === 'WAREHOUSE_MANAGER' || 
     currentUser?.role === 'PROCUREMENT_OFFICER';
+  const isWarehouseRole = isSuperAdmin || 
+    currentUser?.roles?.includes('WAREHOUSE_MANAGER') || 
+    currentUser?.role === 'WAREHOUSE_MANAGER';
+  const isSalesRole = isSuperAdmin || 
+    currentUser?.roles?.includes('SALES_OFFICER') || 
+    currentUser?.role === 'SALES_OFFICER';
 
   // Live server-driven state via React Query (only enabled when authenticated session exists & role has permission)
   const queryOpts = { enabled: !!isAuthenticated };
   const societiesQuery = societyResource.useList(null, queryOpts);
   const warehousesQuery = warehouseResource.useList(null, queryOpts);
-  const employeesQuery = employeeResource.useList(null, { enabled: !!isAuthenticated && isSuperAdmin });
+  const employeesQuery = employeeResource.useList(null, { enabled: !!isAuthenticated && isWarehouseRole });
   const vendorsQuery = vendorResource.useList(null, queryOpts);
-  const leadsQuery = leadResource.useList(null, queryOpts);
+  const leadsQuery = leadResource.useList(null, { enabled: !!isAuthenticated && isSalesRole });
   const ordersQuery = orderResource.useList(null, queryOpts);
   const procurementQuery = procurementResource.useList(null, { enabled: !!isAuthenticated && isProcurementRole });
   const productsQuery = productResource.useList(null, queryOpts);
