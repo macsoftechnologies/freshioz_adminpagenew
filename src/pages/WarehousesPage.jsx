@@ -19,7 +19,7 @@ import {
   HelpCircle
 } from 'lucide-react';
 import { useAdminRole } from '../context/AdminRoleContext';
-import { warehouses as warehouseResource, societies as societyResource } from '../hooks/resources';
+import { warehouses as warehouseResource, societies as societyResource, employees as employeeResource } from '../hooks/resources';
 import { useToast } from '../context/ToastContext';
 import { exportToExcel } from '../utils/excelExporter';
 import AdminWarehouseLocationMapPicker from '../components/common/AdminWarehouseLocationMapPicker';
@@ -30,10 +30,25 @@ export default function WarehousesPage() {
 
   const { data: rawWarehouses = [], isLoading: isLoadingWarehouses } = warehouseResource.useList();
   const { data: rawSocieties = [] } = societyResource.useList();
+  const { data: rawEmployees = [] } = employeeResource.useList();
 
   const warehouses = Array.isArray(rawWarehouses) ? rawWarehouses : [];
   const societies = Array.isArray(rawSocieties) ? rawSocieties : [];
+  const employees = Array.isArray(rawEmployees) ? rawEmployees : [];
   const isLoading = isLoadingWarehouses;
+
+  const [isCustomManager, setIsCustomManager] = useState(false);
+
+  // Group registered employees for selection
+  const warehouseManagers = employees.filter(emp => {
+    const roles = Array.isArray(emp.roles) ? emp.roles : (emp.role ? [emp.role] : []);
+    return roles.includes('WAREHOUSE_MANAGER');
+  });
+
+  const otherStaff = employees.filter(emp => {
+    const roles = Array.isArray(emp.roles) ? emp.roles : (emp.role ? [emp.role] : []);
+    return !roles.includes('WAREHOUSE_MANAGER') && (roles.includes('SUPER_ADMIN') || roles.includes('WAREHOUSE_STAFF') || roles.includes('PROCUREMENT_OFFICER'));
+  });
 
   const createWarehouseMutation = warehouseResource.useCreate();
   const updateWarehouseMutation = warehouseResource.useUpdate();
@@ -84,7 +99,7 @@ export default function WarehousesPage() {
         wh.openTime || '05:00',
         wh.capacityTons || 35,
         wh.managerName || 'Operations Lead',
-        wh.managerPhone || '+91 9999999999',
+        (wh.managerPhone && !wh.managerPhone.includes('\u2022')) ? wh.managerPhone : (employees.find(e => e.name === wh.managerName)?.phone || wh.managerPhone || '+91 9999999999'),
         whSocCount,
         wh.status || 'ACTIVE'
       ];
@@ -101,6 +116,7 @@ export default function WarehousesPage() {
       showToast('Restricted: Only Super Admin can register new physical warehouses.', 'error');
       return;
     }
+    setIsCustomManager(false);
     setEditingWarehouse(null);
     setWarehouseForm({
       code: '',
@@ -120,6 +136,11 @@ export default function WarehousesPage() {
 
   const handleOpenEditWarehouse = (wh) => {
     setEditingWarehouse(wh);
+    setIsCustomManager(false);
+    const matchedEmp = employees.find(e => e.name === wh.managerName);
+    const cleanPhone = (wh.managerPhone && !wh.managerPhone.includes('\u2022'))
+      ? wh.managerPhone
+      : (matchedEmp?.phone || wh.managerPhone || '');
     setWarehouseForm({
       code: wh.code || wh.id,
       name: wh.name,
@@ -130,7 +151,7 @@ export default function WarehousesPage() {
       cutoffTime: wh.cutoffTime || '21:00',
       capacityTons: wh.capacityTons || 40,
       managerName: wh.managerName || '',
-      managerPhone: wh.managerPhone || '',
+      managerPhone: cleanPhone,
       status: wh.status || 'ACTIVE'
     });
     setIsWarehouseModalOpen(true);
@@ -411,7 +432,7 @@ export default function WarehousesPage() {
                           {wh.managerName || 'Operations Lead'}
                         </span>
                         <span style={{ fontSize: '11px', color: '#64748B' }}>
-                          ({wh.managerPhone || '+91 98450 11223'})
+                          ({(wh.managerPhone && !wh.managerPhone.includes('\u2022')) ? wh.managerPhone : (employees.find(e => e.name === wh.managerName)?.phone || wh.managerPhone || '+91 98450 11223')})
                         </span>
                       </div>
                     </td>
@@ -583,17 +604,82 @@ export default function WarehousesPage() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '20px' }}>
                 <div>
-                  <label className="form-label-title">Hub Manager Name</label>
-                  <input
-                    type="text"
+                  <label className="form-label-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span>Hub Manager (Lead In-charge)</span>
+                    {warehouseForm.managerName && (
+                      <span style={{ fontSize: '11px', color: '#059669', fontWeight: 700 }}>Registered Lead</span>
+                    )}
+                  </label>
+                  <select
                     className="form-input-control"
-                    placeholder="e.g. Anand Gowda"
-                    value={warehouseForm.managerName}
-                    onChange={(e) => setWarehouseForm({ ...warehouseForm, managerName: e.target.value })}
-                  />
+                    value={
+                      isCustomManager
+                        ? '__custom__'
+                        : (employees.find(e => e.name === warehouseForm.managerName || (e.phone && e.phone === warehouseForm.managerPhone))?.id || (warehouseForm.managerName ? '__current__' : ''))
+                    }
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '__custom__') {
+                        setIsCustomManager(true);
+                      } else if (val === '__current__') {
+                        setIsCustomManager(false);
+                      } else if (val === '') {
+                        setIsCustomManager(false);
+                        setWarehouseForm({ ...warehouseForm, managerName: '', managerPhone: '' });
+                      } else {
+                        setIsCustomManager(false);
+                        const selectedEmp = employees.find(emp => (emp.id === val || emp.uuid === val));
+                        if (selectedEmp) {
+                          setWarehouseForm({
+                            ...warehouseForm,
+                            managerName: selectedEmp.name,
+                            managerPhone: selectedEmp.phone || warehouseForm.managerPhone || ''
+                          });
+                        }
+                      }
+                    }}
+                  >
+                    <option value="">-- Select Registered Warehouse Manager --</option>
+                    {warehouseManagers.length > 0 && (
+                      <optgroup label="Warehouse & Procurement Managers">
+                        {warehouseManagers.map(emp => (
+                          <option key={emp.id || emp.uuid} value={emp.id || emp.uuid}>
+                            {emp.name} {emp.phone ? '(' + emp.phone + ')' : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {otherStaff.length > 0 && (
+                      <optgroup label="Other Operations Personnel / Super Admins">
+                        {otherStaff.map(emp => (
+                          <option key={emp.id || emp.uuid} value={emp.id || emp.uuid}>
+                            {emp.name} {emp.phone ? '(' + emp.phone + ')' : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {warehouseForm.managerName && !employees.some(e => e.name === warehouseForm.managerName) && (
+                      <option value="__current__">
+                        {warehouseForm.managerName} (Current Lead)
+                      </option>
+                    )}
+                    <option value="__custom__">+ Custom / External Manager Name...</option>
+                  </select>
+
+                  {isCustomManager && (
+                    <input
+                      type="text"
+                      className="form-input-control"
+                      placeholder="Enter custom manager name (e.g. Anand Gowda)"
+                      style={{ marginTop: '8px' }}
+                      value={warehouseForm.managerName}
+                      onChange={(e) => setWarehouseForm({ ...warehouseForm, managerName: e.target.value })}
+                      autoFocus
+                    />
+                  )}
                 </div>
                 <div>
-                  <label className="form-label-title">Manager Phone</label>
+                  <label className="form-label-title">Manager Phone Number</label>
                   <input
                     type="tel"
                     className="form-input-control"
@@ -601,6 +687,9 @@ export default function WarehousesPage() {
                     value={warehouseForm.managerPhone}
                     onChange={(e) => setWarehouseForm({ ...warehouseForm, managerPhone: e.target.value })}
                   />
+                  <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px' }}>
+                    Auto-filled from selected staff profile. Visible to Super Admin.
+                  </div>
                 </div>
               </div>
 
