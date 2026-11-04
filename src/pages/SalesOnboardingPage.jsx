@@ -60,56 +60,80 @@ export default function SalesOnboardingPage() {
 
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
 
-  // Auto-Detect Current GPS Position & Reverse-Geocode Address
-  const handleAutoDetectLocation = () => {
-    if (!navigator.geolocation) {
-      showToast('Geolocation is not supported by your browser.', 'error');
-      return;
-    }
-
+  // Auto-Detect Current GPS Position & Reverse-Geocode Address with IP Fallback
+  const handleAutoDetectLocation = async () => {
     setIsDetectingLocation(true);
 
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const { latitude, longitude } = pos.coords;
-        const latVal = Number(latitude.toFixed(6));
-        const lngVal = Number(longitude.toFixed(6));
-
-        let resolvedAddress = `Auto-Detected Gate GPS: ${latVal}, ${lngVal}`;
-
-        try {
-          // Reverse-geocoding via OpenStreetMap Nominatim
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
-            { headers: { 'Accept': 'application/json', 'User-Agent': 'FreshiozApp/1.0 (admin@freshioz.local)' } }
-          );
-          if (res.ok) {
-            const data = await res.json();
-            if (data && data.display_name) {
-              resolvedAddress = data.display_name;
-            }
+    const applyLocation = async (latVal, lngVal, message) => {
+      let resolvedAddress = `Auto-Detected GPS: ${latVal}, ${lngVal}`;
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latVal}&lon=${lngVal}&zoom=18&addressdetails=1`,
+          { headers: { 'Accept': 'application/json', 'User-Agent': 'FreshiozApp/1.0 (admin@freshioz.local)' } }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.display_name) {
+            resolvedAddress = data.display_name;
           }
-        } catch (fetchErr) {
-          console.warn('Reverse geocoding fallback to coords:', fetchErr);
         }
+      } catch (fetchErr) {
+        console.warn('Reverse geocoding fallback to coords:', fetchErr);
+      }
 
-        setFormData(prev => ({
-          ...prev,
-          lat: latVal,
-          lng: lngVal,
-          address: resolvedAddress
-        }));
+      setFormData(prev => ({
+        ...prev,
+        lat: latVal,
+        lng: lngVal,
+        address: resolvedAddress
+      }));
+      setIsDetectingLocation(false);
+      showToast(message, 'success');
+    };
 
-        setIsDetectingLocation(false);
-        showToast('✓ GPS Location & Street Address detected!', 'success');
-      },
-      (err) => {
-        setIsDetectingLocation(false);
-        console.warn('Geolocation error:', err);
-        showToast('Location permission denied or unavailable. Please type address manually.', 'error');
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
+    if (navigator.geolocation) {
+      const getPos = (highAcc, timeoutMs) =>
+        new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: highAcc,
+            timeout: timeoutMs,
+            maximumAge: 60000,
+          });
+        });
+
+      try {
+        const pos = await getPos(true, 5000).catch(() => getPos(false, 6000));
+        const latVal = Number(pos.coords.latitude.toFixed(6));
+        const lngVal = Number(pos.coords.longitude.toFixed(6));
+        await applyLocation(latVal, lngVal, 'Device GPS location & address detected!');
+        return;
+      } catch (geoErr) {
+        if (geoErr && geoErr.code === 1) {
+          setIsDetectingLocation(false);
+          showToast('Location permission denied in browser. Click lock icon in URL bar to allow.', 'error');
+          return;
+        }
+      }
+    }
+
+    // IP Geolocation Fallback
+    try {
+      const res = await fetch('https://ipwho.is/');
+      if (res.ok) {
+        const ipData = await res.json();
+        if (ipData && ipData.success !== false && ipData.latitude && ipData.longitude) {
+          const latVal = Number(parseFloat(ipData.latitude).toFixed(6));
+          const lngVal = Number(parseFloat(ipData.longitude).toFixed(6));
+          await applyLocation(latVal, lngVal, `Positioned to network location: ${ipData.city || 'your area'}`);
+          return;
+        }
+      }
+    } catch (ipErr) {
+      console.warn('IP fallback failed:', ipErr);
+    }
+
+    setIsDetectingLocation(false);
+    showToast('GPS hardware unavailable on this device. Please type address manually.', 'info');
   };
 
   // Image Upload Handler (converts to base64)

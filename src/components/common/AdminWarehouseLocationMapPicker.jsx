@@ -55,6 +55,7 @@ export default function AdminWarehouseLocationMapPicker({
   const [isSearching, setIsSearching] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [locateError, setLocateError] = useState('');
+  const [locateNote, setLocateNote] = useState('');
 
   // Reverse geocode lat/lng to clean address using OpenStreetMap Nominatim
   const reverseGeocode = async (targetLat, targetLng) => {
@@ -223,47 +224,82 @@ export default function AdminWarehouseLocationMapPicker({
     }
   };
 
-  // Auto-Detect Current GPS Position via Browser Geolocation API
-  const handleAutoDetectLocation = () => {
-    if (!navigator.geolocation) {
-      setLocateError('Geolocation is not supported by your browser.');
-      return;
-    }
-
+  // Auto-Detect Current GPS Position with Multi-Tier Fallback (High Accuracy -> Low Accuracy -> IP Geolocation)
+  const handleAutoDetectLocation = async () => {
     setIsLocating(true);
     setLocateError('');
+    setLocateNote('');
 
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const detectedLat = Number(position.coords.latitude.toFixed(6));
-        const detectedLng = Number(position.coords.longitude.toFixed(6));
+    const applyPosition = async (detectedLat, detectedLng, note = '') => {
+      setCurrentCoords({ lat: detectedLat, lng: detectedLng });
+      const resolvedAddress = await reverseGeocode(detectedLat, detectedLng);
+      setCurrentAddress(resolvedAddress);
 
-        setCurrentCoords({ lat: detectedLat, lng: detectedLng });
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.flyTo([detectedLat, detectedLng], 15, { duration: 1.2 });
+      }
+      if (markerRef.current) {
+        markerRef.current.setLatLng([detectedLat, detectedLng]);
+        markerRef.current.openPopup();
+      }
 
-        const resolvedAddress = await reverseGeocode(detectedLat, detectedLng);
-        setCurrentAddress(resolvedAddress);
+      triggerChange(detectedLat, detectedLng, resolvedAddress);
+      setIsLocating(false);
+      if (note) {
+        setLocateNote(note);
+      }
+    };
 
-        if (mapInstanceRef.current) {
-          mapInstanceRef.current.flyTo([detectedLat, detectedLng], 15, { duration: 1.2 });
+    // Strategy 1: Browser GPS / Wi-Fi Geolocation
+    if (navigator.geolocation) {
+      const getBrowserPos = (highAccuracy, timeoutMs) =>
+        new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: highAccuracy,
+            timeout: timeoutMs,
+            maximumAge: 60000,
+          });
+        });
+
+      try {
+        const pos = await getBrowserPos(true, 5000).catch(() => getBrowserPos(false, 6000));
+        const detectedLat = Number(pos.coords.latitude.toFixed(6));
+        const detectedLng = Number(pos.coords.longitude.toFixed(6));
+        await applyPosition(detectedLat, detectedLng, 'Exact device GPS location detected.');
+        return;
+      } catch (geoErr) {
+        if (geoErr && geoErr.code === 1) { // PERMISSION_DENIED
+          setIsLocating(false);
+          setLocateError('Location permission was denied in your browser. Click the lock icon in your browser URL bar to allow location, or search city above.');
+          return;
         }
-        if (markerRef.current) {
-          markerRef.current.setLatLng([detectedLat, detectedLng]);
-          markerRef.current.openPopup();
-        }
+      }
+    }
 
-        triggerChange(detectedLat, detectedLng, resolvedAddress);
-        setIsLocating(false);
-      },
-      (error) => {
-        setIsLocating(false);
-        if (error.code === error.PERMISSION_DENIED) {
-          setLocateError('Location permission denied. Please allow location access in your browser or search city manually.');
-        } else {
-          setLocateError('Unable to detect GPS position. You can search city or click on the map.');
+    // Strategy 2: IP-based Network Geolocation Fallback (Works on Desktop PCs, Laptops & Office Networks)
+    try {
+      const ipRes = await fetch('https://ipwho.is/', { headers: { Accept: 'application/json' } });
+      if (ipRes.ok) {
+        const ipData = await ipRes.json();
+        if (ipData && ipData.success !== false && ipData.latitude && ipData.longitude) {
+          const detectedLat = Number(parseFloat(ipData.latitude).toFixed(6));
+          const detectedLng = Number(parseFloat(ipData.longitude).toFixed(6));
+          const cityName = ipData.city || ipData.region || 'your region';
+          await applyPosition(
+            detectedLat,
+            detectedLng,
+            `Auto-positioned to network location: ${cityName}. Drag the pin or search above for exact mandi yard.`
+          );
+          return;
         }
-      },
-      { timeout: 10000, enableHighAccuracy: true }
-    );
+      }
+    } catch (ipErr) {
+      console.warn('IP location fetch failed:', ipErr);
+    }
+
+    // Strategy 3: Graceful fallback error
+    setIsLocating(false);
+    setLocateError('Could not detect device GPS. Please type your city/mandi name in "Search any City or Mandi" above or click anywhere on the map.');
   };
 
   // Manual address input change
@@ -402,6 +438,19 @@ export default function AdminWarehouseLocationMapPicker({
           borderRadius: '6px'
         }}>
           {locateError}
+        </div>
+      )}
+
+      {locateNote && !locateError && (
+        <div style={{
+          fontSize: '11.5px',
+          color: '#15803D',
+          background: '#F0FDF4',
+          border: '1px solid #BBF7D0',
+          padding: '6px 10px',
+          borderRadius: '6px'
+        }}>
+          {locateNote}
         </div>
       )}
 
