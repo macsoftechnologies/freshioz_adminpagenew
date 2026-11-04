@@ -21,12 +21,16 @@ import {
   ExternalLink,
   IndianRupee,
   Calendar,
-  RefreshCw
+  RefreshCw,
+  Printer,
+  QrCode
 } from 'lucide-react';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
 import { orders as orderResource, societies as societyResource, warehouses as warehouseResource, useUpdateOrderStatus } from '../hooks/resources';
 import { exportToExcel } from '../utils/excelExporter';
+import { printOrderTaxInvoice, printSocietyDispatchManifest } from '../utils/printInvoices';
+import { apiClient } from '../api/client';
 
 export default function OrdersFulfillmentPage() {
   const { currentUser, currentRoleId } = useAdminRole();
@@ -124,6 +128,46 @@ export default function OrdersFulfillmentPage() {
   // COD Payment Collection Modal state
   const [codModalOrder, setCodModalOrder] = useState(null);
   const [codPaymentMode, setCodPaymentMode] = useState('CASH'); // 'CASH' | 'UPI_QR'
+  const [dynamicQrData, setDynamicQrData] = useState(null);
+  const [isLoadingQr, setIsLoadingQr] = useState(false);
+  const [customRefId, setCustomRefId] = useState('');
+
+  // Fetch dynamic Razorpay / UPI QR code when driver selects UPI QR
+  useEffect(() => {
+    if (codModalOrder && codPaymentMode === 'UPI_QR') {
+      let isMounted = true;
+      setIsLoadingQr(true);
+      setDynamicQrData(null);
+      setCustomRefId('');
+
+      apiClient(`/payments/orders/${codModalOrder.id}/dynamic-qr`)
+        .then(res => {
+          if (isMounted && res) {
+            setDynamicQrData(res);
+          }
+        })
+        .catch(err => {
+          console.warn('Dynamic QR fetch fallback to standard UPI URI:', err);
+          const amt = codModalOrder.totalAmount || 0;
+          const upiUri = `upi://pay?pa=freshioz@icici&pn=Freshioz%20Produce&am=${amt}&cu=INR&tn=Order_${codModalOrder.id?.slice(-6)}`;
+          if (isMounted) {
+            setDynamicQrData({
+              orderId: codModalOrder.id,
+              amount: amt,
+              imageUrl: `https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=8&data=${encodeURIComponent(upiUri)}`,
+              paymentUrl: upiUri,
+              upiString: upiUri,
+              gatewaySource: 'DIRECT_UPI_FALLBACK',
+            });
+          }
+        })
+        .finally(() => {
+          if (isMounted) setIsLoadingQr(false);
+        });
+
+      return () => { isMounted = false; };
+    }
+  }, [codModalOrder?.id, codPaymentMode]);
 
   // Status definitions & badges (Unified canonical lifecycle)
   const STATUS_CONFIG = {
@@ -209,6 +253,7 @@ export default function OrdersFulfillmentPage() {
         codCollectedAmount: (isCod && newStatus === 'DELIVERED') ? (targetOrder.totalAmount || 0) : undefined,
         codCollectedBy: currentUser?.name || 'Delivery Partner',
         codReceivedMode: paymentCollectionData?.mode || (isCod ? 'CASH' : null),
+        ...(paymentCollectionData?.paymentRef ? { razorpayPaymentId: paymentCollectionData.paymentRef } : {})
       });
 
       if (newStatus === 'DELIVERED') {
@@ -227,12 +272,12 @@ export default function OrdersFulfillmentPage() {
   };
 
   // Dedicated COD Payment Recorder (can be invoked independently or as part of delivery)
-  const handleRecordCodPayment = async (orderId, mode = 'CASH', alsoDeliver = false) => {
+  const handleRecordCodPayment = async (orderId, mode = 'CASH', alsoDeliver = false, paymentRef = null) => {
     const targetOrder = (orders || []).find(o => o.id === orderId);
     if (!targetOrder) return;
 
     if (alsoDeliver) {
-      await handleUpdateOrderStatus(orderId, 'DELIVERED', { mode, amount: targetOrder.totalAmount });
+      await handleUpdateOrderStatus(orderId, 'DELIVERED', { mode, amount: targetOrder.totalAmount, paymentRef });
       setCodModalOrder(null);
       return;
     }
@@ -244,6 +289,7 @@ export default function OrdersFulfillmentPage() {
         codCollectedAmount: targetOrder.totalAmount || 0,
         codCollectedBy: currentUser?.name || 'Delivery Partner',
         codReceivedMode: mode,
+        ...(paymentRef ? { razorpayPaymentId: paymentRef } : {})
       });
       showToast(`✅ Payment of ₹${(targetOrder.totalAmount || 0).toLocaleString()} recorded as received via ${mode === 'UPI_QR' ? 'UPI QR' : 'Cash'}!`, 'success');
     } catch (err) {
@@ -794,6 +840,28 @@ export default function OrdersFulfillmentPage() {
               >
                 Apply to All Orders
               </button>
+
+              <button
+                type="button"
+                onClick={() => printSocietyDispatchManifest(batchSociety, orders, slotFilter !== 'ALL' ? slotFilter : 'Morning Run', customDate || dateFilter)}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: '4px',
+                  background: '#FFFFFF',
+                  color: '#166534',
+                  border: '1.5px solid #166534',
+                  fontSize: '11.5px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+                title="Print batch dispatch manifest for society desk handover"
+              >
+                <Printer size={12} />
+                <span>Print Society Manifest</span>
+              </button>
             </form>
           </div>
         </>
@@ -1114,9 +1182,32 @@ export default function OrdersFulfillmentPage() {
                                 fontWeight: 800,
                                 cursor: 'pointer'
                               }}
-                              title="Record payment collected from resident"
+                              title="Record cash collected from resident"
                             >
-                              💵 Receive Payment
+                              💵 Cash
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCodModalOrder(order);
+                                setCodPaymentMode('UPI_QR');
+                              }}
+                              style={{
+                                background: '#0284C7',
+                                color: '#FFF',
+                                border: 'none',
+                                padding: '3px 8px',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                fontWeight: 800,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px'
+                              }}
+                              title="Show dynamic scannable UPI QR on phone screen"
+                            >
+                              <span>📱 UPI QR</span>
                             </button>
                           </div>
                         )
@@ -1148,6 +1239,27 @@ export default function OrdersFulfillmentPage() {
 
                   {/* Bottom Action Row: Strictly One-Way Mark Delivered for Rider */}
                   <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px', borderTop: '1px solid #F1F5F9', paddingTop: '10px' }}>
+                    <button
+                      type="button"
+                      onClick={() => printOrderTaxInvoice(order)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        background: '#F8FAFC',
+                        color: '#334155',
+                        border: '1px solid #CBD5E1',
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        fontWeight: 700,
+                        fontSize: '12px',
+                        cursor: 'pointer'
+                      }}
+                      title="Print Order Delivery Slip / Invoice"
+                    >
+                      <Printer size={14} />
+                      <span>Print Slip</span>
+                    </button>
                     {!isDelivered ? (
                       <button
                         type="button"
@@ -1439,6 +1551,28 @@ export default function OrdersFulfillmentPage() {
                           >
                             <Eye size={12} />
                             <span>View Label</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => printOrderTaxInvoice(order)}
+                            style={{
+                              background: '#F0FDF4',
+                              border: '1px solid #BBF7D0',
+                              padding: '5px 9px',
+                              borderRadius: '6px',
+                              fontSize: '12px',
+                              fontWeight: 700,
+                              color: '#166534',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              marginLeft: '6px'
+                            }}
+                            title="Print Tax Invoice / Delivery Slip"
+                          >
+                            <Printer size={12} />
+                            <span>Invoice</span>
                           </button>
                         </td>
                       </tr>
@@ -1768,6 +1902,28 @@ export default function OrdersFulfillmentPage() {
                   Close Label
                 </button>
 
+                <button
+                  type="button"
+                  onClick={() => printOrderTaxInvoice(selectedOrder)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: '#059669',
+                    color: '#FFF',
+                    border: 'none',
+                    padding: '7px 16px',
+                    borderRadius: '6px',
+                    fontWeight: 800,
+                    fontSize: '12.5px',
+                    cursor: 'pointer'
+                  }}
+                  title="Print Tax Invoice / Packing Slip"
+                >
+                  <Printer size={14} />
+                  <span>Print Tax Invoice</span>
+                </button>
+
                 {isDeliveryExecutive && selectedOrder.status !== 'DELIVERED' && (
                   <button
                     type="button"
@@ -1896,6 +2052,83 @@ export default function OrdersFulfillmentPage() {
               </div>
             </div>
 
+            {/* DYNAMIC SCANNABLE UPI QR CODE DISPLAY (PRE-FILLED AMOUNT) */}
+            {codPaymentMode === 'UPI_QR' && (
+              <div style={{
+                background: '#F0F9FF',
+                border: '1.5px solid #BAE6FD',
+                borderRadius: '12px',
+                padding: '16px',
+                marginBottom: '18px',
+                textAlign: 'center'
+              }}>
+                <div style={{ fontSize: '11px', fontWeight: 800, color: '#0369A1', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                  <QrCode size={14} color="#0284C7" />
+                  <span>Doorstep Dynamic UPI QR • Scan to Pay</span>
+                </div>
+
+                {isLoadingQr ? (
+                  <div style={{ padding: '24px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                    <RefreshCw size={24} color="#0284C7" style={{ animation: 'spin 1s linear infinite' }} />
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#0369A1' }}>
+                      Generating scannable QR for ₹{(codModalOrder.totalAmount || 0).toLocaleString()}...
+                    </span>
+                  </div>
+                ) : dynamicQrData?.imageUrl ? (
+                  <div>
+                    <div style={{
+                      display: 'inline-block',
+                      background: '#FFFFFF',
+                      padding: '12px',
+                      borderRadius: '12px',
+                      boxShadow: '0 4px 12px rgba(2, 132, 199, 0.12)',
+                      border: '1px solid #E0F2FE'
+                    }}>
+                      <img 
+                        src={dynamicQrData.imageUrl} 
+                        alt="Dynamic UPI QR" 
+                        style={{ width: '180px', height: '180px', display: 'block', borderRadius: '6px' }} 
+                      />
+                    </div>
+
+                    <div style={{ marginTop: '10px', fontSize: '15px', fontWeight: 900, color: '#0369A1' }}>
+                      Scan to Pay ₹{(codModalOrder.totalAmount || 0).toLocaleString()}
+                    </div>
+
+                    <div style={{ fontSize: '11px', color: '#475569', marginTop: '3px' }}>
+                      Supported Apps: <strong>PhonePe • GPay • Paytm • BHIM • Cred</strong>
+                    </div>
+
+                    <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '11px', color: '#0369A1', background: '#E0F2FE', padding: '4px 10px', borderRadius: '6px', width: 'fit-content', margin: '8px auto 0' }}>
+                      <span>VPA:</span>
+                      <strong style={{ fontFamily: 'monospace' }}>freshioz@icici</strong>
+                      <span style={{ fontSize: '10px', background: '#0284C7', color: '#FFF', padding: '1px 5px', borderRadius: '3px' }}>
+                        {dynamicQrData.gatewaySource === 'RAZORPAY_DYNAMIC_QR' ? 'Razorpay QR' : 'NPCI UPI'}
+                      </span>
+                    </div>
+
+                    {/* Optional Reference / UTR Input */}
+                    <div style={{ marginTop: '12px', textAlign: 'left', background: '#FFFFFF', padding: '10px 12px', borderRadius: '8px', border: '1px solid #CBD5E1' }}>
+                      <label style={{ fontSize: '11px', fontWeight: 800, color: '#334155', display: 'block', marginBottom: '4px' }}>
+                        Customer UPI Ref / UTR / Razorpay ID (Optional):
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 431092839201 or pay_..."
+                        value={customRefId}
+                        onChange={(e) => setCustomRefId(e.target.value)}
+                        style={{ width: '100%', padding: '6px 8px', borderRadius: '5px', border: '1px solid #CBD5E1', fontSize: '12px' }}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ color: '#DC2626', fontSize: '12px', padding: '12px' }}>
+                    Failed to load dynamic QR. Driver can collect cash or customer can pay to freshioz@icici.
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Confirmation Buttons */}
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
               <button
@@ -1918,7 +2151,7 @@ export default function OrdersFulfillmentPage() {
               {codModalOrder.status !== 'DELIVERED' && (
                 <button
                   type="button"
-                  onClick={() => handleRecordCodPayment(codModalOrder.id, codPaymentMode, false)}
+                  onClick={() => handleRecordCodPayment(codModalOrder.id, codPaymentMode, false, customRefId || dynamicQrData?.qrId || null)}
                   style={{
                     padding: '9px 14px',
                     borderRadius: '8px',
@@ -1943,9 +2176,9 @@ export default function OrdersFulfillmentPage() {
                 onClick={() => {
                   const target = codModalOrder;
                   if (target.status === 'DELIVERED') {
-                    handleRecordCodPayment(target.id, codPaymentMode, false);
+                    handleRecordCodPayment(target.id, codPaymentMode, false, customRefId || dynamicQrData?.qrId || null);
                   } else {
-                    handleRecordCodPayment(target.id, codPaymentMode, true);
+                    handleRecordCodPayment(target.id, codPaymentMode, true, customRefId || dynamicQrData?.qrId || null);
                   }
                 }}
                 style={{
