@@ -422,8 +422,19 @@ export default function OrdersFulfillmentPage() {
       if (riderTab === 'DELIVERED' && o.status !== 'DELIVERED') return false;
     } else {
       // Warehouse Scope Guard: Staff assigned to a warehouse only see orders for their warehouse
-      if (isWarehouseScoped && o.warehouseId && o.warehouseId !== currentUser.assignedWarehouseId) {
-        return false;
+      if (isWarehouseScoped) {
+        const targetWh = warehouses.find(w => w.id === currentUser.assignedWarehouseId || w.code === currentUser.assignedWarehouseId);
+        const whId = targetWh?.id || currentUser.assignedWarehouseId;
+        const whCode = targetWh?.code || currentUser.assignedWarehouseId;
+        const orderWhId = o.warehouseId || o.warehouse?.id;
+        const orderWhCode = o.warehouseCode || o.warehouse?.code;
+
+        const isWhMatch = 
+          (!orderWhId && !orderWhCode) ||
+          (orderWhId && (orderWhId === whId || orderWhId === whCode)) ||
+          (orderWhCode && (orderWhCode === whCode || orderWhCode === whId));
+
+        if (!isWhMatch) return false;
       }
 
       const matchesStatus = statusFilter === 'ALL' || currentStatus === statusFilter;

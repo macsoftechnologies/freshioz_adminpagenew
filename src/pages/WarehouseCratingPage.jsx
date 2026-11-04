@@ -179,7 +179,18 @@ export default function WarehouseCratingPage() {
 
   const visibleOrders = orders.filter(order => {
     if (isWarehouseScoped) {
-      if (order.warehouseId && order.warehouseId !== currentUser.assignedWarehouseId) return false;
+      const targetWh = warehouses.find(w => w.id === currentUser.assignedWarehouseId || w.code === currentUser.assignedWarehouseId);
+      const whId = targetWh?.id || currentUser.assignedWarehouseId;
+      const whCode = targetWh?.code || currentUser.assignedWarehouseId;
+      const orderWhId = order.warehouseId || order.warehouse?.id;
+      const orderWhCode = order.warehouseCode || order.warehouse?.code;
+
+      const isWhMatch = 
+        (!orderWhId && !orderWhCode) ||
+        (orderWhId && (orderWhId === whId || orderWhId === whCode)) ||
+        (orderWhCode && (orderWhCode === whCode || orderWhCode === whId));
+
+      if (!isWhMatch) return false;
     }
     // Strict Scope Guard: Delivery Executive only sees orders assigned to them!
     if (isRiderRole) {

@@ -3,7 +3,7 @@ import { Truck, MapPin, FileText, CheckCircle2, Eye, X, Image as ImageIcon, Tras
 import { Link } from 'react-router-dom';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
-import { procurement as procurementResource } from '../hooks/resources';
+import { procurement as procurementResource, warehouses as warehouseResource } from '../hooks/resources';
 import AdminPagination from '../components/common/AdminPagination';
 
 export default function ProcurementLogsPage() {
@@ -18,18 +18,25 @@ export default function ProcurementLogsPage() {
   const [pageSize, setPageSize] = useState(15);
 
   const { data: rawLogs = [], isLoading } = procurementResource.useList();
+  const { data: rawWarehouses = [] } = warehouseResource.useList();
   const removeProcurementMutation = procurementResource.useRemove();
   const allLogs = Array.isArray(rawLogs) ? rawLogs : [];
+  const warehouses = Array.isArray(rawWarehouses) ? rawWarehouses : [];
 
   // Filter logs by scope, date, and search query
   const filteredLogs = useMemo(() => {
     const isSuper = currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN' || currentUser?.email === 'superadmin@gmail.com';
     const isWarehouseScoped = !isSuper && currentUser?.assignedWarehouseId && currentUser.assignedWarehouseId !== 'ALL';
+    const targetWh = warehouses.find(w => w.id === currentUser?.assignedWarehouseId || w.code === currentUser?.assignedWarehouseId);
+    const whId = targetWh?.id || currentUser?.assignedWarehouseId;
+    const whCode = targetWh?.code || currentUser?.assignedWarehouseId;
 
     return allLogs.filter(log => {
       // Warehouse Scope Guard: Staff assigned to a warehouse only see procurement bills destined for their warehouse
-      if (isWarehouseScoped && log.destinationWarehouseId && log.destinationWarehouseId !== currentUser.assignedWarehouseId) {
-        return false;
+      if (isWarehouseScoped && log.destinationWarehouseId) {
+        if (log.destinationWarehouseId !== whId && log.destinationWarehouseId !== whCode && log.destinationWarehouseId !== currentUser.assignedWarehouseId) {
+          return false;
+        }
       }
 
       // 1. Scope filter (All vs My bills)

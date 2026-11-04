@@ -84,6 +84,16 @@ export default function ProcurementDemandPage() {
   };
 
   const [selectedWarehouseId, setSelectedWarehouseId] = useState(initialWarehouse);
+
+  // Sync warehouse selector once warehouses load
+  React.useEffect(() => {
+    if (isWarehouseScoped && warehouses.length > 0) {
+      const wh = warehouses.find(w => w.id === currentUser.assignedWarehouseId || w.code === currentUser.assignedWarehouseId);
+      if (wh && selectedWarehouseId !== wh.id) {
+        setSelectedWarehouseId(wh.id);
+      }
+    }
+  }, [isWarehouseScoped, currentUser?.assignedWarehouseId, warehouses]);
   const [selectedSlot, setSelectedSlot] = useState('ALL'); // 'ALL' | 'Morning Fresh Slot' | 'Evening Fresh Slot'
   const [selectedDate, setSelectedDate] = useState('ALL'); // 'ALL' | specific delivery date
   const [activeTab, setActiveTab] = useState(getTabFromHash); // 'PENDING' | 'PROCURED_TODAY'
@@ -152,14 +162,20 @@ export default function ProcurementDemandPage() {
     return 0;
   };
 
-  // Filter orders by warehouse
+  // Filter orders by warehouse (matches by ID or Code)
   const matchesWarehouse = (order) => {
     if (selectedWarehouseId === 'ALL') return true;
-    const targetWh = warehouses.find(w => w.id === selectedWarehouseId);
-    const whCode = targetWh?.code;
-    if (order.warehouseId && order.warehouseId !== selectedWarehouseId) return false;
-    if (order.warehouseCode && whCode && order.warehouseCode !== whCode) return false;
-    return true;
+    const targetWh = warehouses.find(w => w.id === selectedWarehouseId || w.code === selectedWarehouseId);
+    const whId = targetWh?.id || selectedWarehouseId;
+    const whCode = targetWh?.code || selectedWarehouseId;
+
+    const orderWhId = order.warehouseId || order.warehouse?.id;
+    const orderWhCode = order.warehouseCode || order.warehouse?.code;
+
+    if (orderWhId && (orderWhId === whId || orderWhId === whCode)) return true;
+    if (orderWhCode && (orderWhCode === whCode || orderWhCode === whId)) return true;
+    if (!orderWhId && !orderWhCode) return true; // Include legacy unassigned orders
+    return false;
   };
 
   // Discover all available delivery dates and slots from orders
@@ -241,9 +257,15 @@ export default function ProcurementDemandPage() {
 
   // Calculate already procured quantities directly from matching procurementLogs
   const matchingProcurementLogs = useMemo(() => {
+    const targetWh = warehouses.find(w => w.id === selectedWarehouseId || w.code === selectedWarehouseId);
+    const whId = targetWh?.id || selectedWarehouseId;
+    const whCode = targetWh?.code || selectedWarehouseId;
+
     return procurementLogs.filter(log => {
-      if (selectedWarehouseId !== 'ALL' && log.destinationWarehouseId && log.destinationWarehouseId !== selectedWarehouseId) {
-        return false;
+      if (selectedWarehouseId !== 'ALL' && log.destinationWarehouseId) {
+        if (log.destinationWarehouseId !== whId && log.destinationWarehouseId !== whCode && log.destinationWarehouseId !== selectedWarehouseId) {
+          return false;
+        }
       }
       if (selectedSlot !== 'ALL' && log.slot) {
         if (!log.slot.toLowerCase().includes(selectedSlot.toLowerCase())) return false;
