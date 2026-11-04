@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
-import { MapPin, Navigation, Compass, CheckCircle2, Loader2, Sparkles, Search } from 'lucide-react';
+import { MapPin, Navigation, Compass, CheckCircle2, Loader2, Sparkles } from 'lucide-react';
 
 // Fix Leaflet standard icons in Vite bundler
 delete L.Icon.Default.prototype._getIconUrl;
@@ -51,8 +51,6 @@ export default function AdminWarehouseLocationMapPicker({
 
   const [currentCoords, setCurrentCoords] = useState({ lat: lat || DEFAULT_LAT, lng: lng || DEFAULT_LNG });
   const [currentAddress, setCurrentAddress] = useState(address);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [locateError, setLocateError] = useState('');
   const [locateNote, setLocateNote] = useState('');
@@ -178,52 +176,6 @@ export default function AdminWarehouseLocationMapPicker({
     }
   };
 
-  // Search any city, town, or APMC Mandi worldwide via Nominatim
-  const handleSearchLocation = async (e) => {
-    if (e) e.preventDefault();
-    const query = searchQuery.trim();
-    if (!query) return;
-
-    setIsSearching(true);
-    setLocateError('');
-
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(query)}&limit=1`,
-        { headers: { 'Accept-Language': 'en' } }
-      );
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.length > 0) {
-          const result = data[0];
-          const newLat = Number(parseFloat(result.lat).toFixed(6));
-          const newLng = Number(parseFloat(result.lon).toFixed(6));
-          const newAddress = result.display_name;
-
-          setCurrentCoords({ lat: newLat, lng: newLng });
-          setCurrentAddress(newAddress);
-
-          if (mapInstanceRef.current) {
-            mapInstanceRef.current.flyTo([newLat, newLng], 15, { duration: 1.2 });
-          }
-          if (markerRef.current) {
-            markerRef.current.setLatLng([newLat, newLng]);
-            markerRef.current.openPopup();
-          }
-
-          triggerChange(newLat, newLng, newAddress);
-          setIsSearching(false);
-          return;
-        }
-      }
-      setLocateError(`Could not find "${query}". Try searching a city name (e.g. Visakhapatnam, Kolar, Madanapalle).`);
-    } catch {
-      setLocateError('Failed to search location. Please check your internet connection.');
-    } finally {
-      setIsSearching(false);
-    }
-  };
-
   // Auto-Detect Current GPS Position with Multi-Tier Fallback (High Accuracy -> Low Accuracy -> IP Geolocation)
   const handleAutoDetectLocation = async () => {
     setIsLocating(true);
@@ -342,50 +294,6 @@ export default function AdminWarehouseLocationMapPicker({
           onChange={handleAddressInputChange}
           required
         />
-      </div>
-
-      {/* City / Mandi Search Bar to easily fly to any city across India */}
-      <div style={{ display: 'flex', gap: '6px' }}>
-        <div style={{ position: 'relative', flex: 1 }}>
-          <Search size={14} color="#64748B" style={{ position: 'absolute', left: '10px', top: '10px' }} />
-          <input
-            type="text"
-            placeholder="Search any City or Mandi (e.g. Visakhapatnam, Kolar, Madanapalle, Vijayawada...)"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSearchLocation(); } }}
-            style={{
-              width: '100%',
-              height: '34px',
-              paddingLeft: '32px',
-              paddingRight: '10px',
-              borderRadius: '6px',
-              border: '1.5px solid #CBD5E1',
-              fontSize: '12px'
-            }}
-          />
-        </div>
-        <button
-          type="button"
-          onClick={handleSearchLocation}
-          disabled={isSearching || !searchQuery.trim()}
-          style={{
-            padding: '0 12px',
-            borderRadius: '6px',
-            background: '#234B3C',
-            color: '#FFF',
-            border: 'none',
-            fontWeight: 700,
-            fontSize: '12px',
-            cursor: isSearching ? 'wait' : 'pointer',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '4px'
-          }}
-        >
-          {isSearching ? <Loader2 size={13} className="animate-spin" /> : <Search size={13} />}
-          <span>Find</span>
-        </button>
       </div>
 
       {/* Action Row: Auto-Detect GPS Button + Interactive Map Note */}
