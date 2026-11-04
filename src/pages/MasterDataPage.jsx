@@ -15,7 +15,8 @@ import {
   Upload,
   Sparkles,
   RotateCcw,
-  Image as ImageIcon
+  Image as ImageIcon,
+  AlertCircle
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAdminRole } from '../context/AdminRoleContext';
