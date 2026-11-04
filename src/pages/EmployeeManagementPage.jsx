@@ -21,7 +21,8 @@ import {
   KeyRound,
   Link2,
   Copy,
-  HelpCircle
+  HelpCircle,
+  Globe
 } from 'lucide-react';
 import { useAdminRole, ROLES } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
@@ -117,7 +118,7 @@ export default function EmployeeManagementPage() {
       roles: emp.roles || ['WAREHOUSE_MANAGER'],
       assignedWarehouseId: emp.assignedWarehouseId || 'ALL',
       assignedLocationType: emp.assignedLocationType || 'WAREHOUSE',
-      assignedLocationName: emp.assignedLocationName || '',
+      assignedLocationName: (warehouses.find(w => w.id === emp.assignedWarehouseId || w.code === emp.assignedWarehouseId)?.name) || emp.assignedWarehouseName || emp.assignedLocationName || '',
       status: emp.status || 'ACTIVE',
       authMethod: emp.authMethod || (emp.inviteStatus === 'INVITED' ? 'INVITE' : 'PASSWORD'),
       password: '', // Kept empty during edit so existing password in database is never overwritten
@@ -505,8 +506,8 @@ export default function EmployeeManagementPage() {
               <tr>
                 <th>Staff Name & Contact</th>
                 <th>Assigned Roles (Multi-Role)</th>
-                <th>Assigned Store / Warehouse Facility</th>
-                <th>Status & Auth</th>
+                <th>Warehouse</th>
+                <th>Status</th>
                 <th>Joined Date</th>
                 <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
@@ -520,7 +521,11 @@ export default function EmployeeManagementPage() {
                 </tr>
               ) : (
                 paginatedEmployees.map(emp => {
-                  const isCitywide = emp.assignedWarehouseId === 'ALL';
+                  const assignedWh = warehouses.find(w => w.id === emp.assignedWarehouseId || w.code === emp.assignedWarehouseId || w.uuid === emp.assignedWarehouseId);
+                  const isCitywide = !emp.assignedWarehouseId || emp.assignedWarehouseId === 'ALL';
+                  const facilityName = isCitywide 
+                    ? 'All Hubs & Warehouses (Citywide)' 
+                    : (assignedWh?.name || emp.assignedWarehouseName || emp.assignedLocationName || emp.assignedWarehouseId);
 
                   return (
                     <tr key={emp.id}>
@@ -593,18 +598,24 @@ export default function EmployeeManagementPage() {
                       </td>
 
                       <td>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', color: '#1E293B', fontWeight: 700 }}>
-                          {isCitywide ? (
-                            <span style={{ color: '#234B3C', background: '#DCFCE7', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 800 }}>
-                              🌐 CITYWIDE
-                            </span>
-                          ) : (
-                            <span style={{ color: '#059669', background: '#ECFDF5', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 800 }}>
-                              🏢 WAREHOUSE
-                            </span>
-                          )}
-                          <span>{emp.assignedLocationName || 'All Hubs'}</span>
-                        </div>
+                        {isCitywide ? (
+                          <span style={{ color: '#234B3C', background: '#DCFCE7', padding: '3px 8px', borderRadius: '6px', fontSize: '11.5px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                            <Globe size={12} />
+                            <span>All Hubs (Citywide)</span>
+                          </span>
+                        ) : (
+                          <div>
+                            <div style={{ fontSize: '12.5px', color: '#0F172A', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                              <Building2 size={13} color="#059669" />
+                              <span>{assignedWh?.name || facilityName}</span>
+                            </div>
+                            {assignedWh?.code && (
+                              <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
+                                Hub Code: <span style={{ fontWeight: 700 }}>{assignedWh.code}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
                         {emp.notes && (
                           <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
                             {emp.notes}
@@ -613,72 +624,16 @@ export default function EmployeeManagementPage() {
                       </td>
 
                       <td>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleToggleStatus(emp.id)}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' }}
-                            title="Click to toggle status"
-                          >
-                            <span className={`status-pill ${emp.status === 'ACTIVE' ? 'approved' : 'rejected'}`}>
-                              {emp.status}
-                            </span>
-                          </button>
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
-                            {emp.inviteStatus === 'INVITED' ? (
-                              <span style={{
-                                background: '#FEF3C7',
-                                color: '#B45309',
-                                fontSize: '10px',
-                                fontWeight: 700,
-                                padding: '1px 6px',
-                                borderRadius: '4px',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '3px'
-                              }}>
-                                <Mail size={9} />
-                                <span>Invited</span>
-                              </span>
-                            ) : (
-                              <span style={{
-                                background: '#ECFDF5',
-                                color: '#047857',
-                                fontSize: '10px',
-                                fontWeight: 700,
-                                padding: '1px 6px',
-                                borderRadius: '4px',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '3px'
-                              }}>
-                                <KeyRound size={9} />
-                                <span>Pass Set</span>
-                              </span>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => handleCopyInviteLink(emp)}
-                              style={{
-                                background: '#F1F5F9',
-                                border: '1px solid #CBD5E1',
-                                borderRadius: '4px',
-                                padding: '1px 5px',
-                                fontSize: '10px',
-                                color: '#334155',
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '2px'
-                              }}
-                              title="Copy activation or login link"
-                            >
-                              <Copy size={9} />
-                              <span>Link</span>
-                            </button>
-                          </div>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleStatus(emp.id)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' }}
+                          title="Click to toggle status"
+                        >
+                          <span className={`status-pill ${emp.status === 'ACTIVE' ? 'approved' : 'rejected'}`}>
+                            {emp.status}
+                          </span>
+                        </button>
                       </td>
 
                       <td style={{ fontSize: '12px', color: '#64748B' }}>

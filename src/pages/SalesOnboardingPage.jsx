@@ -116,24 +116,8 @@ export default function SalesOnboardingPage() {
       }
     }
 
-    // IP Geolocation Fallback
-    try {
-      const res = await fetch('https://ipwho.is/');
-      if (res.ok) {
-        const ipData = await res.json();
-        if (ipData && ipData.success !== false && ipData.latitude && ipData.longitude) {
-          const latVal = Number(parseFloat(ipData.latitude).toFixed(6));
-          const lngVal = Number(parseFloat(ipData.longitude).toFixed(6));
-          await applyLocation(latVal, lngVal, `Positioned to network location: ${ipData.city || 'your area'}`);
-          return;
-        }
-      }
-    } catch (ipErr) {
-      console.warn('IP fallback failed:', ipErr);
-    }
-
     setIsDetectingLocation(false);
-    showToast('GPS hardware unavailable on this device. Please type address manually.', 'info');
+    showToast('Device GPS unavailable. Please enter society address manually or drag pin.', 'info');
   };
 
   // Image Upload Handler (converts to base64)

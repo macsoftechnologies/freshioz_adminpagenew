@@ -59,8 +59,8 @@ export default function AdminWarehouseLocationMapPicker({
   const reverseGeocode = async (targetLat, targetLng) => {
     try {
       const res = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${targetLat}&lon=${targetLng}`,
-        { headers: { 'Accept-Language': 'en' } }
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${targetLat}&lon=${targetLng}&addressdetails=1`,
+        { headers: { 'Accept': 'application/json', 'Accept-Language': 'en' } }
       );
       if (res.ok) {
         const data = await res.json();
@@ -228,30 +228,9 @@ export default function AdminWarehouseLocationMapPicker({
       }
     }
 
-    // Strategy 2: IP-based Network Geolocation Fallback (Works on Desktop PCs, Laptops & Office Networks)
-    try {
-      const ipRes = await fetch('https://ipwho.is/', { headers: { Accept: 'application/json' } });
-      if (ipRes.ok) {
-        const ipData = await ipRes.json();
-        if (ipData && ipData.success !== false && ipData.latitude && ipData.longitude) {
-          const detectedLat = Number(parseFloat(ipData.latitude).toFixed(6));
-          const detectedLng = Number(parseFloat(ipData.longitude).toFixed(6));
-          const cityName = ipData.city || ipData.region || 'your region';
-          await applyPosition(
-            detectedLat,
-            detectedLng,
-            `Auto-positioned to network location: ${cityName}. Drag the pin or search above for exact mandi yard.`
-          );
-          return;
-        }
-      }
-    } catch (ipErr) {
-      console.warn('IP location fetch failed:', ipErr);
-    }
-
-    // Strategy 3: Graceful fallback error
+    // Fallback if hardware GPS unavailable on device
     setIsLocating(false);
-    setLocateError('Could not detect device GPS. Please type your city/mandi name in "Search any City or Mandi" above or click anywhere on the map.');
+    setLocateError('Could not detect device GPS. Please type your city/mandi name in "Search any City or Mandi" above or click anywhere on the map to pin exact location.');
   };
 
   // Manual address input change
