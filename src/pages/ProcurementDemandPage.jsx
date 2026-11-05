@@ -58,7 +58,7 @@ const parseUnitWeightInKg = (unitStr) => {
 import AdminPagination from '../components/common/AdminPagination';
 
 export default function ProcurementDemandPage() {
-  const { currentUser } = useAdminRole();
+  const { currentUser, currentRoleId } = useAdminRole();
   const { showToast } = useToast();
 
   const { data: rawWarehouses = [] } = warehouseResource.useList();
@@ -71,9 +71,24 @@ export default function ProcurementDemandPage() {
   const allOrders = Array.isArray(rawOrders) ? rawOrders : [];
   const procurementLogs = Array.isArray(rawProcLogs) ? rawProcLogs : [];
 
-  const isSuperAdmin = currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN' || currentUser?.email === 'superadmin@gmail.com';
-  const isWarehouseScoped = !isSuperAdmin && currentUser?.assignedWarehouseId && currentUser.assignedWarehouseId !== 'ALL';
-  const initialWarehouse = isWarehouseScoped ? currentUser.assignedWarehouseId : 'ALL';
+  const isExplicitSuperAdminDesk = currentRoleId === 'SUPER_ADMIN' && (currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN' || currentUser?.email === 'superadmin@gmail.com');
+  const isWarehouseScoped = !isExplicitSuperAdminDesk;
+
+  const resolvedWh = useMemo(() => {
+    if (!warehouses || warehouses.length === 0) return null;
+    const assignedId = currentUser?.assignedWarehouseId;
+    if (assignedId && assignedId !== 'ALL') {
+      const match = warehouses.find(w => w.id === assignedId || w.code === assignedId || w.uuid === assignedId);
+      if (match) return match;
+    }
+    return warehouses[0];
+  }, [warehouses, currentUser?.assignedWarehouseId]);
+
+  const assignedWhId = resolvedWh?.id;
+  const assignedWhCode = resolvedWh?.code;
+  const assignedWhName = resolvedWh?.name || 'Warehouse ONE';
+
+  const initialWarehouse = isWarehouseScoped ? (assignedWhId || warehouses[0]?.id || 'ALL') : 'ALL';
 
   // URL Hash synchronization (#pending vs #mandi)
   const getTabFromHash = () => {
@@ -87,13 +102,10 @@ export default function ProcurementDemandPage() {
 
   // Sync warehouse selector once warehouses load
   React.useEffect(() => {
-    if (isWarehouseScoped && warehouses.length > 0) {
-      const wh = warehouses.find(w => w.id === currentUser.assignedWarehouseId || w.code === currentUser.assignedWarehouseId);
-      if (wh && selectedWarehouseId !== wh.id) {
-        setSelectedWarehouseId(wh.id);
-      }
+    if (isWarehouseScoped && assignedWhId && selectedWarehouseId !== assignedWhId) {
+      setSelectedWarehouseId(assignedWhId);
     }
-  }, [isWarehouseScoped, currentUser?.assignedWarehouseId, warehouses]);
+  }, [isWarehouseScoped, assignedWhId, selectedWarehouseId]);
   const [selectedSlot, setSelectedSlot] = useState('ALL'); // 'ALL' | 'Morning Fresh Slot' | 'Evening Fresh Slot'
   const [selectedDate, setSelectedDate] = useState('ALL'); // 'ALL' | specific delivery date
   const [activeTab, setActiveTab] = useState(getTabFromHash); // 'PENDING' | 'PROCURED_TODAY'
@@ -608,7 +620,7 @@ export default function ProcurementDemandPage() {
                   fontWeight: 800,
                   color: '#065F46'
                 }}>
-                  <span>{warehouses.find(w => w.id === currentUser.assignedWarehouseId || w.code === currentUser.assignedWarehouseId)?.name || currentUser.assignedWarehouseId}</span>
+                  <span>{assignedWhCode ? (assignedWhCode + ' - ' + assignedWhName) : assignedWhName}</span>
                   <span style={{ fontSize: '10px', background: '#059669', color: '#FFF', padding: '1px 5px', borderRadius: '4px' }}>🔒 Assigned Hub</span>
                 </div>
               ) : (
@@ -1284,3 +1296,4 @@ export default function ProcurementDemandPage() {
     </div>
   );
 }
+

@@ -174,21 +174,31 @@ export default function WarehouseCratingPage() {
   const isRiderRole = currentUser?.role === 'DELIVERY_EXECUTIVE' && !currentUser?.roles?.includes('SUPER_ADMIN');
 
   // Filter orders based on user's role and assigned warehouse / route / dispatch slot
-  const isSuper = currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN' || currentUser?.email === 'superadmin@gmail.com';
-  const isWarehouseScoped = !isSuper && currentUser?.assignedWarehouseId && currentUser.assignedWarehouseId !== 'ALL';
+  const isSuperDesk = currentRoleId === 'SUPER_ADMIN' && (currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN' || currentUser?.email === 'superadmin@gmail.com');
+  const isWarehouseScoped = !isSuperDesk;
+
+  const resolvedWh = React.useMemo(() => {
+    if (!warehouses || warehouses.length === 0) return null;
+    const assignedId = currentUser?.assignedWarehouseId;
+    if (assignedId && assignedId !== 'ALL') {
+      const match = warehouses.find(w => w.id === assignedId || w.code === assignedId || w.uuid === assignedId);
+      if (match) return match;
+    }
+    return warehouses[0];
+  }, [warehouses, currentUser?.assignedWarehouseId]);
+
+  const assignedWhId = resolvedWh?.id;
+  const assignedWhCode = resolvedWh?.code;
 
   const visibleOrders = orders.filter(order => {
     if (isWarehouseScoped) {
-      const targetWh = warehouses.find(w => w.id === currentUser.assignedWarehouseId || w.code === currentUser.assignedWarehouseId);
-      const whId = targetWh?.id || currentUser.assignedWarehouseId;
-      const whCode = targetWh?.code || currentUser.assignedWarehouseId;
       const orderWhId = order.warehouseId || order.warehouse?.id;
       const orderWhCode = order.warehouseCode || order.warehouse?.code;
 
       const isWhMatch = 
         (!orderWhId && !orderWhCode) ||
-        (orderWhId && (orderWhId === whId || orderWhId === whCode)) ||
-        (orderWhCode && (orderWhCode === whCode || orderWhCode === whId));
+        (orderWhId && (orderWhId === assignedWhId || orderWhId === assignedWhCode)) ||
+        (orderWhCode && (orderWhCode === assignedWhCode || orderWhCode === assignedWhId));
 
       if (!isWhMatch) return false;
     }

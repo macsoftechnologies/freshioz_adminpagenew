@@ -360,7 +360,21 @@ export default function OrdersFulfillmentPage() {
     exportToExcel('Freshioz_Morning_Delivery_Manifest', headers, rows);
   };
 
-  const isWarehouseScoped = !isSuperAdmin && currentUser?.assignedWarehouseId && currentUser.assignedWarehouseId !== 'ALL';
+  const isExplicitSuperAdminDesk = currentRoleId === 'SUPER_ADMIN' && isSuperAdmin;
+  const isWarehouseScoped = !isExplicitSuperAdminDesk;
+
+  const resolvedWh = React.useMemo(() => {
+    if (!warehouses || warehouses.length === 0) return null;
+    const assignedId = currentUser?.assignedWarehouseId;
+    if (assignedId && assignedId !== 'ALL') {
+      const match = warehouses.find(w => w.id === assignedId || w.code === assignedId || w.uuid === assignedId);
+      if (match) return match;
+    }
+    return warehouses[0];
+  }, [warehouses, currentUser?.assignedWarehouseId]);
+
+  const assignedWhId = resolvedWh?.id;
+  const assignedWhCode = resolvedWh?.code;
   const isDeliveryExecutive = currentRoleId === 'DELIVERY_EXECUTIVE' || currentUser?.role === 'DELIVERY_EXECUTIVE';
 
   const isAssignedToCurrentRider = (o) => {
@@ -423,16 +437,13 @@ export default function OrdersFulfillmentPage() {
     } else {
       // Warehouse Scope Guard: Staff assigned to a warehouse only see orders for their warehouse
       if (isWarehouseScoped) {
-        const targetWh = warehouses.find(w => w.id === currentUser.assignedWarehouseId || w.code === currentUser.assignedWarehouseId);
-        const whId = targetWh?.id || currentUser.assignedWarehouseId;
-        const whCode = targetWh?.code || currentUser.assignedWarehouseId;
         const orderWhId = o.warehouseId || o.warehouse?.id;
         const orderWhCode = o.warehouseCode || o.warehouse?.code;
 
         const isWhMatch = 
           (!orderWhId && !orderWhCode) ||
-          (orderWhId && (orderWhId === whId || orderWhId === whCode)) ||
-          (orderWhCode && (orderWhCode === whCode || orderWhCode === whId));
+          (orderWhId && (orderWhId === assignedWhId || orderWhId === assignedWhCode)) ||
+          (orderWhCode && (orderWhCode === assignedWhCode || orderWhCode === assignedWhId));
 
         if (!isWhMatch) return false;
       }

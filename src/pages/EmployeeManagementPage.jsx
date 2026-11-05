@@ -31,14 +31,26 @@ import { exportToExcel } from '../utils/excelExporter';
 import AdminPagination from '../components/common/AdminPagination';
 
 export default function EmployeeManagementPage() {
-  const { currentUser } = useAdminRole();
+  const { currentUser, currentRoleId } = useAdminRole();
   const { showToast } = useToast();
 
-  const isSuperAdmin = currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN' || currentUser?.email === 'superadmin@gmail.com';
-  const isWarehouseScoped = !isSuperAdmin && currentUser?.assignedWarehouseId && currentUser.assignedWarehouseId !== 'ALL';
+  const isSuperAdminDesk = currentRoleId === 'SUPER_ADMIN' && (currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN' || currentUser?.email === 'superadmin@gmail.com');
+  const isWarehouseScoped = !isSuperAdminDesk;
 
   const { data: employees = [], isLoading } = employeeResource.useList();
   const { data: warehouses = [] } = warehouseResource.useList();
+
+  const resolvedWh = React.useMemo(() => {
+    if (!warehouses || warehouses.length === 0) return null;
+    const assignedId = currentUser?.assignedWarehouseId;
+    if (assignedId && assignedId !== 'ALL') {
+      const match = warehouses.find(w => w.id === assignedId || w.code === assignedId || w.uuid === assignedId);
+      if (match) return match;
+    }
+    return warehouses[0];
+  }, [warehouses, currentUser?.assignedWarehouseId]);
+
+  const assignedWh = resolvedWh;
 
   const createEmployeeMutation = employeeResource.useCreate();
   const updateEmployeeMutation = employeeResource.useUpdate();
@@ -118,14 +130,21 @@ export default function EmployeeManagementPage() {
 
   const handleOpenEditModal = (emp) => {
     setEditingEmployee(emp);
+    const isEmpSuperAdmin = (emp.roles || []).includes('SUPER_ADMIN');
+    let targetWhId = emp.assignedWarehouseId;
+    if (!isEmpSuperAdmin && (!targetWhId || targetWhId === 'ALL')) {
+      targetWhId = warehouses[0]?.id || '';
+    }
+    const matchedWh = warehouses.find(w => w.id === targetWhId || w.code === targetWhId);
+
     setFormData({
       name: emp.name,
       phone: emp.phone,
       email: emp.email || '',
       roles: emp.roles || ['WAREHOUSE_MANAGER'],
-      assignedWarehouseId: emp.assignedWarehouseId || 'ALL',
-      assignedLocationType: emp.assignedLocationType || 'WAREHOUSE',
-      assignedLocationName: (warehouses.find(w => w.id === emp.assignedWarehouseId || w.code === emp.assignedWarehouseId)?.name) || emp.assignedWarehouseName || emp.assignedLocationName || '',
+      assignedWarehouseId: targetWhId || (warehouses[0]?.id || 'ALL'),
+      assignedLocationType: 'WAREHOUSE',
+      assignedLocationName: matchedWh?.name || emp.assignedWarehouseName || emp.assignedLocationName || (warehouses[0]?.name || ''),
       status: emp.status || 'ACTIVE',
       authMethod: emp.authMethod || (emp.inviteStatus === 'INVITED' ? 'INVITE' : 'PASSWORD'),
       password: '', // Kept empty during edit so existing password in database is never overwritten
@@ -140,12 +159,19 @@ export default function EmployeeManagementPage() {
   const toggleRoleSelection = (roleId) => {
     setFormData(prev => {
       const current = prev.roles || [];
+      let nextRoles;
       if (current.includes(roleId)) {
         if (current.length === 1) return prev; // Keep at least one role
-        return { ...prev, roles: current.filter(r => r !== roleId) };
+        nextRoles = current.filter(r => r !== roleId);
       } else {
-        return { ...prev, roles: [...current, roleId] };
+        nextRoles = [...current, roleId];
       }
+
+      let nextWhId = prev.assignedWarehouseId;
+      if (!nextRoles.includes('SUPER_ADMIN') && (!nextWhId || nextWhId === 'ALL')) {
+        nextWhId = warehouses[0]?.id || '';
+      }
+      return { ...prev, roles: nextRoles, assignedWarehouseId: nextWhId };
     });
   };
 
@@ -176,15 +202,27 @@ export default function EmployeeManagementPage() {
   };
 
   const handleConfirmCommitEmployee = async () => {
+    const augmentedRoles = Array.isArray(formData.roles) ? [...formData.roles] : [];
+    if (augmentedRoles.includes('WAREHOUSE_MANAGER') && !augmentedRoles.includes('PROCUREMENT_OFFICER')) {
+      augmentedRoles.push('PROCUREMENT_OFFICER');
+    }
+
+    let targetWhId = formData.assignedWarehouseId;
+    const isTargetSuperAdmin = augmentedRoles.includes('SUPER_ADMIN');
+    if (!isTargetSuperAdmin && (!targetWhId || targetWhId === 'ALL')) {
+      targetWhId = warehouses[0]?.id || warehouses[0]?.code;
+    }
+
     // Determine location name & type
     let locName = 'All Hubs & Warehouses (Citywide)';
     let locType = 'ALL';
 
-    if (formData.assignedWarehouseId !== 'ALL') {
-      const wh = warehouses.find(w => w.id === formData.assignedWarehouseId);
+    if (targetWhId && targetWhId !== 'ALL') {
+      const wh = warehouses.find(w => w.id === targetWhId || w.code === targetWhId);
       if (wh) {
         locName = wh.name;
         locType = 'WAREHOUSE';
+        targetWhId = wh.id;
       }
     }
 
@@ -193,14 +231,12 @@ export default function EmployeeManagementPage() {
       ? (formData.inviteToken || `inv_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`)
       : null;
 
-    const augmentedRoles = Array.isArray(formData.roles) ? [...formData.roles] : [];
-    if (augmentedRoles.includes('WAREHOUSE_MANAGER') && !augmentedRoles.includes('PROCUREMENT_OFFICER')) {
-      augmentedRoles.push('PROCUREMENT_OFFICER');
-    }
+
 
     const payload = {
       ...formData,
       roles: augmentedRoles,
+      assignedWarehouseId: targetWhId,
       inviteStatus: resolvedInviteStatus,
       inviteToken: resolvedInviteToken,
       assignedLocationType: locType,
