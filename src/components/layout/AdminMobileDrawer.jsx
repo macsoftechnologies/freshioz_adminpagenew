@@ -613,11 +613,6 @@ export default function AdminMobileDrawer() {
                 <Truck size={17} />
                 <span style={{ flex: 1 }}>My Delivery Manifest</span>
               </NavLink>
-
-              <NavLink to="/warehouse-crating" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
-                <PackageCheck size={17} />
-                <span>Society Drop Crates Handover</span>
-              </NavLink>
             </>
           )}
         </div>

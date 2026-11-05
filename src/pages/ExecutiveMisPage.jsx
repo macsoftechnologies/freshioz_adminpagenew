@@ -129,6 +129,8 @@ export default function ExecutiveMisPage() {
     bulkDiscountSavings: 0,
     deliveryFeesCollected: 0,
     totalOrdersCount: 0,
+    cancelledOrdersCount: 0,
+    cancelledRevenue: 0,
     totalProduceDispatchedKg: 0,
     totalMandiOutflow: 0,
     produceProcuredAmount: 0,
@@ -607,9 +609,15 @@ export default function ExecutiveMisPage() {
           <div style={{ fontSize: '26px', fontWeight: 900, color: C.spruce, marginBottom: '6px' }}>
             ₹{kpis.totalGrossInflow.toLocaleString('en-IN')}
           </div>
-          <div style={{ fontSize: '12px', color: C.textMuted, display: 'flex', justifyContent: 'space-between' }}>
+          <div style={{ fontSize: '12px', color: C.textMuted, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span><strong>{kpis.totalOrdersCount}</strong> Live Orders</span>
-            <span style={{ color: C.spruce, fontWeight: 800 }}>Realized Net</span>
+            {kpis.cancelledOrdersCount > 0 ? (
+              <span style={{ color: C.rose, fontWeight: 700, fontSize: '11px', background: C.roseSurface, padding: '1px 6px', borderRadius: '4px', border: `1px solid ${C.roseBorder}` }}>
+                {kpis.cancelledOrdersCount} Cancelled (-₹{kpis.cancelledRevenue.toLocaleString('en-IN')})
+              </span>
+            ) : (
+              <span style={{ color: C.spruce, fontWeight: 800 }}>Realized Net</span>
+            )}
           </div>
           <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: `1px solid ${C.borderLight}`, fontSize: '11px', color: C.textMuted, display: 'flex', justifyContent: 'space-between' }}>
             <span>Billing: ₹{kpis.grossBillingValue.toLocaleString('en-IN')}</span>

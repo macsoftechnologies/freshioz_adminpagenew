@@ -23,10 +23,56 @@ import { useAdminRole } from '../context/AdminRoleContext';
 import AdminPagination from '../components/common/AdminPagination';
 
 export default function SocietiesDirectoryPage() {
-  const { store } = useAdminRole();
-  const societies = store.societies || [];
+  const { store, currentUser, currentRoleId } = useAdminRole();
+  const rawSocieties = store.societies || [];
   const orders = store.orders || [];
   const warehouses = store.warehouses || [];
+
+  const isSuperAdmin = currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN' || currentUser?.email === 'superadmin@gmail.com';
+  const isSalesOfficer = currentRoleId === 'SALES_OFFICER' || currentUser?.role === 'SALES_OFFICER';
+  const assignedWhId = currentUser?.assignedWarehouseId;
+  const isWarehouseScoped = !isSuperAdmin && assignedWhId && assignedWhId !== 'ALL';
+
+  const resolvedWh = React.useMemo(() => {
+    if (!warehouses || warehouses.length === 0) return null;
+    if (assignedWhId && assignedWhId !== 'ALL') {
+      const match = warehouses.find(w => w.id === assignedWhId || w.code === assignedWhId || w.uuid === assignedWhId);
+      if (match) return match;
+    }
+    return null;
+  }, [warehouses, assignedWhId]);
+
+  // Scoped societies:
+  // - Sales Officer: Only societies they personally onboarded / lead
+  // - Warehouse Manager / Staff: Only societies assigned to their regional warehouse hub
+  // - Super Admin: All societies
+  const societies = React.useMemo(() => {
+    if (isSuperAdmin) return rawSocieties;
+
+    if (isSalesOfficer) {
+      return rawSocieties.filter(s => {
+        const matchCreator = s.createdById && (s.createdById === currentUser?.id || s.createdById === currentUser?.uuid);
+        const matchPhone = s.salesRepPhone && currentUser?.phone && s.salesRepPhone.replace(/\D/g, '') === currentUser.phone.replace(/\D/g, '');
+        const matchName = s.salesRepName && currentUser?.name && s.salesRepName.toLowerCase() === currentUser.name.toLowerCase();
+        const matchSecretary = s.secretaryPhone && currentUser?.phone && s.secretaryPhone.replace(/\D/g, '') === currentUser.phone.replace(/\D/g, '');
+        if (matchCreator || matchPhone || matchName || matchSecretary) return true;
+
+        // If no rep is explicitly stamped yet and rep is bound to a warehouse, allow their hub societies
+        if (!s.createdById && !s.salesRepPhone && !s.salesRepName && isWarehouseScoped) {
+          return s.warehouseId === assignedWhId || s.warehouseId === resolvedWh?.code || s.warehouseId === resolvedWh?.uuid;
+        }
+        return false;
+      });
+    }
+
+    if (isWarehouseScoped) {
+      return rawSocieties.filter(s => {
+        return s.warehouseId === assignedWhId || s.warehouseId === resolvedWh?.code || s.warehouseId === resolvedWh?.uuid;
+      });
+    }
+
+    return rawSocieties;
+  }, [rawSocieties, isSuperAdmin, isSalesOfficer, isWarehouseScoped, currentUser, assignedWhId, resolvedWh]);
 
   const [activeTab, setActiveTab] = useState('ALL'); // 'ALL' | 'APARTMENT' | 'HOSTEL' | 'VILLA'
   const [searchQuery, setSearchQuery] = useState('');
@@ -123,9 +169,19 @@ export default function SocietiesDirectoryPage() {
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {isSalesOfficer && (
+            <span style={{ fontSize: '11.5px', background: '#ECFDF5', border: '1.5px solid #A7F3D0', color: '#065F46', padding: '3px 10px', borderRadius: '6px', fontWeight: 800 }}>
+              👤 {currentUser?.name || 'Sales Officer'} — My Portfolio 🔒 Scoped
+            </span>
+          )}
+          {!isSalesOfficer && isWarehouseScoped && resolvedWh && (
+            <span style={{ fontSize: '11.5px', background: '#ECFDF5', border: '1.5px solid #A7F3D0', color: '#065F46', padding: '3px 10px', borderRadius: '6px', fontWeight: 800 }}>
+              🏢 {resolvedWh.code} — {resolvedWh.name} 🔒 Assigned Hub
+            </span>
+          )}
           <span style={{ fontSize: '12px', background: '#EBF2EE', color: '#234B3C', padding: '4px 12px', borderRadius: '8px', fontWeight: 700 }}>
-            {societies.length} Onboarded Communities
+            {societies.length} {isSalesOfficer ? 'Assigned' : 'Onboarded'} Communities
           </span>
           <span style={{ fontSize: '12px', background: '#FEF3C7', color: '#B45309', padding: '4px 12px', borderRadius: '8px', fontWeight: 700 }}>
             {allUniqueResidents.size} Registered Residents

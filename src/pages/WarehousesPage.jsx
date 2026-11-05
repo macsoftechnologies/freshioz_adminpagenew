@@ -111,9 +111,22 @@ export default function WarehousesPage() {
     exportToExcel('Freshioz_Warehouses_Directory', headers, rows);
   };
 
-  const isSuperAdmin = currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN';
+  const isSuperAdmin = currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN' || currentUser?.email === 'superadmin@gmail.com';
+  const assignedWhId = currentUser?.assignedWarehouseId;
+  const isWarehouseScoped = !isSuperAdmin && assignedWhId && assignedWhId !== 'ALL';
 
-  const filteredWarehouses = warehouses.filter(wh => {
+  const accessibleWarehouses = React.useMemo(() => {
+    if (!isWarehouseScoped) return warehouses;
+    return warehouses.filter(wh => wh.id === assignedWhId || wh.code === assignedWhId || wh.uuid === assignedWhId);
+  }, [warehouses, isWarehouseScoped, assignedWhId]);
+
+  const accessibleSocieties = React.useMemo(() => {
+    if (!isWarehouseScoped) return societies;
+    const whIds = new Set(accessibleWarehouses.map(w => w.id));
+    return societies.filter(s => whIds.has(s.warehouseId));
+  }, [societies, accessibleWarehouses, isWarehouseScoped]);
+
+  const filteredWarehouses = accessibleWarehouses.filter(wh => {
     if (hubStatusFilter === 'ACTIVE' && wh.status === 'INACTIVE') return false;
     if (hubStatusFilter === 'INACTIVE' && wh.status !== 'INACTIVE') return false;
     return true;
@@ -252,14 +265,14 @@ export default function WarehousesPage() {
               Warehouses Directory
             </h1>
             <span style={{ background: '#E0F2FE', color: '#0369A1', fontSize: '11px', fontWeight: 800, padding: '2px 8px', borderRadius: '4px' }}>
-              {warehouses.length} Active Hubs
+              {accessibleWarehouses.length} Active Hubs
             </span>
           </div>
 
           {/* Compact Inline Stats Strip */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '11.5px', color: '#64748B', marginTop: '3px', flexWrap: 'wrap' }}>
-            <span>• <strong>{societies.length}</strong> Covered Communities & Hostels</span>
-            <span>• Total Handling Capacity: <strong style={{ color: '#059669' }}>{warehouses.reduce((acc, w) => acc + (w.capacityTons || 35), 0)} Tons</strong></span>
+            <span>• <strong>{accessibleSocieties.length}</strong> Covered Communities & Hostels</span>
+            <span>• Total Handling Capacity: <strong style={{ color: '#059669' }}>{accessibleWarehouses.reduce((acc, w) => acc + (w.capacityTons || 35), 0)} Tons</strong></span>
           </div>
         </div>
 
@@ -321,7 +334,7 @@ export default function WarehousesPage() {
           <div>
             <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
               <Warehouse size={18} color="#234B3C" />
-              <span>Regional Warehouses & Logistics Hubs ({warehouses.length})</span>
+              <span>Regional Warehouses & Logistics Hubs ({accessibleWarehouses.length})</span>
             </h3>
             <p style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
               Direct Agri-Logistics Sorting & Crating Hubs serving registered apartment communities and hostels.
@@ -343,7 +356,7 @@ export default function WarehousesPage() {
                 cursor: 'pointer'
               }}
             >
-              All Hubs ({warehouses.length})
+              All Hubs ({accessibleWarehouses.length})
             </button>
             <button
               type="button"
@@ -359,7 +372,7 @@ export default function WarehousesPage() {
                 cursor: 'pointer'
               }}
             >
-              Active ({warehouses.filter(w => w.status !== 'INACTIVE').length})
+              Active ({accessibleWarehouses.filter(w => w.status !== 'INACTIVE').length})
             </button>
             <button
               type="button"
@@ -375,7 +388,7 @@ export default function WarehousesPage() {
                 cursor: 'pointer'
               }}
             >
-              Paused ({warehouses.filter(w => w.status === 'INACTIVE').length})
+              Paused ({accessibleWarehouses.filter(w => w.status === 'INACTIVE').length})
             </button>
           </div>
         </div>

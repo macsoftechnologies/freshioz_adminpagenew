@@ -77,7 +77,7 @@ export default function EmployeeManagementPage() {
     assignedLocationName: 'All Hubs & Warehouses (Citywide)',
     status: 'ACTIVE',
     authMethod: 'PASSWORD', // 'PASSWORD' | 'INVITE'
-    password: 'admin123',
+    password: 'Freshioz@123',
     inviteStatus: 'ACTIVE', // 'ACTIVE' | 'INVITED'
     inviteToken: '',
     notes: ''

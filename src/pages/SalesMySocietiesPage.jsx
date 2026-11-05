@@ -10,21 +10,20 @@ export default function SalesMySocietiesPage() {
   const [statusFilter, setStatusFilter] = useState('ALL');
 
   const allSocieties = store.societies || [];
-  const mySocietiesCount = allSocieties.filter(s => 
-    !currentUser || 
-    s.createdById === currentUser.id || 
-    s.salesRepPhone === currentUser.phone || 
-    s.salesRepName === currentUser.name ||
-    !s.salesRepName
-  ).length;
+  const mySocietiesCount = allSocieties.filter(s => {
+    if (!currentUser) return true;
+    const matchId = s.createdById && (s.createdById === currentUser.id || s.createdById === currentUser.uuid);
+    const matchPhone = s.salesRepPhone && currentUser.phone && s.salesRepPhone.replace(/\D/g, '') === currentUser.phone.replace(/\D/g, '');
+    const matchName = s.salesRepName && currentUser.name && s.salesRepName.toLowerCase() === currentUser.name.toLowerCase();
+    return matchId || matchPhone || matchName;
+  }).length;
 
   const filtered = allSocieties.filter(s => {
     if (repFilter === 'MY' && currentUser) {
-      const isMine = s.createdById === currentUser.id ||
-                     s.salesRepPhone === currentUser.phone ||
-                     s.salesRepName === currentUser.name ||
-                     !s.salesRepName; // include default demo fixtures
-      if (!isMine) return false;
+      const matchId = s.createdById && (s.createdById === currentUser.id || s.createdById === currentUser.uuid);
+      const matchPhone = s.salesRepPhone && currentUser.phone && s.salesRepPhone.replace(/\D/g, '') === currentUser.phone.replace(/\D/g, '');
+      const matchName = s.salesRepName && currentUser.name && s.salesRepName.toLowerCase() === currentUser.name.toLowerCase();
+      if (!matchId && !matchPhone && !matchName) return false;
     }
     if (statusFilter === 'ALL') return true;
     return s.status === statusFilter;
@@ -173,8 +172,8 @@ export default function SalesMySocietiesPage() {
                       <div style={{ fontSize: '11px', color: '#64748B' }}>+91 {soc.secretaryPhone || '—'}</div>
                     </td>
                     <td>
-                      <div style={{ fontSize: '12px', fontWeight: 700, color: '#1E293B' }}>{soc.salesRepName || 'Field Sales'}</div>
-                      <div style={{ fontSize: '11px', color: '#64748B' }}>+91 {soc.salesRepPhone || '99999999999'}</div>
+                      <div style={{ fontSize: '12px', fontWeight: 700, color: '#1E293B' }}>{soc.salesRepName || 'Unassigned'}</div>
+                      <div style={{ fontSize: '11px', color: '#64748B' }}>{soc.salesRepPhone ? `+91 ${soc.salesRepPhone}` : '—'}</div>
                     </td>
                     <td>
                       <span className={`status-pill ${soc.status.toLowerCase()}`}>

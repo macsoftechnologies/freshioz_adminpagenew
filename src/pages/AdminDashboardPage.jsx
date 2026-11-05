@@ -139,10 +139,25 @@ export default function AdminDashboardPage() {
     });
   }, [allOrders, timeRange, selectedWarehouseId]);
 
+  // Active Orders (Excluding Cancelled) for Realized Revenue, AOV, Volume & Charts
+  const activeOrders = useMemo(() => {
+    return filteredOrders.filter(o => o.status !== 'CANCELLED');
+  }, [filteredOrders]);
+
+  const cancelledOrders = useMemo(() => {
+    return filteredOrders.filter(o => o.status === 'CANCELLED');
+  }, [filteredOrders]);
+
+  const totalCancelledCount = cancelledOrders.length;
+  const totalCancelledAmount = useMemo(() => {
+    return cancelledOrders.reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
+  }, [cancelledOrders]);
+
 // Compute Previous Period Orders for Trend Comparison (% Deltas)
 const previousPeriodOrders = useMemo(() => {
   const now = new Date();
   return allOrders.filter(o => {
+    if (o.status === 'CANCELLED') return false;
     if (selectedWarehouseId !== 'ALL' && o.warehouseId !== selectedWarehouseId) {
       return false;
     }
@@ -174,10 +189,10 @@ const previousPeriodOrders = useMemo(() => {
   });
   }, [allOrders, timeRange, selectedWarehouseId]);
 
-// ================= 2. DYNAMIC TOP 4 KPI METRICS =================
+// ================= 2. DYNAMIC TOP 4 KPI METRICS (ACTIVE ORDERS ONLY) =================
 const totalGrossSales = useMemo(() => {
-  return filteredOrders.reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
-}, [filteredOrders]);
+  return activeOrders.reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
+}, [activeOrders]);
 
 const prevGrossSales = useMemo(() => {
   return previousPeriodOrders.reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
@@ -190,7 +205,7 @@ const salesTrendDelta = useMemo(() => {
   return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
 }, [totalGrossSales, prevGrossSales]);
 
-const totalOrdersCount = filteredOrders.length;
+const totalOrdersCount = activeOrders.length;
 const prevOrdersCount = previousPeriodOrders.length;
 const ordersTrendDelta = useMemo(() => {
   if (totalOrdersCount === 0) return '0 Orders';
@@ -201,12 +216,12 @@ const ordersTrendDelta = useMemo(() => {
 
 const activeCustomersCount = useMemo(() => {
   const userSet = new Set();
-  filteredOrders.forEach(o => {
+  activeOrders.forEach(o => {
     if (o.userId) userSet.add(o.userId);
     else if (o.userPhone) userSet.add(o.userPhone);
   });
   return userSet.size;
-}, [filteredOrders]);
+}, [activeOrders]);
 
 const prevActiveCustomersCount = useMemo(() => {
   const userSet = new Set();
@@ -267,7 +282,7 @@ const totalMandiSpend = useMemo(() => {
         bucketPrevOrdersMap[i] = { label: key, value: 0 };
       }
 
-      filteredOrders.forEach(o => {
+      activeOrders.forEach(o => {
         const dt = new Date(o.orderPlacedAt || o.createdAt);
         if (!isNaN(dt.getTime())) {
           const diffDays = Math.floor((now.getTime() - dt.getTime()) / (1000 * 3600 * 24));
@@ -290,7 +305,7 @@ const totalMandiSpend = useMemo(() => {
       }
 
       const currentYear = now.getFullYear();
-      filteredOrders.forEach(o => {
+      activeOrders.forEach(o => {
         const dt = new Date(o.orderPlacedAt || o.createdAt);
         if (!isNaN(dt.getTime())) {
           const m = dt.getMonth();
@@ -311,7 +326,7 @@ const totalMandiSpend = useMemo(() => {
         bucketPrevOrdersMap[d] = { label: `${d} Prev`, day: d, value: 0 };
       }
 
-      filteredOrders.forEach(o => {
+      activeOrders.forEach(o => {
         const dt = new Date(o.orderPlacedAt || o.createdAt);
         if (!isNaN(dt.getTime())) {
           if (dt.getMonth() === now.getMonth() && dt.getFullYear() === now.getFullYear()) {
@@ -371,13 +386,13 @@ return {
   hasData: maxRecorded > 0,
   xLabels
 };
-  }, [filteredOrders, salesTimeFilter]);
+  }, [activeOrders, salesTimeFilter]);
 
 // ================= 4. DYNAMIC TOP SELLING PRODUCTS (FROM ORDER ITEMS) =================
 const dynamicTopProducts = useMemo(() => {
   const prodMap = {};
 
-  filteredOrders.forEach(o => {
+  activeOrders.forEach(o => {
     (o.items || []).forEach(it => {
       const key = it.productId || it.name;
       if (!prodMap[key]) {
@@ -418,21 +433,9 @@ const dynamicTopProducts = useMemo(() => {
     });
   }
 
-  // When 0 orders recorded in clean DB: showcase top 5 active produce catalog SKUs
-  return products.slice(0, 5).map((p, idx) => {
-    const icon = resolveProduceIcon(p.name, p.categoryId);
-    return {
-      rank: idx + 1,
-      name: p.name,
-      icon,
-      percent: 0,
-      shareText: '0.0%',
-      revenueFormatted: `₹${p.retailPrice}`,
-      quantityText: `${p.retailUnit}`,
-      statusText: `₹${p.retailPrice}/${p.retailUnit} • Ready for Orders`
-    };
-  });
-}, [filteredOrders, totalGrossSales, products]);
+  // When 0 orders recorded in clean DB, return empty list (no fake product sales)
+  return [];
+}, [activeOrders, totalGrossSales, products]);
 
 // ================= 5. DYNAMIC SALES BY CATEGORY (DONUT CHART) =================
 const dynamicCategorySplit = useMemo(() => {
@@ -452,7 +455,7 @@ const dynamicCategorySplit = useMemo(() => {
     catMap['FRUITS'] = { id: 'FRUITS', name: 'Fresh Fruits', revenue: 0, color: '#F97316' };
   }
 
-  filteredOrders.forEach(o => {
+  activeOrders.forEach(o => {
     (o.items || []).forEach(it => {
       const p = products.find(prod => prod.id === it.productId || prod.name === it.name);
       const catId = p?.categoryId || it.category || 'VEGETABLES';
@@ -492,7 +495,7 @@ const dynamicCategorySplit = useMemo(() => {
     categories: formattedCats,
     hasData: totalSales > 0
   };
-}, [categories, products, filteredOrders, totalGrossSales]);
+}, [categories, products, activeOrders, totalGrossSales]);
 
   // ================= 6. DYNAMIC TOP PERFORMING MONTH (DATABASE AUDIT) =================
   const monthlyBreakdown = useMemo(() => {
@@ -500,7 +503,7 @@ const dynamicCategorySplit = useMemo(() => {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const now = new Date();
 
-    allOrders.forEach(o => {
+    allOrders.filter(o => o.status !== 'CANCELLED').forEach(o => {
       const dt = new Date(o.orderPlacedAt || o.createdAt);
       if (!isNaN(dt.getTime())) {
         const key = `${months[dt.getMonth()]} ${dt.getFullYear()}`;
@@ -547,7 +550,7 @@ const dynamicCategorySplit = useMemo(() => {
       { day: 'Sat', sales: 0, count: 0 },
     ];
 
-    filteredOrders.forEach(o => {
+    activeOrders.forEach(o => {
       const dt = new Date(o.orderPlacedAt || o.createdAt);
       if (!isNaN(dt.getTime())) {
         const dayIdx = dt.getDay();
@@ -577,7 +580,7 @@ const dynamicCategorySplit = useMemo(() => {
         heightPercent
       };
     });
-  }, [filteredOrders]);
+  }, [activeOrders]);
 
   // ================= 8. 100% DYNAMIC WAREHOUSE FULFILLMENT HUBS =================
   const dynamicWarehouseData = useMemo(() => {
@@ -593,8 +596,10 @@ const dynamicCategorySplit = useMemo(() => {
     const colors = ['#16A34A', '#F97316', '#8B5CF6', '#0284C7', '#EC4899', '#14B8A6'];
 
     const hubs = warehouses.map((w, idx) => {
-      const whOrders = filteredOrders.filter(o => o.warehouseId === w.id);
+      const whOrders = activeOrders.filter(o => o.warehouseId === w.id);
+      const whCancelled = cancelledOrders.filter(o => o.warehouseId === w.id);
       const orderCount = whOrders.length;
+      const cancelledCount = whCancelled.length;
       const revenue = whOrders.reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
       const percent = totalOrdersCount > 0 ? Number(((orderCount / totalOrders) * 100).toFixed(1)) : 0;
       const connectedSocieties = societies.filter(s => s.warehouseId === w.id).length;
@@ -607,6 +612,7 @@ const dynamicCategorySplit = useMemo(() => {
         cutoffTime: w.cutoffTime || '21:00',
         capacityTons: w.capacityTons || 40,
         orderCount,
+        cancelledCount,
         revenue,
         percent,
         connectedSocieties,
@@ -619,11 +625,11 @@ const dynamicCategorySplit = useMemo(() => {
       totalHubs: warehouses.length,
       hasWarehouses: true
     };
-  }, [warehouses, filteredOrders, totalOrdersCount, societies]);
+  }, [warehouses, activeOrders, cancelledOrders, totalOrdersCount, societies]);
 
 // ================= 9. DYNAMIC DELIVERY PERFORMANCE METRICS =================
 const deliveryPerformance = useMemo(() => {
-  if (filteredOrders.length === 0) {
+  if (activeOrders.length === 0) {
     return {
       onTimeRate: '0.0%',
       avgDeliveryTime: '0.0 hrs',
@@ -633,8 +639,8 @@ const deliveryPerformance = useMemo(() => {
     };
   }
 
-  const delivered = filteredOrders.filter(o => o.status === 'DELIVERED');
-  const onTimePercent = Number(((delivered.length / filteredOrders.length) * 100).toFixed(1));
+  const delivered = activeOrders.filter(o => o.status === 'DELIVERED');
+  const onTimePercent = Number(((delivered.length / activeOrders.length) * 100).toFixed(1));
 
   return {
     onTimeRate: `${onTimePercent}%`,
@@ -643,7 +649,7 @@ const deliveryPerformance = useMemo(() => {
     deliveredCount: delivered.length,
     hasOrders: true
   };
-}, [filteredOrders]);
+}, [activeOrders]);
 
 // Consolidated Excel Exporter
 const handleExportConsolidatedExcel = () => {
@@ -872,9 +878,15 @@ return (
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', color: '#64748B' }}>
               <span>Live Resident Inflow</span>
-              <span style={{ color: '#16A34A', fontWeight: 800, background: '#F0FDF4', padding: '1px 6px', borderRadius: '4px', border: '1px solid #BBF7D0' }}>
-                ↑ {salesTrendDelta}
-              </span>
+              {totalCancelledCount > 0 ? (
+                <span style={{ color: '#DC2626', fontWeight: 700, fontSize: '11px', background: '#FEF2F2', padding: '1px 6px', borderRadius: '4px', border: '1px solid #FECACA' }}>
+                  {totalCancelledCount} Cancelled (-₹{totalCancelledAmount.toLocaleString('en-IN')})
+                </span>
+              ) : (
+                <span style={{ color: '#16A34A', fontWeight: 800, background: '#F0FDF4', padding: '1px 6px', borderRadius: '4px', border: '1px solid #BBF7D0' }}>
+                  ↑ {salesTrendDelta}
+                </span>
+              )}
             </div>
           </div>
 
@@ -898,13 +910,19 @@ return (
               </div>
             </div>
             <div style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', letterSpacing: '-0.02em', marginBottom: '6px' }}>
-              {totalOrdersCount.toLocaleString('en-IN')}
+              {totalOrdersCount.toLocaleString('en-IN')} <span style={{ fontSize: '13px', fontWeight: 700, color: '#64748B' }}>Active</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11.5px', color: '#64748B' }}>
               <span>Fulfillment Dispatches</span>
-              <span style={{ color: '#2563EB', fontWeight: 800, background: '#EFF6FF', padding: '1px 6px', borderRadius: '4px', border: '1px solid #BFDBFE' }}>
-                ↑ {ordersTrendDelta}
-              </span>
+              {totalCancelledCount > 0 ? (
+                <span style={{ color: '#DC2626', fontWeight: 800, background: '#FEF2F2', padding: '1px 6px', borderRadius: '4px', border: '1px solid #FECACA' }}>
+                  {totalCancelledCount} Cancelled
+                </span>
+              ) : (
+                <span style={{ color: '#2563EB', fontWeight: 800, background: '#EFF6FF', padding: '1px 6px', borderRadius: '4px', border: '1px solid #BFDBFE' }}>
+                  ↑ {ordersTrendDelta}
+                </span>
+              )}
             </div>
           </div>
 
@@ -1138,56 +1156,64 @@ return (
 
                               {/* List of Top 5 Ranked Products */}
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                {dynamicTopProducts.map((p, idx) => (
-                                  <div
-                                    key={idx}
-                                    onMouseEnter={() => setHoveredProductIndex(idx)}
-                                    onMouseLeave={() => setHoveredProductIndex(null)}
-                                    style={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '10px',
-                                      padding: '5px 8px',
-                                      borderRadius: '8px',
-                                      background: hoveredProductIndex === idx ? '#F8FAFC' : 'transparent',
-                                      transition: 'background 0.15s ease'
-                                    }}
-                                  >
-                                    <span style={{ fontSize: '12px', fontWeight: 800, color: '#94A3B8', width: '14px' }}>
-                                      {p.rank}
-                                    </span>
-                                    <span style={{ fontSize: '18px' }}>{p.icon}</span>
-                                    <span
-                                      style={{
-                                        fontSize: '13px',
-                                        fontWeight: 700,
-                                        color: '#1E293B',
-                                        width: '100px',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis',
-                                        whiteSpace: 'nowrap'
-                                      }}
-                                      title={p.name}
-                                    >
-                                      {p.name}
-                                    </span>
-
-                                    {/* Horizontal Progress Bar */}
-                                    <div style={{ flex: 1, height: '8px', background: '#F1F5F9', borderRadius: '9999px', overflow: 'hidden' }}>
-                                      <div style={{
-                                        height: '100%',
-                                        width: `${p.percent > 0 ? p.percent : 0}%`,
-                                        background: '#16A34A',
-                                        borderRadius: '9999px',
-                                        transition: 'width 0.4s ease'
-                                      }} />
-                                    </div>
-
-                                    <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A', minWidth: '45px', textAlign: 'right' }}>
-                                      {p.shareText}
-                                    </span>
+                                {dynamicTopProducts.length === 0 ? (
+                                  <div style={{ padding: '36px 16px', textAlign: 'center', color: '#94A3B8', fontSize: '13px', background: '#F8FAFC', borderRadius: '8px' }}>
+                                    <ShoppingBag size={24} color="#94A3B8" style={{ margin: '0 auto 8px' }} />
+                                    <div style={{ fontWeight: 700, color: '#475569' }}>No Customer Orders Yet</div>
+                                    <div style={{ fontSize: '11.5px', marginTop: '2px' }}>Top selling produce will rank here once orders are placed.</div>
                                   </div>
-                                ))}
+                                ) : (
+                                  dynamicTopProducts.map((p, idx) => (
+                                    <div
+                                      key={idx}
+                                      onMouseEnter={() => setHoveredProductIndex(idx)}
+                                      onMouseLeave={() => setHoveredProductIndex(null)}
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '10px',
+                                        padding: '5px 8px',
+                                        borderRadius: '8px',
+                                        background: hoveredProductIndex === idx ? '#F8FAFC' : 'transparent',
+                                        transition: 'background 0.15s ease'
+                                      }}
+                                    >
+                                      <span style={{ fontSize: '12px', fontWeight: 800, color: '#94A3B8', width: '14px' }}>
+                                        {p.rank}
+                                      </span>
+                                      <span style={{ fontSize: '18px' }}>{p.icon}</span>
+                                      <span
+                                        style={{
+                                          fontSize: '13px',
+                                          fontWeight: 700,
+                                          color: '#1E293B',
+                                          width: '100px',
+                                          overflow: 'hidden',
+                                          textOverflow: 'ellipsis',
+                                          whiteSpace: 'nowrap'
+                                        }}
+                                        title={p.name}
+                                      >
+                                        {p.name}
+                                      </span>
+
+                                      {/* Horizontal Progress Bar */}
+                                      <div style={{ flex: 1, height: '8px', background: '#F1F5F9', borderRadius: '9999px', overflow: 'hidden' }}>
+                                        <div style={{
+                                          height: '100%',
+                                          width: `${p.percent > 0 ? p.percent : 0}%`,
+                                          background: '#16A34A',
+                                          borderRadius: '9999px',
+                                          transition: 'width 0.4s ease'
+                                        }} />
+                                      </div>
+
+                                      <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A', minWidth: '45px', textAlign: 'right' }}>
+                                        {p.shareText}
+                                      </span>
+                                    </div>
+                                  ))
+                                )}
                               </div>
                             </div>
 

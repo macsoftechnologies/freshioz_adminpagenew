@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   ClipboardList, 
@@ -17,12 +17,18 @@ import {
   Calendar,
   Clock,
   Printer,
-  ChevronRight
+  ChevronRight,
+  Warehouse,
+  Boxes,
+  Box,
+  Filter,
+  Check
 } from 'lucide-react';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
 import { orders as orderResource, employees as employeeResource, warehouses as warehouseResource, societies as societyResource, useUpdateOrderStatus } from '../hooks/resources';
 import AdminPagination from '../components/common/AdminPagination';
+import { extractBlockAndFlat } from '../utils/addressParser';
 
 // Helper to parse unit weight
 const parseUnitWeightInKg = (unitStr) => {
@@ -66,13 +72,18 @@ export default function WarehouseCratingPage() {
   const societies = Array.isArray(rawSocieties) ? rawSocieties : [];
 
   const updateOrderStatusMutation = useUpdateOrderStatus();
-  const deliveryRiders = employees.filter(e => (e.roles || []).includes('DELIVERY_EXECUTIVE'));
+  const deliveryRiders = useMemo(() => {
+    return employees.filter(e => 
+      e.role === 'DELIVERY_EXECUTIVE' || 
+      (e.roles || []).includes('DELIVERY_EXECUTIVE')
+    );
+  }, [employees]);
 
   // URL Hash synchronization (#packing, #dispatch, #delivered)
   const getTabFromHash = () => {
     if (typeof window === 'undefined') return 'PACKING_STATION';
     const hash = (window.location.hash || '').toLowerCase();
-    if (hash === '#dispatch' || hash === '#lots' || hash === '#delivered') return 'SOCIETY_LOTS';
+    if (hash === '#dispatch' || hash === '#lots' || hash === '#delivered' || hash === '#out-for-delivery' || hash === '#ready') return 'SOCIETY_LOTS';
     return 'PACKING_STATION';
   };
 
@@ -80,7 +91,9 @@ export default function WarehouseCratingPage() {
     if (typeof window === 'undefined') return 'ALL';
     const hash = (window.location.hash || '').toLowerCase();
     if (hash === '#delivered') return 'DELIVERED';
-    if (hash === '#dispatch') return 'OUT_FOR_DELIVERY';
+    if (hash === '#out-for-delivery') return 'OUT_FOR_DELIVERY';
+    if (hash === '#ready') return 'READY_FOR_HANDOVER';
+    // '#dispatch', '#lots', or default shows ALL lots first
     return 'ALL';
   };
 
@@ -88,6 +101,9 @@ export default function WarehouseCratingPage() {
   const [activeTab, setActiveTab] = useState(getTabFromHash);
   const [lotFilter, setLotFilter] = useState(getLotFilterFromHash); // 'ALL' | 'READY_FOR_HANDOVER' | 'OUT_FOR_DELIVERY' | 'DELIVERED'
   const [slotFilter, setSlotFilter] = useState('ALL'); // 'ALL' | 'Morning' | 'Evening'
+  const [societyFilter, setSocietyFilter] = useState('ALL');
+  const [blockFilter, setBlockFilter] = useState('ALL');
+  const [packingStageFilter, setPackingStageFilter] = useState('ALL'); // 'ALL' | 'READY_TO_PACK' | 'CONFIRMED' | 'PACKED'
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
 
@@ -105,7 +121,9 @@ export default function WarehouseCratingPage() {
 
   const handleTabChange = (newTab) => {
     setActiveTab(newTab);
-    const targetHash = newTab === 'SOCIETY_LOTS' ? (lotFilter === 'DELIVERED' ? '#delivered' : '#dispatch') : '#packing';
+    const targetHash = newTab === 'SOCIETY_LOTS' 
+      ? (lotFilter === 'DELIVERED' ? '#delivered' : (lotFilter === 'OUT_FOR_DELIVERY' ? '#out-for-delivery' : '#dispatch')) 
+      : '#packing';
     if (window.location.hash !== targetHash) {
       window.location.hash = targetHash;
     }
@@ -113,7 +131,9 @@ export default function WarehouseCratingPage() {
 
   const handleLotFilterChange = (filterVal) => {
     setLotFilter(filterVal);
-    const targetHash = filterVal === 'DELIVERED' ? '#delivered' : (filterVal === 'OUT_FOR_DELIVERY' ? '#dispatch' : '#lots');
+    const targetHash = filterVal === 'DELIVERED' 
+      ? '#delivered' 
+      : (filterVal === 'OUT_FOR_DELIVERY' ? '#out-for-delivery' : (filterVal === 'READY_FOR_HANDOVER' ? '#ready' : '#dispatch'));
     if (window.location.hash !== targetHash) {
       window.location.hash = targetHash;
     }
@@ -129,6 +149,36 @@ export default function WarehouseCratingPage() {
 
   // Address label preview modal
   const [labelModalOrder, setLabelModalOrder] = useState(null);
+
+  // Packing Verification Checklist Modal
+  const [packingModalOrder, setPackingModalOrder] = useState(null);
+  const [checkedItems, setCheckedItems] = useState({});
+
+  const handleOpenPackingVerification = (order) => {
+    setPackingModalOrder(order);
+    const initial = {};
+    (order.items || []).forEach((_, idx) => {
+      initial[idx] = true;
+    });
+    setCheckedItems(initial);
+  };
+
+  const toggleCheckItem = (idx) => {
+    setCheckedItems(prev => ({
+      ...prev,
+      [idx]: !prev[idx]
+    }));
+  };
+
+  const handleConfirmVerification = async (shouldPrintLabel = false) => {
+    if (!packingModalOrder) return;
+    const targetOrder = packingModalOrder;
+    await handleMarkPacked(targetOrder.id);
+    setPackingModalOrder(null);
+    if (shouldPrintLabel) {
+      setLabelModalOrder(targetOrder);
+    }
+  };
 
   if (isDeliveryExecutive) {
     return (
@@ -189,15 +239,18 @@ export default function WarehouseCratingPage() {
 
   const assignedWhId = resolvedWh?.id;
   const assignedWhCode = resolvedWh?.code;
+  const assignedWhName = resolvedWh?.name;
 
   const visibleOrders = orders.filter(order => {
+    // Exclude cancelled orders from packing desk
+    if (order.status === 'CANCELLED') return false;
+
     if (isWarehouseScoped) {
-      const orderWhId = order.warehouseId || order.warehouse?.id;
-      const orderWhCode = order.warehouseCode || order.warehouse?.code;
+      const orderWhId = order.warehouseId || order.warehouse?.id || societies.find(s => s.id === order.societyId)?.warehouseId;
+      const orderWhCode = order.warehouseCode || order.warehouse?.code || warehouses.find(w => w.id === orderWhId)?.code;
 
       const isWhMatch = 
-        (!orderWhId && !orderWhCode) ||
-        (orderWhId && (orderWhId === assignedWhId || orderWhId === assignedWhCode)) ||
+        (orderWhId && (orderWhId === assignedWhId || orderWhId === assignedWhCode || orderWhId === resolvedWh?.uuid)) ||
         (orderWhCode && (orderWhCode === assignedWhCode || orderWhCode === assignedWhId));
 
       if (!isWhMatch) return false;
@@ -218,12 +271,121 @@ export default function WarehouseCratingPage() {
     return true;
   });
 
-  const paginatedOrders = visibleOrders.slice(
+  // Available societies and blocks from active orders
+  const availableSocieties = useMemo(() => {
+    const socMap = new Map();
+    visibleOrders.forEach(o => {
+      const id = o.societyId || o.societyName;
+      if (id && !socMap.has(id)) {
+        socMap.set(id, { id: o.societyId, name: o.societyName });
+      }
+    });
+    return Array.from(socMap.values());
+  }, [visibleOrders]);
+
+  const availableBlocks = useMemo(() => {
+    const blockSet = new Set();
+    visibleOrders.forEach(o => {
+      if (societyFilter === 'ALL' || o.societyId === societyFilter || o.societyName === societyFilter) {
+        const { block } = extractBlockAndFlat(o.flatNo);
+        blockSet.add(block);
+      }
+    });
+    return Array.from(blockSet).sort();
+  }, [visibleOrders, societyFilter]);
+
+  // Filtered and Sorted Packing Orders
+  const filteredPackingOrders = useMemo(() => {
+    return visibleOrders.filter(order => {
+      if (societyFilter !== 'ALL' && order.societyId !== societyFilter && order.societyName !== societyFilter) {
+        return false;
+      }
+      const { block } = extractBlockAndFlat(order.flatNo);
+      if (blockFilter !== 'ALL' && block !== blockFilter) {
+        return false;
+      }
+      if (packingStageFilter === 'READY_TO_PACK' && order.status !== 'AT_WAREHOUSE') {
+        return false;
+      }
+      if (packingStageFilter === 'CONFIRMED' && order.status !== 'CONFIRMED' && order.status !== 'PROCURING') {
+        return false;
+      }
+      if (packingStageFilter === 'PACKED' && order.status !== 'PACKED' && order.status !== 'OUT_FOR_DELIVERY' && order.status !== 'DELIVERED') {
+        return false;
+      }
+      return true;
+    }).sort((a, b) => {
+      const socCompare = (a.societyName || '').localeCompare(b.societyName || '');
+      if (socCompare !== 0) return socCompare;
+      const bA = extractBlockAndFlat(a.flatNo);
+      const bB = extractBlockAndFlat(b.flatNo);
+      const blockCompare = bA.block.localeCompare(bB.block);
+      if (blockCompare !== 0) return blockCompare;
+      return (bA.flat || '').localeCompare(bB.flat || '', undefined, { numeric: true });
+    });
+  }, [visibleOrders, societyFilter, blockFilter, packingStageFilter]);
+
+  // Group into Block Crates
+  const blockCrates = useMemo(() => {
+    const map = {};
+    filteredPackingOrders.forEach(order => {
+      const soc = order.societyName || 'Society Hub';
+      const { block } = extractBlockAndFlat(order.flatNo);
+      const key = `${soc}____${block}`;
+
+      if (!map[key]) {
+        map[key] = {
+          key,
+          societyName: soc,
+          societyId: order.societyId,
+          blockName: block,
+          orders: [],
+          totalItems: 0,
+          totalWeightKg: 0,
+          allPacked: true,
+          readyToPackCount: 0,
+          confirmedCount: 0,
+          packedCount: 0,
+        };
+      }
+
+      map[key].orders.push(order);
+      map[key].totalItems += (order.items || []).length;
+
+      (order.items || []).forEach(it => {
+        const q = parseFloat(it.qty) || 1;
+        const unit = String(it.unit || '').toLowerCase();
+        let multiplier = 1;
+        if (unit.includes('25 kg') || unit.includes('sack')) multiplier = 25;
+        else if (unit.includes('20 kg') || unit.includes('crate')) multiplier = 20;
+        else if (unit.includes('10 kg') || unit.includes('box')) multiplier = 10;
+        map[key].totalWeightKg += q * multiplier;
+      });
+
+      if (order.status === 'PACKED' || order.status === 'OUT_FOR_DELIVERY' || order.status === 'DELIVERED') {
+        map[key].packedCount += 1;
+      } else {
+        map[key].allPacked = false;
+      }
+
+      if (order.status === 'AT_WAREHOUSE') {
+        map[key].readyToPackCount += 1;
+      }
+      if (order.status === 'CONFIRMED' || order.status === 'PROCURING') {
+        map[key].confirmedCount += 1;
+      }
+    });
+
+    return Object.values(map);
+  }, [filteredPackingOrders]);
+
+  const paginatedOrders = filteredPackingOrders.slice(
     (currentPage - 1) * pageSize,
     currentPage * pageSize
   );
 
   // Group orders into Consolidated Society Delivery Lots (Scoped by Society, Delivery Date & Delivery Slot)
+  // Strict Isolation: Dispatched and Delivered orders are kept in their completed lots and NEVER mixed into pending handover lots.
   const societyLotsMap = {};
   visibleOrders.forEach(order => {
     // Only include orders in the run (not cancelled)
@@ -231,12 +393,29 @@ export default function WarehouseCratingPage() {
     const socName = order.societyName || 'Society Hub';
     const delivDate = order.deliveryDate || 'Morning Run';
     const delivSlot = order.deliverySlot || 'Morning Fresh Slot';
-    const lotKey = `${socName}__${delivDate}__${delivSlot}`;
+
+    let lotKey;
+    let initialLotId = null;
+
+    if (order.deliveryLotId) {
+      // Dispatched or previously assigned lot
+      lotKey = `LOT_${order.deliveryLotId}`;
+      initialLotId = order.deliveryLotId;
+    } else if (order.status === 'DELIVERED') {
+      // Historical delivered orders without a lot ID: isolate them so they never contaminate active packing lots
+      lotKey = `HIST_DELIVERED_${socName}__${delivDate}__${delivSlot}`;
+    } else if (order.status === 'OUT_FOR_DELIVERY') {
+      // Active in-transit orders
+      lotKey = `IN_TRANSIT_${socName}__${delivDate}__${delivSlot}`;
+    } else {
+      // Pending active orders awaiting packing and handover (CONFIRMED, PROCURING, AT_WAREHOUSE, PACKED)
+      lotKey = `PENDING_${socName}__${delivDate}__${delivSlot}`;
+    }
 
     if (!societyLotsMap[lotKey]) {
       societyLotsMap[lotKey] = {
         lotKey,
-        lotId: null,
+        lotId: initialLotId,
         societyId: order.societyId,
         societyName: socName,
         deliveryDate: delivDate,
@@ -284,9 +463,9 @@ export default function WarehouseCratingPage() {
 
   // Determine overall status for each society lot
   const societyLots = Object.values(societyLotsMap).map(lot => {
-    const allDelivered = lot.orders.every(o => o.status === 'DELIVERED');
-    const allOut = lot.orders.every(o => o.status === 'OUT_FOR_DELIVERY' || o.status === 'DELIVERED');
-    const allPacked = lot.orders.every(o => o.status === 'PACKED' || o.status === 'OUT_FOR_DELIVERY' || o.status === 'DELIVERED');
+    const allDelivered = lot.orders.length > 0 && lot.orders.every(o => o.status === 'DELIVERED');
+    const allOut = lot.orders.length > 0 && lot.orders.every(o => o.status === 'OUT_FOR_DELIVERY' || o.status === 'DELIVERED');
+    const allPacked = lot.orders.length > 0 && lot.orders.every(o => o.status === 'PACKED');
 
     let lotStatus = 'PENDING_PACKING';
     if (allDelivered) lotStatus = 'DELIVERED';
@@ -305,9 +484,64 @@ export default function WarehouseCratingPage() {
     };
   });
 
-  // Open Handover Modal
+  // Open Handover Modal & Auto-Populate Warehouse Assigned Driver
   const handleOpenHandover = (lot) => {
-    setHandoverLot(lot);
+    // Strictly isolate only active, non-delivered orders for the handover dispatch payload
+    const activeOrders = lot.orders.filter(o => o.status !== 'DELIVERED' && o.status !== 'CANCELLED');
+    const activeWeight = activeOrders.reduce((sum, order) => {
+      let w = 0;
+      (order.items || []).forEach(it => {
+        const q = parseFloat(it.qty) || 1;
+        const unit = String(it.unit || '').toLowerCase();
+        let mult = 1;
+        if (unit.includes('25 kg') || unit.includes('sack')) mult = 25;
+        else if (unit.includes('20 kg') || unit.includes('crate')) mult = 20;
+        else if (unit.includes('10 kg') || unit.includes('box')) mult = 10;
+        w += q * mult;
+      });
+      return sum + w;
+    }, 0);
+
+    setHandoverLot({
+      ...lot,
+      orders: activeOrders,
+      totalWeightKg: activeWeight
+    });
+
+    // 1. Check if orders in this lot already have an assigned driver
+    const existingDriverOrder = activeOrders.find(o => o.deliveryPartnerId || o.deliveryPartnerName);
+
+    // 2. Check for driver assigned to this warehouse
+    const lotWhId = activeOrders[0]?.warehouseId || assignedWhId;
+    const lotWhCode = activeOrders[0]?.warehouseCode || assignedWhCode;
+
+    const assignedWhDriver = deliveryRiders.find(r => 
+      (lotWhId && (r.assignedWarehouseId === lotWhId || r.assignedWarehouseId === lotWhCode)) ||
+      (lotWhCode && (r.assignedWarehouseId === lotWhCode || r.assignedWarehouseId === lotWhId)) ||
+      (resolvedWh && (r.assignedWarehouseId === resolvedWh.id || r.assignedWarehouseId === resolvedWh.code || r.assignedWarehouseId === resolvedWh.uuid))
+    );
+
+    const selectedDriver = 
+      (existingDriverOrder?.deliveryPartnerId && deliveryRiders.find(r => r.id === existingDriverOrder.deliveryPartnerId)) ||
+      assignedWhDriver ||
+      deliveryRiders[0];
+
+    if (selectedDriver) {
+      setDriverId(selectedDriver.id);
+      setDriverName(selectedDriver.name);
+      setDriverPhone(selectedDriver.phone);
+      setVehicleNumber(selectedDriver.vehicleNumber || existingDriverOrder?.vehicleNumber || 'KA-04-E-5581');
+    } else if (existingDriverOrder) {
+      setDriverId(existingDriverOrder.deliveryPartnerId || '');
+      setDriverName(existingDriverOrder.deliveryPartnerName || '');
+      setDriverPhone(existingDriverOrder.deliveryPartnerPhone || '');
+      setVehicleNumber(existingDriverOrder.vehicleNumber || 'KA-04-E-5581');
+    } else {
+      setDriverId('');
+      setDriverName('');
+      setDriverPhone('');
+      setVehicleNumber('KA-04-E-5581');
+    }
   };
 
   // Submit Handover to Delivery Partner
@@ -315,8 +549,16 @@ export default function WarehouseCratingPage() {
     e.preventDefault();
     if (!handoverLot) return;
 
+    // Safety guard: only dispatch orders that are not already delivered or cancelled
+    const ordersToDispatch = handoverLot.orders.filter(o => o.status !== 'DELIVERED' && o.status !== 'CANCELLED');
+    if (ordersToDispatch.length === 0) {
+      showToast('No pending orders to dispatch in this lot.', 'warning');
+      setHandoverLot(null);
+      return;
+    }
+
     try {
-      await Promise.all(handoverLot.orders.map(o => updateOrderStatusMutation.mutateAsync({
+      await Promise.all(ordersToDispatch.map(o => updateOrderStatusMutation.mutateAsync({
         id: o.id,
         status: 'OUT_FOR_DELIVERY',
         deliveryLotId: handoverLot.lotId,
@@ -351,15 +593,90 @@ export default function WarehouseCratingPage() {
     }
   };
 
-  const toPackCount = orders.filter(o => o.status === 'CONFIRMED' || o.status === 'PROCURING').length;
-  const packedCount = orders.filter(o => o.status === 'PACKED').length;
-  const outCount = orders.filter(o => o.status === 'OUT_FOR_DELIVERY').length;
+  // Pack & Seal Entire Block Crate
+  const handlePackEntireBlock = async (crate) => {
+    const unpackagedOrders = crate.orders.filter(o => o.status !== 'PACKED' && o.status !== 'OUT_FOR_DELIVERY' && o.status !== 'DELIVERED');
+    if (unpackagedOrders.length === 0) {
+      showToast('All orders in this crate are already packed & sealed!', 'info');
+      return;
+    }
+
+    const confirmed = window.confirm(`Confirm packing & sealing all ${unpackagedOrders.length} order(s) for ${crate.societyName} [${crate.blockName}]?`);
+    if (!confirmed) return;
+
+    try {
+      await Promise.all(unpackagedOrders.map(o => updateOrderStatusMutation.mutateAsync({
+        id: o.id,
+        status: 'PACKED',
+        packedBy: currentUser?.name || 'Warehouse Packing Lead',
+        packedById: currentUser?.id || 'emp-packer'
+      })));
+      showToast(`✓ Crate [${crate.societyName} — ${crate.blockName}] packed & sealed (${unpackagedOrders.length} orders)!`, 'success');
+    } catch (err) {
+      showToast(`Failed to pack crate: ${err?.message || 'Server error'}`, 'error');
+    }
+  };
+
+  // Print Physical Crate Manifest Tag
+  const handlePrintCrateTag = (crate) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Freshioz Delivery Crate - ${crate.societyName} - ${crate.blockName}</title>
+          <style>
+            body { font-family: system-ui, -apple-system, sans-serif; padding: 24px; color: #0F172A; }
+            .crate-tag { border: 3px solid #234B3C; border-radius: 12px; padding: 24px; max-width: 500px; margin: 0 auto; }
+            .header { text-align: center; border-bottom: 2px dashed #CBD5E1; padding-bottom: 16px; margin-bottom: 16px; }
+            .title { font-size: 24px; font-weight: 900; color: #234B3C; margin: 0; }
+            .block-badge { display: inline-block; background: #EBF2EE; color: #234B3C; font-size: 22px; font-weight: 900; padding: 6px 18px; border-radius: 8px; margin-top: 10px; border: 2px solid #234B3C; }
+            .meta { display: flex; justify-content: space-between; margin: 16px 0; font-size: 14px; font-weight: 700; color: #475569; }
+            .order-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #F1F5F9; font-size: 13.5px; }
+            .flat { font-weight: 800; color: #0F172A; }
+          </style>
+        </head>
+        <body>
+          <div class="crate-tag">
+            <div class="header">
+              <div style="font-size: 13px; color: #64748B; font-weight: 800; letter-spacing: 1px; text-transform: uppercase;">FRESHIOZ MORNING DISPATCH CRATE</div>
+              <div class="title">${crate.societyName}</div>
+              <div class="block-badge">${crate.blockName}</div>
+            </div>
+            <div class="meta">
+              <span>Orders: ${crate.orders.length}</span>
+              <span>Weight: ~${crate.totalWeightKg.toFixed(1)} kg</span>
+              <span>Hub: ${assignedWhCode || 'Central Hub'}</span>
+            </div>
+            <div style="font-weight: 800; font-size: 12px; color: #64748B; text-transform: uppercase; margin-bottom: 8px;">Flat Manifest in Crate:</div>
+            ${crate.orders.map(o => `
+              <div class="order-item">
+                <span class="flat">📍 ${extractBlockAndFlat(o.flatNo).flat} (${o.userName || 'Resident'})</span>
+                <span>#${o.id} • ${(o.items || []).length} items</span>
+              </div>
+            `).join('')}
+            <div style="margin-top: 20px; text-align: center; font-size: 11px; color: #94A3B8;">
+              Direct Farm-Fresh Harvest • Security Reception Desk Handover
+            </div>
+          </div>
+          <script>window.print(); setTimeout(() => window.close(), 500);</script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  const readyToPackCount = visibleOrders.filter(o => o.status === 'AT_WAREHOUSE').length;
+  const mandiTransitCount = visibleOrders.filter(o => o.status === 'CONFIRMED' || o.status === 'PROCURING').length;
+  const toPackCount = readyToPackCount + mandiTransitCount;
+  const packedCount = visibleOrders.filter(o => o.status === 'PACKED').length;
+  const outCount = visibleOrders.filter(o => o.status === 'OUT_FOR_DELIVERY').length;
 
   return (
     <div className="admin-page-container">
       {/* Page Header */}
       <div className="page-title-header" style={{ marginBottom: '14px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
           <div>
             <h1 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
               Warehouse Packing Desk & Society Lot Dispatch
@@ -369,290 +686,575 @@ export default function WarehouseCratingPage() {
             </p>
           </div>
 
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '11.5px', background: '#FEF3C7', color: '#B45309', padding: '3px 10px', borderRadius: '6px', fontWeight: 700 }}>
-              To Pack: {toPackCount} Orders
-            </span>
-            <span style={{ fontSize: '11.5px', background: '#E0F2FE', color: '#0369A1', padding: '3px 10px', borderRadius: '6px', fontWeight: 700 }}>
-              Packed & Labeled: {packedCount}
-            </span>
-            <span style={{ fontSize: '11.5px', background: '#DCFCE7', color: '#15803D', padding: '3px 10px', borderRadius: '6px', fontWeight: 700 }}>
-              In-Transit: {outCount}
-            </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            {/* Logistics Hub Badge */}
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '5px 12px',
+              borderRadius: '6px',
+              border: isWarehouseScoped ? '1.5px solid #A7F3D0' : '1.5px solid #E2E8F0',
+              background: isWarehouseScoped ? '#ECFDF5' : '#F8FAFC',
+              fontSize: '12px',
+              fontWeight: 800,
+              color: isWarehouseScoped ? '#065F46' : '#1E293B'
+            }}>
+              <Warehouse size={15} color={isWarehouseScoped ? "#059669" : "#0284C7"} />
+              <span>🏢 {assignedWhCode ? `${assignedWhCode} — ${assignedWhName}` : (assignedWhName || currentUser?.assignedLocationName || (currentUser?.assignedWarehouseId !== 'ALL' ? currentUser?.assignedWarehouseId : 'All Hubs & Warehouses'))}</span>
+              {isWarehouseScoped && (
+                <span style={{ fontSize: '10px', background: '#059669', color: '#FFF', padding: '1px 5px', borderRadius: '4px' }}>🔒 Assigned Hub</span>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '11.5px', background: '#DCFCE7', color: '#166534', padding: '3px 10px', borderRadius: '6px', fontWeight: 800, border: '1px solid #86EFAC' }}>
+                ⚡ Ready to Pack: {readyToPackCount}
+              </span>
+              <span style={{ fontSize: '11.5px', background: '#FEF3C7', color: '#B45309', padding: '3px 10px', borderRadius: '6px', fontWeight: 700 }}>
+                ⏳ Mandi Sourcing: {mandiTransitCount}
+              </span>
+              <span style={{ fontSize: '11.5px', background: '#E0F2FE', color: '#0369A1', padding: '3px 10px', borderRadius: '6px', fontWeight: 700 }}>
+                ✓ Packed & Labeled: {packedCount}
+              </span>
+              <span style={{ fontSize: '11.5px', background: '#F1F5F9', color: '#475569', padding: '3px 10px', borderRadius: '6px', fontWeight: 700 }}>
+                🚚 In-Transit: {outCount}
+              </span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Tabs Switcher: Packing Station vs Society Lots & Slot Pills */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '2px solid #E2E8F0', paddingBottom: '2px', flexWrap: 'wrap', gap: '8px' }}>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            type="button"
-            onClick={() => handleTabChange('PACKING_STATION')}
-            style={{
-              padding: '8px 18px',
-              fontSize: '13px',
-              fontWeight: 700,
-              borderRadius: '8px 8px 0 0',
-              border: 'none',
-              background: activeTab === 'PACKING_STATION' ? '#234B3C' : 'transparent',
-              color: activeTab === 'PACKING_STATION' ? '#FFFFFF' : '#64748B',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            <Tag size={15} />
-            <span>1. Packing Station (Address & Flat Labeling)</span>
-            {toPackCount > 0 && (
-              <span style={{ background: '#FEF3C7', color: '#B45309', fontSize: '11px', padding: '1px 6px', borderRadius: '9999px', fontWeight: 800 }}>
-                {toPackCount}
+      {/* Streamlined 2-Step Operations Workflow Tabs */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'stretch',
+        gap: '12px',
+        marginBottom: '16px',
+        flexWrap: 'wrap'
+      }}>
+        {/* Step 1: Pack & Crate */}
+        <button
+          type="button"
+          onClick={() => handleTabChange('PACKING_STATION')}
+          style={{
+            flex: '1 1 280px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            padding: '12px 18px',
+            borderRadius: '10px',
+            border: activeTab === 'PACKING_STATION' ? '2px solid #234B3C' : '1.5px solid #E2E8F0',
+            background: activeTab === 'PACKING_STATION' ? '#F0FDF4' : '#FFFFFF',
+            cursor: 'pointer',
+            textAlign: 'left',
+            boxShadow: activeTab === 'PACKING_STATION' ? '0 2px 6px rgba(35, 75, 60, 0.1)' : 'none',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <div style={{
+            width: '36px',
+            height: '36px',
+            borderRadius: '8px',
+            background: activeTab === 'PACKING_STATION' ? '#234B3C' : '#F1F5F9',
+            color: activeTab === 'PACKING_STATION' ? '#FFFFFF' : '#64748B',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontWeight: 900,
+            fontSize: '15px',
+            flexShrink: 0
+          }}>
+            1
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '13.5px', fontWeight: 900, color: activeTab === 'PACKING_STATION' ? '#234B3C' : '#1E293B' }}>
+                Step 1: Pack & Crate Orders
               </span>
-            )}
-          </button>
+              {toPackCount > 0 && (
+                <span style={{ background: '#FEF3C7', color: '#B45309', fontSize: '11px', padding: '1px 7px', borderRadius: '9999px', fontWeight: 800 }}>
+                  {toPackCount} to pack
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
+              Weigh produce bags, verify items & assign to Block Crates
+            </div>
+          </div>
+        </button>
 
-          <button
-            type="button"
-            onClick={() => handleTabChange('SOCIETY_LOTS')}
-            style={{
-              padding: '8px 18px',
-              fontSize: '13px',
-              fontWeight: 700,
-              borderRadius: '8px 8px 0 0',
-              border: 'none',
-              background: activeTab === 'SOCIETY_LOTS' ? '#234B3C' : 'transparent',
-              color: activeTab === 'SOCIETY_LOTS' ? '#FFFFFF' : '#64748B',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            <Layers size={15} />
-            <span>2. Society Delivery Lots & Driver Handover ({societyLots.length})</span>
-          </button>
-        </div>
-
-        {/* Slot Filter Pills */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700 }}>Run:</span>
-          <button
-            type="button"
-            onClick={() => setSlotFilter('ALL')}
-            style={{
-              padding: '3px 8px',
-              fontSize: '11px',
-              borderRadius: '4px',
-              border: '1px solid',
-              borderColor: slotFilter === 'ALL' ? '#234B3C' : '#CBD5E1',
-              background: slotFilter === 'ALL' ? '#234B3C' : '#FFF',
-              color: slotFilter === 'ALL' ? '#FFF' : '#475569',
-              fontWeight: 700,
-              cursor: 'pointer'
-            }}
-          >
-            All Runs
-          </button>
-          <button
-            type="button"
-            onClick={() => setSlotFilter('Morning')}
-            style={{
-              padding: '3px 8px',
-              fontSize: '11px',
-              borderRadius: '4px',
-              border: '1px solid',
-              borderColor: slotFilter === 'Morning' ? '#0284C7' : '#CBD5E1',
-              background: slotFilter === 'Morning' ? '#0284C7' : '#FFF',
-              color: slotFilter === 'Morning' ? '#FFF' : '#475569',
-              fontWeight: 700,
-              cursor: 'pointer'
-            }}
-          >
-            🌅 Morning Run
-          </button>
-          <button
-            type="button"
-            onClick={() => setSlotFilter('Evening')}
-            style={{
-              padding: '3px 8px',
-              fontSize: '11px',
-              borderRadius: '4px',
-              border: '1px solid',
-              borderColor: slotFilter === 'Evening' ? '#F59E0B' : '#CBD5E1',
-              background: slotFilter === 'Evening' ? '#F59E0B' : '#FFF',
-              color: slotFilter === 'Evening' ? '#FFF' : '#475569',
-              fontWeight: 700,
-              cursor: 'pointer'
-            }}
-          >
-            🌇 Evening Run
-          </button>
-        </div>
+        {/* Step 2: Driver Handover */}
+        <button
+          type="button"
+          onClick={() => handleTabChange('SOCIETY_LOTS')}
+          style={{
+            flex: '1 1 280px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            padding: '12px 18px',
+            borderRadius: '10px',
+            border: activeTab === 'SOCIETY_LOTS' ? '2px solid #234B3C' : '1.5px solid #E2E8F0',
+            background: activeTab === 'SOCIETY_LOTS' ? '#F0FDF4' : '#FFFFFF',
+            cursor: 'pointer',
+            textAlign: 'left',
+            boxShadow: activeTab === 'SOCIETY_LOTS' ? '0 2px 6px rgba(35, 75, 60, 0.1)' : 'none',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <div style={{
+            width: '36px',
+            height: '36px',
+            borderRadius: '8px',
+            background: activeTab === 'SOCIETY_LOTS' ? '#234B3C' : '#F1F5F9',
+            color: activeTab === 'SOCIETY_LOTS' ? '#FFFFFF' : '#64748B',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontWeight: 900,
+            fontSize: '15px',
+            flexShrink: 0
+          }}>
+            2
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '13.5px', fontWeight: 900, color: activeTab === 'SOCIETY_LOTS' ? '#234B3C' : '#1E293B' }}>
+                Step 2: Driver Handover & Lots
+              </span>
+              <span style={{ background: '#E2E8F0', color: '#334155', fontSize: '11px', padding: '1px 7px', borderRadius: '9999px', fontWeight: 800 }}>
+                {societyLots.length} Society Lots
+              </span>
+            </div>
+            <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
+              Dispatch sealed crates to delivery partners with vehicle check
+            </div>
+          </div>
+        </button>
       </div>
 
-      {/* VIEW 1: PACKING STATION (INDIVIDUAL FLAT ADDRESS LABELS) */}
+      {/* VIEW 1: PACKING STATION (APARTMENT & BLOCK-WISE CRATING) */}
       {activeTab === 'PACKING_STATION' && (
-        <div className="admin-table-card">
-          <div className="admin-table-header">
-            <div>
-              <h3 style={{ fontSize: '15px', color: '#0F172A', margin: 0 }}>
-                Individual Customer Orders to Pack & Label
-              </h3>
-              <span style={{ fontSize: '12px', color: '#64748B' }}>
-                Weigh produce, pack into consumer bags, and stick society flat address tag
+        <div>
+          {/* CONSOLIDATED SINGLE-BAR PACKING CONTROLS */}
+          <div style={{
+            background: '#FFFFFF',
+            border: '1.5px solid #E2E8F0',
+            borderRadius: '10px',
+            padding: '10px 14px',
+            marginBottom: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '10px'
+          }}>
+            {/* Filter Dropdowns in a single row */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              {/* Run Selector */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: '#F8FAFC', border: '1px solid #CBD5E1', padding: '4px 8px', borderRadius: '6px' }}>
+                <Clock size={13} color="#64748B" />
+                <select
+                  value={slotFilter}
+                  onChange={(e) => setSlotFilter(e.target.value)}
+                  style={{
+                    border: 'none',
+                    background: 'transparent',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    color: '#0F172A',
+                    cursor: 'pointer',
+                    outline: 'none'
+                  }}
+                >
+                  <option value="ALL">All Runs (Morning & Evening)</option>
+                  <option value="Morning">🌅 Morning Fresh Run</option>
+                  <option value="Evening">🌇 Evening Run</option>
+                </select>
+              </div>
+
+              {/* Apartment Selector */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: '#F8FAFC', border: '1px solid #CBD5E1', padding: '4px 8px', borderRadius: '6px' }}>
+                <Building2 size={13} color="#0284C7" />
+                <select
+                  value={societyFilter}
+                  onChange={(e) => {
+                    setSocietyFilter(e.target.value);
+                    setBlockFilter('ALL');
+                    setCurrentPage(1);
+                  }}
+                  style={{
+                    border: 'none',
+                    background: 'transparent',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    color: '#0F172A',
+                    cursor: 'pointer',
+                    outline: 'none'
+                  }}
+                >
+                  <option value="ALL">🏢 All Apartments ({availableSocieties.length})</option>
+                  {availableSocieties.map(s => (
+                    <option key={s.id || s.name} value={s.id || s.name}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Block / Wing Selector */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: '#F8FAFC', border: '1px solid #CBD5E1', padding: '4px 8px', borderRadius: '6px' }}>
+                <Boxes size={13} color="#059669" />
+                <select
+                  value={blockFilter}
+                  onChange={(e) => {
+                    setBlockFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  style={{
+                    border: 'none',
+                    background: 'transparent',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    color: '#0F172A',
+                    cursor: 'pointer',
+                    outline: 'none'
+                  }}
+                >
+                  <option value="ALL">📦 All Blocks / Wings ({availableBlocks.length})</option>
+                  {availableBlocks.map(b => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Stage Filter */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: '#F8FAFC', border: '1px solid #CBD5E1', padding: '4px 8px', borderRadius: '6px' }}>
+                <Filter size={13} color="#D97706" />
+                <select
+                  value={packingStageFilter}
+                  onChange={(e) => {
+                    setPackingStageFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  style={{
+                    border: 'none',
+                    background: 'transparent',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    color: '#0F172A',
+                    cursor: 'pointer',
+                    outline: 'none'
+                  }}
+                >
+                  <option value="ALL">All Packing Stages</option>
+                  <option value="READY_TO_PACK">⚡ Ready to Pack (Produce Received)</option>
+                  <option value="CONFIRMED">⏳ Mandi Procurement (Upcoming)</option>
+                  <option value="PACKED">✓ Packed & Sealed</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Right: Active Crates & Flats Counter */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: '#EBF2EE',
+                color: '#234B3C',
+                padding: '5px 12px',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: 800,
+                border: '1px solid #A7C4B8'
+              }}>
+                <Boxes size={14} color="#234B3C" />
+                <span>{blockCrates.length} Block Crate(s) • {filteredPackingOrders.length} Flats</span>
               </span>
             </div>
           </div>
 
-          <div style={{ overflowX: 'auto' }}>
-            <table className="admin-data-table">
-              <thead>
-                <tr>
-                  <th>Order ID</th>
-                  <th>Delivery Address & Flat Tag</th>
-                  <th>Customer Contact</th>
-                  <th>Items to Pack</th>
-                  <th>Status</th>
-                  <th style={{ textAlign: 'right' }}>Packing Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleOrders.length === 0 ? (
-                  <tr>
-                    <td colSpan="6">
-                      <div className="admin-empty-state">
-                        <div className="admin-empty-state-icon">
-                          <PackageCheck size={22} />
-                        </div>
-                        <div className="admin-empty-state-title">No Orders in Packing Queue</div>
-                        <div className="admin-empty-state-desc">
-                          Confirmed customer orders will appear here for dawn weighing and flat tagging.
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  paginatedOrders.map(order => (
-                    <tr key={order.id}>
-                      <td>
-                        <strong style={{ fontFamily: 'monospace', color: '#0F172A', fontSize: '13px' }}>
-                          #{order.id}
-                        </strong>
-                        <div style={{ fontSize: '11px', color: '#64748B' }}>
-                          {order.deliverySlot || 'Morning Fresh Slot'}
-                        </div>
-                      </td>
+          {/* DEDICATED APARTMENT & BLOCK CRATE BOXES */}
+          <div>
+              {blockCrates.length === 0 ? (
+                <div className="admin-empty-state" style={{ background: '#FFF', borderRadius: '12px', border: '1.5px solid #E2E8F0', padding: '36px 20px', textAlign: 'center' }}>
+                  <div className="admin-empty-state-icon" style={{ margin: '0 auto 12px' }}>
+                    <PackageCheck size={26} color="#059669" />
+                  </div>
+                  <div className="admin-empty-state-title" style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>
+                    No Orders Matching Packing Criteria
+                  </div>
+                  <div className="admin-empty-state-desc" style={{ fontSize: '13px', color: '#64748B', maxWidth: '420px', margin: '6px auto 0' }}>
+                    Select another Apartment or Block, or adjust the stage filter to view orders.
+                  </div>
+                </div>
+              ) : (
+                blockCrates.map(crate => {
+                  const unpackagedOrders = crate.orders.filter(o => o.status !== 'PACKED' && o.status !== 'OUT_FOR_DELIVERY' && o.status !== 'DELIVERED');
+                  const isCrateDone = crate.allPacked;
 
-                      <td>
-                        <div style={{ fontWeight: 800, color: '#0F172A', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <Building2 size={13} color="#0284C7" />
-                          <span>{order.societyName}</span>
+                  return (
+                    <div key={crate.key} style={{
+                      background: '#FFFFFF',
+                      border: isCrateDone ? '2px solid #86EFAC' : '2px solid #CBD5E1',
+                      borderRadius: '12px',
+                      marginBottom: '20px',
+                      overflow: 'hidden',
+                      boxShadow: '0 2px 6px rgba(0,0,0,0.04)'
+                    }}>
+                      {/* Crate Header Banner */}
+                      <div style={{
+                        background: isCrateDone ? '#F0FDF4' : '#F8FAFC',
+                        borderBottom: isCrateDone ? '1.5px solid #BBF7D0' : '1.5px solid #E2E8F0',
+                        padding: '14px 18px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '12px'
+                      }}>
+                        {/* Left: Crate Title & Identity */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                          <div style={{
+                            width: '40px',
+                            height: '40px',
+                            borderRadius: '10px',
+                            background: isCrateDone ? '#DCFCE7' : '#E0F2FE',
+                            color: isCrateDone ? '#166534' : '#0369A1',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}>
+                            <PackageCheck size={22} />
+                          </div>
+
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: '15px', fontWeight: 900, color: '#0F172A' }}>
+                                {crate.societyName}
+                              </span>
+                              <span style={{
+                                background: '#234B3C',
+                                color: '#FFFFFF',
+                                fontSize: '12px',
+                                fontWeight: 900,
+                                padding: '3px 10px',
+                                borderRadius: '6px',
+                                letterSpacing: '0.4px'
+                              }}>
+                                📦 CRATE: {crate.blockName}
+                              </span>
+                              {isCrateDone ? (
+                                <span style={{ fontSize: '11px', background: '#DCFCE7', color: '#166534', fontWeight: 800, padding: '2px 8px', borderRadius: '4px', border: '1px solid #86EFAC' }}>
+                                  ✓ Crate Sealed & Ready
+                                </span>
+                              ) : crate.readyToPackCount > 0 ? (
+                                <span style={{ fontSize: '11px', background: '#E0F2FE', color: '#0369A1', fontWeight: 800, padding: '2px 8px', borderRadius: '4px', border: '1px solid #BAE6FD' }}>
+                                  ⚡ Produce Arrived ({crate.readyToPackCount} to pack)
+                                </span>
+                              ) : (
+                                <span style={{ fontSize: '11px', background: '#FEF3C7', color: '#B45309', fontWeight: 800, padding: '2px 8px', borderRadius: '4px', border: '1px solid #FDE68A' }}>
+                                  ⏳ Mandi Procurement ({crate.confirmedCount})
+                                </span>
+                              )}
+                            </div>
+
+                            <div style={{ fontSize: '12px', color: '#64748B', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <span><strong>{crate.orders.length}</strong> Flats in Crate</span>
+                              <span>•</span>
+                              <span><strong>{crate.totalItems}</strong> Produce Bags</span>
+                              <span>•</span>
+                              <span>Est. Weight: <strong>~{crate.totalWeightKg.toFixed(1)} kg</strong></span>
+                            </div>
+                          </div>
                         </div>
-                        <span style={{
-                          fontSize: '11.5px',
-                          background: '#EBF2EE',
-                          color: '#234B3C',
-                          fontWeight: 800,
-                          padding: '2px 8px',
-                          borderRadius: '4px',
-                          display: 'inline-block',
-                          marginTop: '3px',
-                          border: '1px solid #C8DBD0'
-                        }}>
-                          📍 {order.flatNo}
-                        </span>
-                      </td>
 
-                      <td>
-                        <div style={{ fontSize: '12.5px', fontWeight: 600, color: '#0F172A' }}>{order.userName}</div>
-                        <div style={{ fontSize: '11.5px', color: '#64748B' }}>+91 {order.userPhone}</div>
-                      </td>
+                        {/* Right: Actions */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <button
+                            type="button"
+                            onClick={() => handlePrintCrateTag(crate)}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '7px 12px',
+                              borderRadius: '6px',
+                              border: '1.5px solid #CBD5E1',
+                              background: '#FFFFFF',
+                              color: '#334155',
+                              fontSize: '12px',
+                              fontWeight: 700,
+                              cursor: 'pointer'
+                            }}
+                            title="Print physical crate manifest label for plastic tote"
+                          >
+                            <Printer size={14} />
+                            <span>Print Crate Tag</span>
+                          </button>
 
-                      <td>
-                        <div style={{ fontSize: '12.5px', color: '#1E293B', maxWidth: '340px' }}>
-                          {order.items.map((i, idx) => (
-                            <span key={idx} style={{ display: 'inline-block', marginRight: '8px', marginBottom: '2px' }}>
-                              • {i.name} <strong>({i.qty} * {i.unit})</strong>
-                            </span>
-                          ))}
-                        </div>
-                      </td>
-
-                      <td>
-                        <span style={{
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          padding: '3px 8px',
-                          borderRadius: '9999px',
-                          background: order.status === 'PACKED' ? '#DCFCE7' : order.status === 'OUT_FOR_DELIVERY' ? '#FEF3C7' : '#F1F5F9',
-                          color: order.status === 'PACKED' ? '#15803D' : order.status === 'OUT_FOR_DELIVERY' ? '#B45309' : '#475569'
-                        }}>
-                          {order.status === 'PACKED' ? '✓ Packed & Labeled' : order.status}
-                        </span>
-                      </td>
-
-                      <td style={{ textAlign: 'right' }}>
-                        <div style={{ display: 'inline-flex', gap: '6px' }}>
-                          {order.status === 'CONFIRMED' || order.status === 'PROCURING' ? (
+                          {!isCrateDone && (
                             <button
                               type="button"
-                              onClick={() => handleMarkPacked(order.id)}
-                              className="admin-btn-accent"
+                              onClick={() => handlePackEntireBlock(crate)}
                               style={{
-                                fontSize: '11.5px',
-                                padding: '6px 12px',
-                                borderRadius: '6px',
                                 display: 'inline-flex',
                                 alignItems: 'center',
-                                gap: '4px'
-                              }}
-                            >
-                              <Tag size={13} />
-                              <span>Pack & Label</span>
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => setLabelModalOrder(order)}
-                              style={{
-                                background: '#FFFFFF',
-                                border: '1px solid #CBD5E1',
-                                padding: '5px 10px',
+                                gap: '6px',
+                                padding: '7px 14px',
                                 borderRadius: '6px',
-                                fontSize: '11.5px',
-                                fontWeight: 700,
-                                color: '#334155',
+                                border: 'none',
+                                background: '#166534',
+                                color: '#FFFFFF',
+                                fontSize: '12px',
+                                fontWeight: 800,
                                 cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px'
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
                               }}
-                              title="Print / View Address Label"
                             >
-                              <Printer size={12} />
-                              <span>View Label</span>
+                              <Check size={14} />
+                              <span>Pack & Seal Block Crate ({unpackagedOrders.length})</span>
                             </button>
                           )}
                         </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-          <AdminPagination
-            currentPage={currentPage}
-            totalItems={visibleOrders.length}
-            pageSize={pageSize}
-            onPageChange={setCurrentPage}
-            onPageSizeChange={(newSize) => {
-              setPageSize(newSize);
-              setCurrentPage(1);
-            }}
-            itemLabel="orders to pack"
-          />
+                      </div>
+
+                      {/* Orders Table inside Crate */}
+                      <div style={{ overflowX: 'auto' }}>
+                        <table className="admin-data-table" style={{ margin: 0 }}>
+                          <thead>
+                            <tr style={{ background: '#FAFBFB' }}>
+                              <th style={{ width: '140px' }}>Flat / Door #</th>
+                              <th style={{ width: '150px' }}>Order ID</th>
+                              <th style={{ width: '180px' }}>Resident POC</th>
+                              <th>Produce Items in Bag</th>
+                              <th style={{ width: '150px' }}>Status</th>
+                              <th style={{ width: '140px', textAlign: 'right' }}>Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {crate.orders.map(order => {
+                              const { flat } = extractBlockAndFlat(order.flatNo);
+                              const isPacked = order.status === 'PACKED' || order.status === 'OUT_FOR_DELIVERY' || order.status === 'DELIVERED';
+                              const isReady = order.status === 'AT_WAREHOUSE';
+
+                              return (
+                                <tr key={order.id} style={{ background: isPacked ? '#F9FCF9' : '#FFF' }}>
+                                  <td>
+                                    <div style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '5px',
+                                      background: '#EBF2EE',
+                                      color: '#234B3C',
+                                      fontWeight: 900,
+                                      fontSize: '13px',
+                                      padding: '4px 10px',
+                                      borderRadius: '6px',
+                                      border: '1.5px solid #A7C4B8'
+                                    }}>
+                                      <MapPin size={13} color="#234B3C" />
+                                      <span>{flat}</span>
+                                    </div>
+                                  </td>
+
+                                  <td>
+                                    <strong style={{ fontFamily: 'monospace', color: '#0F172A', fontSize: '13px' }}>
+                                      #{order.id}
+                                    </strong>
+                                    <div style={{ fontSize: '10.5px', color: '#64748B' }}>
+                                      {order.deliverySlot || 'Morning Run'}
+                                    </div>
+                                  </td>
+
+                                  <td>
+                                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>{order.userName || 'Resident'}</div>
+                                    <div style={{ fontSize: '11px', color: '#64748B' }}>+91 {order.userPhone}</div>
+                                  </td>
+
+                                  <td>
+                                    <div style={{ fontSize: '12.5px', color: '#1E293B', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                      {(order.items || []).map((i, iIdx) => (
+                                        <span key={iIdx} style={{ background: '#F1F5F9', padding: '2px 7px', borderRadius: '4px', fontSize: '11.5px', fontWeight: 600 }}>
+                                          {i.name} <strong>({i.qty} * {i.unit})</strong>
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </td>
+
+                                  <td>
+                                    {isPacked ? (
+                                      <span style={{ fontSize: '11px', fontWeight: 800, padding: '3px 8px', borderRadius: '4px', background: '#DCFCE7', color: '#15803D' }}>
+                                        ✓ Packed & Labeled
+                                      </span>
+                                    ) : isReady ? (
+                                      <span style={{ fontSize: '11px', fontWeight: 800, padding: '3px 8px', borderRadius: '4px', background: '#E0F2FE', color: '#0369A1' }}>
+                                        ⚡ Ready to Pack
+                                      </span>
+                                    ) : (
+                                      <span style={{ fontSize: '11px', fontWeight: 800, padding: '3px 8px', borderRadius: '4px', background: '#FEF3C7', color: '#B45309' }}>
+                                        ⏳ Mandi Sourcing
+                                      </span>
+                                    )}
+                                  </td>
+
+                                  <td style={{ textAlign: 'right' }}>
+                                    {!isPacked ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenPackingVerification(order)}
+                                        className="admin-btn-accent"
+                                        style={{
+                                          fontSize: '11.5px',
+                                          padding: '5px 12px',
+                                          borderRadius: '6px',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '4px',
+                                          background: isReady ? '#059669' : '#234B3C'
+                                        }}
+                                      >
+                                        <Tag size={13} />
+                                        <span>Pack & Label</span>
+                                      </button>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => setLabelModalOrder(order)}
+                                        style={{
+                                          background: '#FFFFFF',
+                                          border: '1px solid #CBD5E1',
+                                          padding: '4px 8px',
+                                          borderRadius: '6px',
+                                          fontSize: '11.5px',
+                                          fontWeight: 700,
+                                          color: '#334155',
+                                          cursor: 'pointer',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '4px'
+                                        }}
+                                      >
+                                        <Printer size={12} />
+                                        <span>Label</span>
+                                      </button>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
         </div>
       )}
 
@@ -773,7 +1375,7 @@ export default function WarehouseCratingPage() {
                         </span>
                       </div>
                       <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
-                        One Consolidated Delivery Lot for {lot.orders.length} Resident Flats • Total: <strong>{lot.totalWeightKg} kg</strong> Produce
+                        One Consolidated Delivery Lot for {lot.orders.length} {lot.orders.length === 1 ? 'Resident Flat' : 'Resident Flats'} • Total: <strong>{lot.totalWeightKg} kg</strong> Produce
                       </div>
                     </div>
                   </div>
@@ -866,12 +1468,17 @@ export default function WarehouseCratingPage() {
                       <Truck size={20} color="#D97706" />
                       <div>
                         <div style={{ fontSize: '13px', fontWeight: 800, color: '#92400E' }}>
-                          Assigned Driver: {lot.deliveryPartnerName} ({lot.vehicleNumber})
+                          Assigned Driver: {lot.deliveryPartnerName} {lot.vehicleNumber ? `(${lot.vehicleNumber})` : ''}
                         </div>
                         <div style={{ fontSize: '11px', color: '#B45309' }}>
-                          Dispatched at {lot.dispatchedAt ? new Date(lot.dispatchedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Dawn Dispatch'}
+                          Dispatched at {lot.dispatchedAt ? new Date(lot.dispatchedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Transport Run'}
                         </div>
                       </div>
+                    </div>
+                  ) : lot.status === 'OUT_FOR_DELIVERY' ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#92400E', fontSize: '12.5px', fontWeight: 700 }}>
+                      <Truck size={16} color="#D97706" />
+                      <span>Dispatched from Warehouse • Route run in progress</span>
                     </div>
                   ) : (
                     <div style={{ fontSize: '12.5px', color: '#64748B' }}>
@@ -894,26 +1501,39 @@ export default function WarehouseCratingPage() {
                     )}
 
                     {lot.status === 'OUT_FOR_DELIVERY' && (
-                      <button
-                        type="button"
-                        onClick={() => handleMarkLotDelivered(lot)}
-                        style={{
-                          background: '#059669',
-                          color: '#FFFFFF',
-                          border: 'none',
-                          padding: '7px 16px',
-                          borderRadius: '6px',
-                          fontSize: '12.5px',
-                          fontWeight: 800,
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px'
-                        }}
-                      >
-                        <CheckCircle2 size={14} />
-                        <span>Mark Delivered at Society Drop Desk</span>
-                      </button>
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        background: '#FEF3C7',
+                        color: '#92400E',
+                        border: '1px solid #FDE68A',
+                        padding: '6px 14px',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        fontWeight: 800
+                      }}>
+                        <Truck size={14} color="#D97706" />
+                        <span>In-Transit • Awaiting Rider Drop Desk Confirmation</span>
+                      </span>
+                    )}
+
+                    {lot.status === 'DELIVERED' && (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        background: '#DCFCE7',
+                        color: '#15803D',
+                        border: '1px solid #86EFAC',
+                        padding: '6px 14px',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        fontWeight: 800
+                      }}>
+                        <CheckCircle2 size={14} color="#15803D" />
+                        <span>Delivered & Verified at Society Gate</span>
+                      </span>
                     )}
                   </div>
                 </div>
@@ -974,35 +1594,64 @@ export default function WarehouseCratingPage() {
                   <label style={{ fontSize: '12px', fontWeight: 700, display: 'block', marginBottom: '4px', color: '#334155' }}>
                     Select Registered Delivery Partner / Rider *
                   </label>
-                  {deliveryRiders.length > 0 && (
-                    <select
-                      value={driverId}
-                      onChange={(e) => {
-                        const rider = deliveryRiders.find(r => r.id === e.target.value);
+                  <select
+                    value={driverId}
+                    onChange={(e) => {
+                      const selectedVal = e.target.value;
+                      setDriverId(selectedVal);
+                      if (selectedVal === 'CUSTOM') {
+                        setDriverName('');
+                        setDriverPhone('');
+                      } else {
+                        const rider = deliveryRiders.find(r => r.id === selectedVal);
                         if (rider) {
-                          setDriverId(rider.id);
                           setDriverName(rider.name);
                           setDriverPhone(rider.phone);
                         }
-                      }}
-                      style={{ width: '100%', height: '38px', padding: '0 10px', borderRadius: '6px', border: '1.5px solid #CBD5E1', fontSize: '12.5px', marginBottom: '8px', background: '#F8FAFC' }}
-                    >
-                      <option value="">-- Choose Assigned Company Delivery Executive --</option>
-                      {deliveryRiders.map(r => (
-                        <option key={r.id} value={r.id}>
-                          {r.name} • {r.phone} ({r.assignedLocationName || 'Citywide'})
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                  <input
-                    type="text"
-                    placeholder="or enter driver name..."
-                    value={driverName}
-                    onChange={(e) => setDriverName(e.target.value)}
-                    style={{ width: '100%', height: '38px', padding: '0 10px', borderRadius: '6px', border: '1.5px solid #CBD5E1', fontSize: '13px', fontWeight: 700 }}
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      height: '40px',
+                      padding: '0 10px',
+                      borderRadius: '8px',
+                      border: '1.5px solid #234B3C',
+                      background: '#F0FDF4',
+                      fontSize: '13px',
+                      fontWeight: 800,
+                      color: '#0F172A',
+                      cursor: 'pointer',
+                      marginBottom: (driverId === 'CUSTOM' || deliveryRiders.length === 0) ? '8px' : '0'
+                    }}
                     required
-                  />
+                  >
+                    {deliveryRiders.length === 0 && (
+                      <option value="">No registered delivery executives found</option>
+                    )}
+                    {deliveryRiders.map(r => {
+                      const isWarehouseMatch = 
+                        (assignedWhId && (r.assignedWarehouseId === assignedWhId || r.assignedWarehouseId === assignedWhCode)) ||
+                        (resolvedWh && (r.assignedWarehouseId === resolvedWh.id || r.assignedWarehouseId === resolvedWh.code || r.assignedWarehouseId === resolvedWh.uuid));
+                      return (
+                        <option key={r.id} value={r.id}>
+                          {r.name} • +91 {r.phone} {isWarehouseMatch ? '⭐ (Assigned to this Hub)' : ''}
+                        </option>
+                      );
+                    })}
+                    <option value="CUSTOM">✏️ Other / Freelance Temp Driver</option>
+                  </select>
+
+                  {/* Manual input only if Other is selected or no drivers registered */}
+                  {(driverId === 'CUSTOM' || deliveryRiders.length === 0) && (
+                    <input
+                      type="text"
+                      placeholder="Enter driver full name..."
+                      value={driverName}
+                      onChange={(e) => setDriverName(e.target.value)}
+                      style={{ width: '100%', height: '38px', padding: '0 10px', borderRadius: '6px', border: '1.5px solid #CBD5E1', fontSize: '13px', fontWeight: 700, marginTop: '8px' }}
+                      required
+                    />
+                  )}
                 </div>
 
                 <div>
@@ -1014,7 +1663,16 @@ export default function WarehouseCratingPage() {
                     placeholder="e.g. 9845077112"
                     value={driverPhone}
                     onChange={(e) => setDriverPhone(e.target.value)}
-                    style={{ width: '100%', height: '38px', padding: '0 10px', borderRadius: '6px', border: '1.5px solid #CBD5E1', fontSize: '13px' }}
+                    style={{
+                      width: '100%',
+                      height: '38px',
+                      padding: '0 10px',
+                      borderRadius: '6px',
+                      border: '1.5px solid #CBD5E1',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      background: driverId !== 'CUSTOM' && deliveryRiders.length > 0 ? '#F8FAFC' : '#FFF'
+                    }}
                     required
                   />
                 </div>
@@ -1061,7 +1719,7 @@ export default function WarehouseCratingPage() {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
                   <span style={{ color: '#64748B' }}>Total Customer Flats in Lot:</span>
-                  <strong>{handoverLot.orders.length} Flats</strong>
+                  <strong>{handoverLot.orders.length} {handoverLot.orders.length === 1 ? 'Flat' : 'Flats'}</strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: '#64748B' }}>Total Produce Weight:</span>
@@ -1282,6 +1940,298 @@ export default function WarehouseCratingPage() {
           </div>
         </div>
       )}
+
+      {/* MODAL: PACKING VERIFICATION CHECKLIST & CONFIRMATION */}
+      {packingModalOrder && (() => {
+        const { block, flat } = extractBlockAndFlat(packingModalOrder.flatNo);
+        const isReady = packingModalOrder.status === 'AT_WAREHOUSE';
+        const isProcuring = packingModalOrder.status === 'CONFIRMED' || packingModalOrder.status === 'PROCURING';
+        const itemsList = packingModalOrder.items || [];
+        const allItemsChecked = itemsList.length === 0 || itemsList.every((_, idx) => checkedItems[idx]);
+
+        return (
+          <div style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000,
+            padding: '20px'
+          }}>
+            <div style={{
+              background: '#FFFFFF',
+              borderRadius: '16px',
+              maxWidth: '520px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              border: '2px solid #234B3C',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)',
+              display: 'flex',
+              flexDirection: 'column'
+            }}>
+              {/* Modal Header */}
+              <div style={{
+                padding: '16px 20px',
+                borderBottom: '1.5px solid #E2E8F0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: '#FAFBFB'
+              }}>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 800, color: '#234B3C', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                    Warehouse Packing Station • Verification
+                  </div>
+                  <h3 style={{ fontSize: '17px', fontWeight: 900, color: '#0F172A', margin: '2px 0 0' }}>
+                    Verify & Pack Flat {flat}
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPackingModalOrder(null)}
+                  style={{
+                    background: '#F1F5F9',
+                    border: 'none',
+                    borderRadius: '8px',
+                    width: '32px',
+                    height: '32px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    color: '#64748B'
+                  }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div style={{ padding: '20px', flex: 1, display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {/* Destination & Target Block Crate Banner */}
+                <div style={{
+                  background: '#F0FDF4',
+                  border: '1.5px solid #86EFAC',
+                  borderRadius: '10px',
+                  padding: '12px 14px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 800, color: '#166534', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Target Delivery Destination
+                    </span>
+                    <span style={{
+                      background: '#234B3C',
+                      color: '#FFF',
+                      fontSize: '11.5px',
+                      fontWeight: 900,
+                      padding: '2px 8px',
+                      borderRadius: '5px'
+                    }}>
+                      📦 Put in Crate: {block}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '16px', fontWeight: 900, color: '#0F172A' }}>
+                      {packingModalOrder.societyName}
+                    </span>
+                    <span style={{
+                      background: '#EBF2EE',
+                      color: '#234B3C',
+                      fontSize: '13px',
+                      fontWeight: 900,
+                      padding: '2px 8px',
+                      borderRadius: '5px',
+                      border: '1.5px solid #A7C4B8'
+                    }}>
+                      📍 Flat / Door: {flat}
+                    </span>
+                  </div>
+
+                  <div style={{ fontSize: '12px', color: '#475569', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                    <span><strong>Order:</strong> #{packingModalOrder.id}</span>
+                    <span><strong>Resident:</strong> {packingModalOrder.userName || 'Customer'} ({packingModalOrder.userPhone ? `+91 ${packingModalOrder.userPhone}` : 'No phone'})</span>
+                    <span><strong>Slot:</strong> {packingModalOrder.deliverySlot || 'Morning Run'}</span>
+                  </div>
+                </div>
+
+                {/* Mandi Sourcing Warning Notice (if produce en route) */}
+                {isProcuring && (
+                  <div style={{
+                    background: '#FEF3C7',
+                    border: '1.5px solid #FDE68A',
+                    borderRadius: '8px',
+                    padding: '10px 12px',
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '8px'
+                  }}>
+                    <AlertCircle size={16} color="#B45309" style={{ flexShrink: 0, marginTop: '2px' }} />
+                    <div style={{ fontSize: '12px', color: '#92400E', lineHeight: 1.4 }}>
+                      <strong>Produce In Sourcing:</strong> This order is listed under Mandi Sourcing. Please ensure produce from today's mandi arrivals is physically weighed and present on the sorting table before packing.
+                    </div>
+                  </div>
+                )}
+
+                {/* Produce Packing Checklist */}
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A' }}>
+                      Produce Items Checklist ({itemsList.length} items):
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const allState = !allItemsChecked;
+                        const updated = {};
+                        itemsList.forEach((_, idx) => {
+                          updated[idx] = allState;
+                        });
+                        setCheckedItems(updated);
+                      }}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#0284C7',
+                        fontSize: '11.5px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        padding: 0
+                      }}
+                    >
+                      {allItemsChecked ? 'Uncheck All' : 'Check All Items'}
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {itemsList.map((it, idx) => {
+                      const isChecked = !!checkedItems[idx];
+                      return (
+                        <div
+                          key={idx}
+                          onClick={() => toggleCheckItem(idx)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '8px 12px',
+                            borderRadius: '8px',
+                            background: isChecked ? '#F0FDF4' : '#F8FAFC',
+                            border: isChecked ? '1.5px solid #86EFAC' : '1px solid #E2E8F0',
+                            cursor: 'pointer',
+                            transition: 'all 0.1s ease'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => toggleCheckItem(idx)}
+                              style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#234B3C' }}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                            <span style={{
+                              fontSize: '13px',
+                              fontWeight: 700,
+                              color: isChecked ? '#0F172A' : '#64748B'
+                            }}>
+                              {it.name}
+                            </span>
+                          </div>
+
+                          <span style={{
+                            background: isChecked ? '#DCFCE7' : '#E2E8F0',
+                            color: isChecked ? '#15803D' : '#475569',
+                            fontSize: '12px',
+                            fontWeight: 800,
+                            padding: '2px 8px',
+                            borderRadius: '5px'
+                          }}>
+                            {it.qty} * {it.unit}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div style={{ fontSize: '11.5px', color: '#64748B', fontStyle: 'italic', background: '#F8FAFC', padding: '8px 12px', borderRadius: '6px', border: '1px dashed #CBD5E1' }}>
+                  💡 Confirm all items are weighed into the retail bag, then place the bag into <strong>Crate: {block}</strong> for {packingModalOrder.societyName}.
+                </div>
+              </div>
+
+              {/* Modal Footer Actions */}
+              <div style={{
+                padding: '14px 20px',
+                borderTop: '1.5px solid #E2E8F0',
+                background: '#FAFBFB',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '10px'
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setPackingModalOrder(null)}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    border: '1.5px solid #CBD5E1',
+                    background: '#FFFFFF',
+                    color: '#475569',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmVerification(false)}
+                    style={{
+                      padding: '8px 14px',
+                      borderRadius: '8px',
+                      border: '1.5px solid #CBD5E1',
+                      background: '#FFFFFF',
+                      color: '#0F172A',
+                      fontSize: '13px',
+                      fontWeight: 800,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    ✓ Confirm Packed
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmVerification(true)}
+                    className="admin-btn-accent"
+                    style={{
+                      padding: '8px 18px',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      fontWeight: 800,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      background: '#234B3C'
+                    }}
+                  >
+                    <Printer size={14} />
+                    <span>Confirm & Print Label</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

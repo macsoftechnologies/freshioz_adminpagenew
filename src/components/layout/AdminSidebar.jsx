@@ -495,10 +495,6 @@ export default function AdminSidebar() {
               <Truck size={18} />
               <span style={{ flex: 1 }}>My Delivery Manifest</span>
             </NavLink>
-            <NavLink to="/warehouse-crating" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
-              <PackageCheck size={18} />
-              <span>Society Drop Crates Handover</span>
-            </NavLink>
           </>
         )}
       </nav>

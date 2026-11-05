@@ -23,7 +23,8 @@ import {
   Calendar,
   RefreshCw,
   Printer,
-  QrCode
+  QrCode,
+  XCircle
 } from 'lucide-react';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
@@ -31,6 +32,7 @@ import { orders as orderResource, societies as societyResource, warehouses as wa
 import { exportToExcel } from '../utils/excelExporter';
 import { printOrderTaxInvoice, printSocietyDispatchManifest } from '../utils/printInvoices';
 import { apiClient } from '../api/client';
+import { extractBlockAndFlat } from '../utils/addressParser';
 
 export default function OrdersFulfillmentPage() {
   const { currentUser, currentRoleId } = useAdminRole();
@@ -53,6 +55,7 @@ export default function OrdersFulfillmentPage() {
     if (hash === '#packing' || hash === '#packed') return 'PACKED';
     if (hash === '#dispatch' || hash === '#out_for_delivery' || hash === '#out-for-delivery') return 'OUT_FOR_DELIVERY';
     if (hash === '#delivered') return 'DELIVERED';
+    if (hash === '#cancelled') return 'CANCELLED';
     if (hash === '#warehouse') return 'AT_WAREHOUSE';
     if (hash === '#procuring' || hash === '#mandi') return 'PROCURING';
     if (hash === '#confirmed') return 'CONFIRMED';
@@ -70,6 +73,7 @@ export default function OrdersFulfillmentPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState(getInitialStatusFilter);
   const [societyFilter, setSocietyFilter] = useState('ALL');
+  const [blockFilter, setBlockFilter] = useState('ALL');
   const [warehouseFilter, setWarehouseFilter] = useState('ALL');
   const [slotFilter, setSlotFilter] = useState('ALL');
   const [riderTab, setRiderTab] = useState(getInitialRiderTab); // 'PENDING' | 'DELIVERED' | 'ALL'
@@ -94,6 +98,7 @@ export default function OrdersFulfillmentPage() {
       PACKED: '#packing',
       OUT_FOR_DELIVERY: '#dispatch',
       DELIVERED: '#delivered',
+      CANCELLED: '#cancelled',
       ALL: '#all'
     };
     const targetHash = hashMap[newStatus] || '#all';
@@ -180,13 +185,49 @@ export default function OrdersFulfillmentPage() {
     CANCELLED: { label: 'Cancelled', badgeClass: 'rejected', desc: 'Order voided / cancelled', color: '#DC2626' }
   };
 
-  // Status counts
-  const countConfirmed = orders.filter(o => (o.status || 'CONFIRMED') === 'CONFIRMED').length;
-  const countProcuring = orders.filter(o => o.status === 'PROCURING').length;
-  const countWarehouse = orders.filter(o => o.status === 'AT_WAREHOUSE').length;
-  const countPacked = orders.filter(o => o.status === 'PACKED').length;
-  const countOut = orders.filter(o => o.status === 'OUT_FOR_DELIVERY').length;
-  const countDelivered = orders.filter(o => o.status === 'DELIVERED').length;
+  const isDeliveryExecutive = currentRoleId === 'DELIVERY_EXECUTIVE' || currentUser?.role === 'DELIVERY_EXECUTIVE';
+  const isExplicitSuperAdminDesk = currentRoleId === 'SUPER_ADMIN' && (currentUser?.role === 'SUPER_ADMIN' || currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.email === 'superadmin@gmail.com');
+  const isWarehouseScoped = !isExplicitSuperAdminDesk;
+
+  const resolvedWh = React.useMemo(() => {
+    if (!warehouses || warehouses.length === 0) return null;
+    const assignedId = currentUser?.assignedWarehouseId;
+    if (assignedId && assignedId !== 'ALL') {
+      const match = warehouses.find(w => w.id === assignedId || w.code === assignedId || w.uuid === assignedId);
+      if (match) return match;
+    }
+    return warehouses[0];
+  }, [warehouses, currentUser?.assignedWarehouseId]);
+
+  const assignedWhId = resolvedWh?.id;
+  const assignedWhCode = resolvedWh?.code;
+  const assignedWhName = resolvedWh?.name;
+
+  // Warehouse Scoped Orders & Societies
+  const scopedOrders = React.useMemo(() => {
+    if (!isWarehouseScoped || isDeliveryExecutive) return orders;
+    return orders.filter(o => {
+      const orderWhId = o.warehouseId || o.warehouse?.id || societies.find(s => s.id === o.societyId)?.warehouseId;
+      const orderWhCode = o.warehouseCode || o.warehouse?.code || warehouses.find(w => w.id === orderWhId)?.code;
+      return (orderWhId && (orderWhId === assignedWhId || orderWhId === assignedWhCode || orderWhId === resolvedWh?.uuid)) ||
+             (orderWhCode && (orderWhCode === assignedWhCode || orderWhCode === assignedWhId));
+    });
+  }, [orders, isWarehouseScoped, assignedWhId, assignedWhCode, resolvedWh, societies, warehouses]);
+
+  const accessibleSocieties = React.useMemo(() => {
+    if (!isWarehouseScoped) return societies;
+    return societies.filter(s => s.warehouseId === assignedWhId || s.warehouseId === assignedWhCode || s.warehouseId === resolvedWh?.uuid);
+  }, [societies, isWarehouseScoped, assignedWhId, assignedWhCode, resolvedWh]);
+
+  // Status counts (scoped to current warehouse)
+  const countConfirmed = scopedOrders.filter(o => (o.status || 'CONFIRMED') === 'CONFIRMED').length;
+  const countProcuring = scopedOrders.filter(o => o.status === 'PROCURING').length;
+  const countWarehouse = scopedOrders.filter(o => o.status === 'AT_WAREHOUSE').length;
+  const countPacked = scopedOrders.filter(o => o.status === 'PACKED').length;
+  const countOut = scopedOrders.filter(o => o.status === 'OUT_FOR_DELIVERY').length;
+  const countDelivered = scopedOrders.filter(o => o.status === 'DELIVERED').length;
+  const countCancelled = scopedOrders.filter(o => o.status === 'CANCELLED').length;
+  const countActiveOrders = scopedOrders.filter(o => o.status !== 'CANCELLED').length;
 
   const ORDER_STAGE_HIERARCHY = {
     CONFIRMED: 1,
@@ -219,14 +260,18 @@ export default function OrdersFulfillmentPage() {
       return;
     }
 
-    // Role Guard: Delivery Executive can ONLY mark orders as DELIVERED
+    // Role Guard: Delivery Executive can ONLY mark orders as DELIVERED or CANCELLED
     if (isDeliveryExecutive) {
-      if (newStatus !== 'DELIVERED') {
-        showToast('Delivery executives can only mark assigned orders as DELIVERED.', 'error');
+      if (newStatus !== 'DELIVERED' && newStatus !== 'CANCELLED') {
+        showToast('Delivery executives can only mark assigned orders as DELIVERED or CANCELLED.', 'error');
         return;
       }
       if (targetOrder.status === 'DELIVERED') {
         showToast('This order has already been delivered and verified.', 'info');
+        return;
+      }
+      if (targetOrder.status === 'CANCELLED') {
+        showToast('This order has already been cancelled.', 'info');
         return;
       }
     }
@@ -360,80 +405,103 @@ export default function OrdersFulfillmentPage() {
     exportToExcel('Freshioz_Morning_Delivery_Manifest', headers, rows);
   };
 
-  const isExplicitSuperAdminDesk = currentRoleId === 'SUPER_ADMIN' && isSuperAdmin;
-  const isWarehouseScoped = !isExplicitSuperAdminDesk;
+// (isDeliveryExecutive, isWarehouseScoped and resolvedWh defined above)
 
-  const resolvedWh = React.useMemo(() => {
-    if (!warehouses || warehouses.length === 0) return null;
-    const assignedId = currentUser?.assignedWarehouseId;
-    if (assignedId && assignedId !== 'ALL') {
-      const match = warehouses.find(w => w.id === assignedId || w.code === assignedId || w.uuid === assignedId);
-      if (match) return match;
-    }
-    return warehouses[0];
-  }, [warehouses, currentUser?.assignedWarehouseId]);
-
-  const assignedWhId = resolvedWh?.id;
-  const assignedWhCode = resolvedWh?.code;
-  const isDeliveryExecutive = currentRoleId === 'DELIVERY_EXECUTIVE' || currentUser?.role === 'DELIVERY_EXECUTIVE';
-
+  // Strict Assignment Guard: Drivers ONLY receive orders specifically assigned to them in Step 2 Handover!
   const isAssignedToCurrentRider = (o) => {
+    // Orders assigned to this driver that are in progress, delivered, or reported cancelled
+    if (o.status !== 'OUT_FOR_DELIVERY' && o.status !== 'DELIVERED' && o.status !== 'CANCELLED') return false;
+
     if (o.deliveryPartnerId && (o.deliveryPartnerId === currentUser?.id || o.deliveryPartnerId === currentUser?.uuid)) return true;
     if (o.deliveryPartnerPhone && currentUser?.phone && o.deliveryPartnerPhone.replace(/\D/g, '') === currentUser.phone.replace(/\D/g, '')) return true;
     if (o.deliveryPartnerName && currentUser?.name && o.deliveryPartnerName.toLowerCase() === currentUser.name.toLowerCase()) return true;
     if (currentUser?.assignedLocationName && currentUser.assignedLocationName !== 'ALL' && currentUser.assignedLocationName !== 'Citywide' && o.societyName === currentUser.assignedLocationName) return true;
+    
+    // Super Admin preview: Allow Super Admin testing/previewing Rider desk to view all active dispatched orders
+    if (isSuperAdmin) return true;
+    
+    // Warehouse Driver Fallback: If this driver is registered to a warehouse hub and an order is dispatched from that hub without a conflicting rival driver
+    if (currentUser?.assignedWarehouseId && currentUser.assignedWarehouseId !== 'ALL') {
+      const orderWhId = o.warehouseId || o.warehouse?.id;
+      const orderWhCode = o.warehouseCode || o.warehouse?.code;
+      const isMyWarehouse = 
+        (orderWhId && (orderWhId === currentUser.assignedWarehouseId || orderWhId === assignedWhId || orderWhId === assignedWhCode)) ||
+        (orderWhCode && (orderWhCode === currentUser.assignedWarehouseId || orderWhCode === assignedWhCode || orderWhCode === assignedWhId));
+      if (isMyWarehouse && !o.deliveryPartnerId && !o.deliveryPartnerPhone) return true;
+    }
+
     return false;
   };
 
-  const hasSpecificAssignedOrders = orders.some(isAssignedToCurrentRider);
+  // Strictly assigned orders only
+  const riderBaseOrders = orders.filter(isAssignedToCurrentRider);
 
-  const riderBaseOrders = orders.filter(o => {
-    if (hasSpecificAssignedOrders) {
-      return isAssignedToCurrentRider(o);
-    }
-    // In test environment, if no orders were specifically tagged with rider ID, show active delivery orders
-    return o.status === 'OUT_FOR_DELIVERY' || o.status === 'PACKED' || o.status === 'DELIVERED';
-  });
+  // Available blocks from active visible orders
+  const availableBlocks = useMemo(() => {
+    const blockSet = new Set();
+    const sourceOrders = isDeliveryExecutive ? riderBaseOrders : scopedOrders;
+    (sourceOrders || []).forEach(o => {
+      if (societyFilter === 'ALL' || o.societyName === societyFilter || o.societyId === societyFilter) {
+        const { block } = extractBlockAndFlat(o.flatNo || o.flatNumber);
+        if (block && block !== 'General') {
+          blockSet.add(block);
+        }
+      }
+    });
+    return Array.from(blockSet).sort();
+  }, [isDeliveryExecutive, riderBaseOrders, scopedOrders, societyFilter]);
 
   const countRiderPending = riderBaseOrders.filter(o => o.status === 'OUT_FOR_DELIVERY' || o.status === 'PACKED').length;
   const countRiderDelivered = riderBaseOrders.filter(o => o.status === 'DELIVERED').length;
+  const countRiderCancelled = riderBaseOrders.filter(o => o.status === 'CANCELLED').length;
   const riderTotalCodToCollect = riderBaseOrders
-    .filter(o => o.status !== 'DELIVERED' && (o.paymentMethod || '').includes('PAY_ON_DELIVERY'))
+    .filter(o => o.status !== 'DELIVERED' && o.status !== 'CANCELLED' && (o.paymentMethod || '').includes('PAY_ON_DELIVERY'))
     .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
 
-  const handleClaimRun = async () => {
-    const claimableOrders = orders.filter(o => o.status === 'OUT_FOR_DELIVERY' || o.status === 'PACKED');
-    if (claimableOrders.length === 0) {
-      showToast('No active orders available to claim.', 'info');
-      return;
-    }
+  // Rider Cancellation / Exception Modal State
+  const [riderCancelModalOrder, setRiderCancelModalOrder] = useState(null);
+  const [riderCancelReason, setRiderCancelReason] = useState('CUSTOMER_NOT_AVAILABLE');
+  const [riderCancelNotes, setRiderCancelNotes] = useState('');
+
+  const handleConfirmRiderCancel = async (e) => {
+    e.preventDefault();
+    if (!riderCancelModalOrder) return;
+    const targetOrder = riderCancelModalOrder;
+
+    const reasonLabelMap = {
+      CUSTOMER_NOT_AVAILABLE: 'Resident Not Available / Door Locked / Unreachable',
+      WRONG_ADDRESS: 'Incorrect Flat # / Invalid Address',
+      CUSTOMER_REFUSED: 'Resident Refused Delivery / Cancelled at Door',
+      QUALITY_REJECTED: 'Produce Quality Rejected by Resident',
+      SOCIETY_GATE_DENIED: 'Society Security / Association Denied Entry',
+      OTHER: 'Other Exception'
+    };
+    const fullReason = `${reasonLabelMap[riderCancelReason] || riderCancelReason}${riderCancelNotes ? ` - ${riderCancelNotes}` : ''} (Reported by Rider ${currentUser?.name || 'Driver'})`;
 
     try {
-      await Promise.all(claimableOrders.map(o => updateOrderStatusMutation.mutateAsync({
-        id: o.id,
-        status: 'OUT_FOR_DELIVERY',
-        deliveryPartnerId: currentUser?.id || 'FRZ_EMP_105',
-        deliveryPartnerName: currentUser?.name || 'Society Gate Delivery Rider',
-        deliveryPartnerPhone: currentUser?.phone || '9845033333',
-      })));
-      showToast(`Claimed ${claimableOrders.length} active deliveries for ${currentUser?.name || 'Rider'}!`, 'success');
+      await updateOrderStatusMutation.mutateAsync({
+        id: targetOrder.id,
+        status: 'CANCELLED',
+        reason: fullReason,
+        cancelledReason: fullReason
+      });
+      showToast(`Order #${targetOrder.id} marked Undelivered / Cancelled. Return produce bag to warehouse.`, 'info');
+      setRiderCancelModalOrder(null);
     } catch (err) {
-      showToast(err.message || 'Failed to claim deliveries.', 'error');
+      showToast(err.message || 'Failed to cancel order.', 'error');
     }
   };
 
   // Filtered Orders
-  const filteredOrders = orders.filter(o => {
+  const filteredOrders = scopedOrders.filter(o => {
     const currentStatus = o.status || 'CONFIRMED';
 
     if (isDeliveryExecutive) {
-      const inRiderBase = hasSpecificAssignedOrders 
-        ? isAssignedToCurrentRider(o)
-        : (o.status === 'OUT_FOR_DELIVERY' || o.status === 'PACKED' || o.status === 'DELIVERED');
-      if (!inRiderBase) return false;
+      if (!isAssignedToCurrentRider(o)) return false;
 
-      if (riderTab === 'PENDING' && o.status === 'DELIVERED') return false;
+      if (riderTab === 'PENDING' && (o.status === 'DELIVERED' || o.status === 'CANCELLED')) return false;
       if (riderTab === 'DELIVERED' && o.status !== 'DELIVERED') return false;
+      if (riderTab === 'CANCELLED' && o.status !== 'CANCELLED') return false;
     } else {
       // Warehouse Scope Guard: Staff assigned to a warehouse only see orders for their warehouse
       if (isWarehouseScoped) {
@@ -448,7 +516,9 @@ export default function OrdersFulfillmentPage() {
         if (!isWhMatch) return false;
       }
 
-      const matchesStatus = statusFilter === 'ALL' || currentStatus === statusFilter;
+      const matchesStatus = statusFilter === 'ALL'
+        ? currentStatus !== 'CANCELLED'
+        : currentStatus === statusFilter;
       if (!matchesStatus) return false;
     }
 
@@ -456,9 +526,12 @@ export default function OrdersFulfillmentPage() {
       o.id?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       o.userName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       o.societyName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      o.flatNo?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       o.flatNumber?.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesSociety = societyFilter === 'ALL' || o.societyName === societyFilter;
+    const matchesSociety = societyFilter === 'ALL' || o.societyName === societyFilter || o.societyId === societyFilter;
+    const matchesBlock = blockFilter === 'ALL' || extractBlockAndFlat(o.flatNo || o.flatNumber).block === blockFilter;
+    if (!matchesBlock) return false;
     const matchesSlot = slotFilter === 'ALL' || (o.deliverySlot || 'Morning Fresh Slot').toLowerCase().includes(slotFilter.toLowerCase());
 
     // Date range filter
@@ -489,10 +562,22 @@ export default function OrdersFulfillmentPage() {
   }, [searchQuery, statusFilter, societyFilter, warehouseFilter, slotFilter, riderTab, dateFilter, customDate]);
 
   const totalPages = Math.max(1, Math.ceil(filteredOrders.length / pageSize));
+  const sortedFilteredOrders = useMemo(() => {
+    return [...filteredOrders].sort((a, b) => {
+      const socCompare = (a.societyName || '').localeCompare(b.societyName || '');
+      if (socCompare !== 0) return socCompare;
+      const bA = extractBlockAndFlat(a.flatNo || a.flatNumber);
+      const bB = extractBlockAndFlat(b.flatNo || b.flatNumber);
+      const blockCompare = bA.block.localeCompare(bB.block);
+      if (blockCompare !== 0) return blockCompare;
+      return (bA.flat || '').localeCompare(bB.flat || '', undefined, { numeric: true });
+    });
+  }, [filteredOrders]);
+
   const paginatedOrders = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
-    return filteredOrders.slice(start, start + pageSize);
-  }, [filteredOrders, currentPage, pageSize]);
+    return sortedFilteredOrders.slice(start, start + pageSize);
+  }, [sortedFilteredOrders, currentPage, pageSize]);
 
   return (
     <div className="admin-page-container">
@@ -507,13 +592,31 @@ export default function OrdersFulfillmentPage() {
         borderBottom: '1.5px solid #E2E8F0',
         marginBottom: '10px'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <h1 style={{ fontSize: '18px', color: '#0F172A', fontWeight: 800, margin: 0 }}>
             {isDeliveryExecutive ? `My Delivery Manifest (${currentUser?.name || 'Delivery Partner'})` : 'Order Fulfillment Pipeline'}
           </h1>
           <span style={{ fontSize: '11px', background: isDeliveryExecutive ? '#DCFCE7' : '#E0F2FE', color: isDeliveryExecutive ? '#15803D' : '#0369A1', fontWeight: 800, padding: '2px 8px', borderRadius: '4px' }}>
-            {filteredOrders.length} {isDeliveryExecutive ? 'Assigned Stops' : 'Orders Active'}
+            {isDeliveryExecutive ? `${filteredOrders.length} Assigned Stops` : `${filteredOrders.filter(o => o.status !== 'CANCELLED').length} Orders Active`}
           </span>
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '3px 8px',
+            borderRadius: '6px',
+            border: isWarehouseScoped ? '1.5px solid #A7F3D0' : '1.5px solid #CBD5E1',
+            background: isWarehouseScoped ? '#ECFDF5' : '#F8FAFC',
+            fontSize: '11.5px',
+            fontWeight: 800,
+            color: isWarehouseScoped ? '#065F46' : '#1E293B'
+          }}>
+            <Warehouse size={13} color={isWarehouseScoped ? "#059669" : "#0284C7"} />
+            <span>🏢 {assignedWhCode ? `${assignedWhCode} — ${assignedWhName}` : (assignedWhName || currentUser?.assignedLocationName || (currentUser?.assignedWarehouseId !== 'ALL' ? currentUser?.assignedWarehouseId : 'All Hubs & Warehouses'))}</span>
+            {isWarehouseScoped && (
+              <span style={{ fontSize: '9px', background: '#059669', color: '#FFF', padding: '1px 5px', borderRadius: '3px' }}>🔒 Assigned Hub</span>
+            )}
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -567,8 +670,9 @@ export default function OrdersFulfillmentPage() {
                     ({currentUser?.phone || '+91 98450 33333'})
                   </span>
                 </div>
-                <div style={{ fontSize: '11.5px', color: '#475569', marginTop: '1px' }}>
-                  Assigned Route: <strong>{currentUser?.assignedLocationName || 'All Registered Communities (Citywide)'}</strong>
+                <div style={{ fontSize: '11.5px', color: '#475569', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>Assigned Hub: <strong>🏢 {assignedWhCode ? `${assignedWhCode} — ${assignedWhName}` : (assignedWhName || currentUser?.assignedLocationName || 'Warehouse ONE')}</strong></span>
+                  <span style={{ fontSize: '10px', background: '#059669', color: '#FFF', padding: '1px 5px', borderRadius: '4px', fontWeight: 800 }}>🔒 Assigned Hub</span>
                 </div>
               </div>
             </div>
@@ -585,29 +689,14 @@ export default function OrdersFulfillmentPage() {
               </div>
               <div style={{ height: '24px', width: '1px', background: '#E2E8F0' }} />
               <div style={{ textAlign: 'center', padding: '0 6px' }}>
+                <div style={{ fontSize: '16px', fontWeight: 900, color: '#DC2626' }}>{countRiderCancelled}</div>
+                <div style={{ fontSize: '10px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase' }}>Cancelled</div>
+              </div>
+              <div style={{ height: '24px', width: '1px', background: '#E2E8F0' }} />
+              <div style={{ textAlign: 'center', padding: '0 6px' }}>
                 <div style={{ fontSize: '16px', fontWeight: 900, color: '#B91C1C' }}>₹{riderTotalCodToCollect.toLocaleString()}</div>
                 <div style={{ fontSize: '10px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase' }}>COD to Collect</div>
               </div>
-
-              {!hasSpecificAssignedOrders && countRiderPending > 0 && (
-                <button
-                  type="button"
-                  onClick={handleClaimRun}
-                  style={{
-                    padding: '5px 10px',
-                    borderRadius: '6px',
-                    background: '#1E293B',
-                    color: '#FFF',
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    border: 'none',
-                    cursor: 'pointer'
-                  }}
-                  title="Claim active runs for this rider account"
-                >
-                  Claim Active Route Run
-                </button>
-              )}
             </div>
           </div>
 
@@ -616,7 +705,8 @@ export default function OrdersFulfillmentPage() {
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
-            marginBottom: '10px'
+            marginBottom: '10px',
+            flexWrap: 'wrap'
           }}>
             <button
               type="button"
@@ -658,6 +748,27 @@ export default function OrdersFulfillmentPage() {
             >
               <CheckCircle2 size={13} />
               <span>2. Completed Today ({countRiderDelivered})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleRiderTabChange('CANCELLED')}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: 800,
+                cursor: 'pointer',
+                border: 'none',
+                background: riderTab === 'CANCELLED' ? '#DC2626' : '#F1F5F9',
+                color: riderTab === 'CANCELLED' ? '#FFF' : '#475569',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+            >
+              <XCircle size={13} />
+              <span>3. Cancelled / Undelivered ({countRiderCancelled})</span>
             </button>
 
             <button
@@ -704,7 +815,7 @@ export default function OrdersFulfillmentPage() {
                 whiteSpace: 'nowrap'
               }}
             >
-              All Stages ({orders.length})
+              All Stages ({countActiveOrders})
             </button>
 
             <button
@@ -814,6 +925,24 @@ export default function OrdersFulfillmentPage() {
             >
               6. Delivered ({countDelivered})
             </button>
+
+            <button
+              type="button"
+              onClick={() => handleStatusFilterChange('CANCELLED')}
+              style={{
+                padding: '5px 12px',
+                borderRadius: '6px',
+                fontSize: '11.5px',
+                fontWeight: 800,
+                cursor: 'pointer',
+                border: statusFilter === 'CANCELLED' ? '1.5px solid #DC2626' : '1px solid #E2E8F0',
+                background: statusFilter === 'CANCELLED' ? '#FEF2F2' : '#FFF',
+                color: statusFilter === 'CANCELLED' ? '#DC2626' : '#64748B',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              Cancelled ({countCancelled})
+            </button>
           </div>
 
           {/* Slim Society Batch Quick Updater Bar */}
@@ -858,6 +987,7 @@ export default function OrdersFulfillmentPage() {
               >
                 <option value="PROCURING">PROCURING (Mandi Yard)</option>
                 <option value="AT_WAREHOUSE">AT WAREHOUSE (Sorting & Crating)</option>
+                <option value="PACKED">PACKED (Crated & Labeled)</option>
                 <option value="OUT_FOR_DELIVERY">OUT FOR DELIVERY (In Transit)</option>
                 <option value="DELIVERED">DELIVERED (Drop Desk Handover)</option>
               </select>
@@ -929,7 +1059,7 @@ export default function OrdersFulfillmentPage() {
                 onChange={(e) => setStatusFilter(e.target.value)}
                 style={{ padding: '3px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '12px' }}
               >
-                <option value="ALL">All Status ({orders.length})</option>
+                <option value="ALL">All Status ({scopedOrders.length})</option>
                 <option value="CONFIRMED">Confirmed ({countConfirmed})</option>
                 <option value="PROCURING">Procuring ({countProcuring})</option>
                 <option value="AT_WAREHOUSE">At Warehouse ({countWarehouse})</option>
@@ -943,15 +1073,43 @@ export default function OrdersFulfillmentPage() {
             <span>Society:</span>
             <select
               value={societyFilter}
-              onChange={(e) => setSocietyFilter(e.target.value)}
+              onChange={(e) => {
+                setSocietyFilter(e.target.value);
+                setBlockFilter('ALL');
+              }}
               style={{ padding: '3px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '12px' }}
             >
               <option value="ALL">All Societies</option>
-              {societies.map(s => (
+              {accessibleSocieties.map(s => (
                 <option key={s.id} value={s.name}>{s.name}</option>
               ))}
             </select>
           </div>
+
+          {availableBlocks.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#64748B' }}>
+              <Layers size={13} color="#234B3C" />
+              <span>Block / Wing:</span>
+              <select
+                value={blockFilter}
+                onChange={(e) => setBlockFilter(e.target.value)}
+                style={{
+                  padding: '3px 8px',
+                  borderRadius: '6px',
+                  border: blockFilter !== 'ALL' ? '1.5px solid #234B3C' : '1px solid #CBD5E1',
+                  background: blockFilter !== 'ALL' ? '#F0FDF4' : '#FFF',
+                  color: blockFilter !== 'ALL' ? '#234B3C' : '#334155',
+                  fontSize: '12px',
+                  fontWeight: 700
+                }}
+              >
+                <option value="ALL">All Blocks ({availableBlocks.length})</option>
+                {availableBlocks.map(b => (
+                  <option key={b} value={b}>Block {b}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#64748B' }}>
             <span>Run Slot:</span>
@@ -1288,28 +1446,61 @@ export default function OrdersFulfillmentPage() {
                       <Printer size={14} />
                       <span>Print Slip</span>
                     </button>
-                    {!isDelivered ? (
-                      <button
-                        type="button"
-                        onClick={() => handleUpdateOrderStatus(order.id, 'DELIVERED')}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          background: '#059669',
-                          color: '#FFF',
-                          border: 'none',
-                          padding: '8px 18px',
-                          borderRadius: '8px',
-                          fontWeight: 800,
-                          fontSize: '13px',
-                          cursor: 'pointer',
-                          boxShadow: '0 2px 4px rgba(5, 150, 105, 0.25)'
-                        }}
-                      >
-                        <CheckCircle2 size={16} />
-                        <span>Mark Delivered at Drop Desk</span>
-                      </button>
+                    {order.status === 'CANCELLED' ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#DC2626', fontWeight: 800, fontSize: '12px', background: '#FEF2F2', padding: '6px 12px', borderRadius: '6px', border: '1px solid #FCA5A5' }}>
+                        <XCircle size={15} />
+                        <span>Undelivered / Cancelled: {order.cancelledReason || 'Resident unavailable'}</span>
+                      </div>
+                    ) : !isDelivered ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRiderCancelModalOrder(order);
+                            setRiderCancelReason('CUSTOMER_NOT_AVAILABLE');
+                            setRiderCancelNotes('');
+                          }}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            background: '#FEF2F2',
+                            color: '#DC2626',
+                            border: '1px solid #FCA5A5',
+                            padding: '8px 12px',
+                            borderRadius: '8px',
+                            fontWeight: 800,
+                            fontSize: '12px',
+                            cursor: 'pointer'
+                          }}
+                          title="Report delivery exception or resident cancellation"
+                        >
+                          <XCircle size={14} />
+                          <span>Cancel Stop</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateOrderStatus(order.id, 'DELIVERED')}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            background: '#059669',
+                            color: '#FFF',
+                            border: 'none',
+                            padding: '8px 18px',
+                            borderRadius: '8px',
+                            fontWeight: 800,
+                            fontSize: '13px',
+                            cursor: 'pointer',
+                            boxShadow: '0 2px 4px rgba(5, 150, 105, 0.25)'
+                          }}
+                        >
+                          <CheckCircle2 size={16} />
+                          <span>Mark Delivered at Drop Desk</span>
+                        </button>
+                      </div>
                     ) : (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#059669', fontWeight: 800, fontSize: '12.5px' }}>
                         <CheckCircle2 size={16} />
@@ -1364,6 +1555,7 @@ export default function OrdersFulfillmentPage() {
                   <th>Produce Basket Items</th>
                   <th>Value & Mode</th>
                   <th>Assigned Warehouse Hub</th>
+                  <th>Assigned Driver & Logistics</th>
                   <th>Live Fulfillment Status</th>
                   <th style={{ textAlign: 'right' }}>Actions</th>
                 </tr>
@@ -1371,14 +1563,14 @@ export default function OrdersFulfillmentPage() {
               <tbody>
                 {isLoadingOrders ? (
                   <tr>
-                    <td colSpan="7" style={{ textAlign: 'center', padding: '40px' }}>
+                    <td colSpan="8" style={{ textAlign: 'center', padding: '40px' }}>
                       <RefreshCw size={24} style={{ margin: '0 auto 10px', display: 'block', animation: 'spin 1s linear infinite', color: '#0284C7' }} />
                       <div style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A' }}>Loading Orders Pipeline...</div>
                     </td>
                   </tr>
                 ) : filteredOrders.length === 0 ? (
                   <tr>
-                    <td colSpan="7">
+                    <td colSpan="8">
                       <div className="admin-empty-state">
                         <div className="admin-empty-state-icon">
                           <Package size={22} />
@@ -1412,8 +1604,20 @@ export default function OrdersFulfillmentPage() {
                           <div style={{ fontSize: '11.5px', color: '#475569', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
                             <Building2 size={12} color="#64748B" />
                             <span>{order.societyName || 'Greenfield Heights'}</span>
-                            {order.flatNumber && <span style={{ fontWeight: 700 }}>({order.flatNumber})</span>}
                           </div>
+                          {(() => {
+                            const { block, flat } = extractBlockAndFlat(order.flatNo || order.flatNumber);
+                            return (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '3px' }}>
+                                <span style={{ fontSize: '10.5px', background: '#234B3C', color: '#FFF', fontWeight: 800, padding: '1px 5px', borderRadius: '4px' }}>
+                                  📦 {block}
+                                </span>
+                                <span style={{ fontSize: '11px', background: '#EBF2EE', color: '#234B3C', fontWeight: 800, padding: '1px 5px', borderRadius: '4px', border: '1px solid #C8DBD0' }}>
+                                  📍 {flat}
+                                </span>
+                              </div>
+                            );
+                          })()}
                         </td>
 
                         <td>
@@ -1490,6 +1694,66 @@ export default function OrdersFulfillmentPage() {
                         </td>
 
                         <td>
+                          {order.deliveryPartnerName ? (
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12.5px', fontWeight: 800, color: '#0F172A' }}>
+                                <Truck size={13} color="#D97706" />
+                                <span>{order.deliveryPartnerName}</span>
+                              </div>
+                              {order.deliveryPartnerPhone && (
+                                <a
+                                  href={`tel:${order.deliveryPartnerPhone}`}
+                                  style={{
+                                    fontSize: '11px',
+                                    color: '#059669',
+                                    fontWeight: 700,
+                                    textDecoration: 'none',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '3px',
+                                    marginTop: '2px'
+                                  }}
+                                >
+                                  <Phone size={10} />
+                                  <span>+91 {order.deliveryPartnerPhone}</span>
+                                </a>
+                              )}
+                              <div style={{ fontSize: '10.5px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '5px', marginTop: '3px', flexWrap: 'wrap' }}>
+                                {order.vehicleNumber && (
+                                  <span style={{ fontFamily: 'monospace', fontWeight: 800, background: '#F1F5F9', color: '#334155', padding: '1px 5px', borderRadius: '3px' }}>
+                                    {order.vehicleNumber}
+                                  </span>
+                                )}
+                                {order.deliveryLotId && (
+                                  <span style={{ fontWeight: 800, color: '#234B3C', background: '#EBF2EE', padding: '1px 5px', borderRadius: '3px' }}>
+                                    #{order.deliveryLotId}
+                                  </span>
+                                )}
+                              </div>
+                              {order.dispatchedBy && (
+                                <div style={{ fontSize: '10px', color: '#94A3B8', marginTop: '2px' }}>
+                                  Dispatched: {order.dispatchedBy}
+                                </div>
+                              )}
+                            </div>
+                          ) : currentStatus === 'OUT_FOR_DELIVERY' ? (
+                            <div>
+                              <div style={{ fontSize: '11.5px', color: '#D97706', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <Truck size={12} color="#D97706" />
+                                <span>Hub Fleet Transport</span>
+                              </div>
+                              <div style={{ fontSize: '10.5px', color: '#94A3B8', marginTop: '2px' }}>
+                                In-Transit to Drop Desk
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: '11px', color: '#94A3B8', fontStyle: 'italic' }}>
+                              Awaiting Handover
+                            </div>
+                          )}
+                        </td>
+
+                        <td>
                           {/* STRICT PERMISSION: Only Super Admin gets the reversible selector dropdown */}
                           {isSuperAdmin ? (
                             <select
@@ -1527,6 +1791,16 @@ export default function OrdersFulfillmentPage() {
                               {statusConf.label}
                             </span>
                           )}
+                          {currentStatus === 'CANCELLED' && order.cancelledReason && (
+                            <div style={{ fontSize: '10px', color: '#DC2626', fontWeight: 700, marginTop: '3px', maxWidth: '170px', lineHeight: 1.2 }}>
+                              ⚠️ {order.cancelledReason}
+                            </div>
+                          )}
+                          {currentStatus === 'DELIVERED' && order.deliveredAt && (
+                            <div style={{ fontSize: '10px', color: '#15803D', fontWeight: 700, marginTop: '3px' }}>
+                              ✓ Verified at {new Date(order.deliveredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          )}
                           {order.lastStatusUpdate && (
                             <div style={{ fontSize: '10px', color: '#64748B', marginTop: '2px' }}>
                               Updated: {order.lastStatusUpdate}
@@ -1535,7 +1809,7 @@ export default function OrdersFulfillmentPage() {
                         </td>
 
                         <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                          {currentStatus === 'OUT_FOR_DELIVERY' && (
+                          {currentStatus === 'OUT_FOR_DELIVERY' && isSuperAdmin && (
                             <button
                               type="button"
                               onClick={() => handleUpdateOrderStatus(order.id, 'DELIVERED')}
@@ -1553,11 +1827,29 @@ export default function OrdersFulfillmentPage() {
                                 gap: '4px',
                                 marginRight: '6px'
                               }}
-                              title="Mark Delivered to society drop desk"
+                              title="Mark Delivered to society drop desk (Super Admin override)"
                             >
                               <CheckCircle2 size={13} />
                               <span>Mark Delivered</span>
                             </button>
+                          )}
+                          {currentStatus === 'OUT_FOR_DELIVERY' && !isSuperAdmin && (
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              background: '#FEF3C7',
+                              color: '#92400E',
+                              border: '1px solid #FDE68A',
+                              padding: '4px 8px',
+                              borderRadius: '4px',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              marginRight: '6px'
+                            }}>
+                              <Truck size={12} color="#D97706" />
+                              <span>In-Transit with Rider</span>
+                            </span>
                           )}
                           <button
                             type="button"
@@ -1896,6 +2188,46 @@ export default function OrdersFulfillmentPage() {
                   <span style={{ fontFamily: 'monospace', fontWeight: 800 }}>#{selectedOrder.id}</span>
                 </div>
 
+                {/* LOGISTICS & DISPATCH AUDIT BOX */}
+                {(selectedOrder.deliveryPartnerName || selectedOrder.dispatchedBy || selectedOrder.status === 'OUT_FOR_DELIVERY' || selectedOrder.status === 'DELIVERED') && (
+                  <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '10px 12px', marginTop: '10px', fontSize: '12px' }}>
+                    <div style={{ fontWeight: 800, color: '#334155', textTransform: 'uppercase', fontSize: '11px', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <Truck size={13} color="#D97706" />
+                      <span>Logistics & Handover Audit Trail:</span>
+                    </div>
+                    {selectedOrder.deliveryPartnerName && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+                        <span style={{ color: '#64748B' }}>Assigned Partner:</span>
+                        <strong style={{ color: '#0F172A' }}>{selectedOrder.deliveryPartnerName} {selectedOrder.deliveryPartnerPhone ? `(+91 ${selectedOrder.deliveryPartnerPhone})` : ''}</strong>
+                      </div>
+                    )}
+                    {selectedOrder.vehicleNumber && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+                        <span style={{ color: '#64748B' }}>Vehicle Registration:</span>
+                        <span style={{ fontFamily: 'monospace', fontWeight: 800 }}>{selectedOrder.vehicleNumber}</span>
+                      </div>
+                    )}
+                    {selectedOrder.deliveryLotId && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+                        <span style={{ color: '#64748B' }}>Delivery Lot Code:</span>
+                        <strong style={{ color: '#234B3C' }}>#{selectedOrder.deliveryLotId}</strong>
+                      </div>
+                    )}
+                    {selectedOrder.dispatchedBy && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+                        <span style={{ color: '#64748B' }}>Dispatched By:</span>
+                        <span>{selectedOrder.dispatchedBy}</span>
+                      </div>
+                    )}
+                    {selectedOrder.cancelledReason && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px', paddingTop: '4px', borderTop: '1px dashed #FCA5A5', color: '#991B1B' }}>
+                        <span>Cancellation Reason:</span>
+                        <strong>{selectedOrder.cancelledReason}</strong>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* CRATED PRODUCE CONTENTS - CLEAN FORMATTING WITH space * space */}
                 <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '10px', marginTop: '10px' }}>
                   <div style={{ fontSize: '11.5px', fontWeight: 800, color: '#334155', textTransform: 'uppercase', marginBottom: '6px', display: 'flex', justifyContent: 'space-between' }}>
@@ -2231,6 +2563,189 @@ export default function OrdersFulfillmentPage() {
           </div>
         </div>
       )}
+
+      {/* MODAL: RIDER DELIVERY EXCEPTION & CANCELLATION */}
+      {riderCancelModalOrder && (() => {
+        const { block, flat } = extractBlockAndFlat(riderCancelModalOrder.flatNo);
+        return (
+          <div style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000,
+            padding: '20px'
+          }}>
+            <div style={{
+              background: '#FFFFFF',
+              borderRadius: '16px',
+              maxWidth: '480px',
+              width: '100%',
+              padding: '24px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)',
+              border: '2px solid #DC2626'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', borderBottom: '1.5px solid #F1F5F9', paddingBottom: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: '#FEF2F2', color: '#DC2626', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <XCircle size={22} />
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: '16px', fontWeight: 900, color: '#0F172A', margin: 0 }}>
+                      Report Delivery Exception / Cancel
+                    </h3>
+                    <div style={{ fontSize: '11.5px', color: '#64748B' }}>
+                      #{riderCancelModalOrder.id} • Flat {flat} ({riderCancelModalOrder.societyName})
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setRiderCancelModalOrder(null)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <form onSubmit={handleConfirmRiderCancel}>
+                {/* Destination & Customer Summary */}
+                <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '12px', marginBottom: '14px', fontSize: '12.5px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span style={{ color: '#64748B' }}>Resident:</span>
+                    <strong style={{ color: '#0F172A' }}>{riderCancelModalOrder.userName} (+91 {riderCancelModalOrder.userPhone})</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span style={{ color: '#64748B' }}>Destination:</span>
+                    <strong>{riderCancelModalOrder.societyName} — Flat {flat} (Block {block})</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#64748B' }}>Basket Items:</span>
+                    <span>{(riderCancelModalOrder.items || []).length} produce items</span>
+                  </div>
+                </div>
+
+                {/* Exception Reason Selector */}
+                <div style={{ marginBottom: '14px' }}>
+                  <label style={{ fontSize: '12.5px', fontWeight: 800, display: 'block', marginBottom: '6px', color: '#1E293B' }}>
+                    Select Reason for Non-Delivery *
+                  </label>
+                  <select
+                    value={riderCancelReason}
+                    onChange={(e) => setRiderCancelReason(e.target.value)}
+                    style={{
+                      width: '100%',
+                      height: '42px',
+                      padding: '0 12px',
+                      borderRadius: '8px',
+                      border: '1.5px solid #CBD5E1',
+                      background: '#FFF',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      color: '#0F172A',
+                      cursor: 'pointer'
+                    }}
+                    required
+                  >
+                    <option value="CUSTOMER_NOT_AVAILABLE">🚪 Resident Not Available / Flat Locked / Unreachable</option>
+                    <option value="WRONG_ADDRESS">📍 Incorrect Flat # / Wrong Community Address</option>
+                    <option value="CUSTOMER_REFUSED">🙅 Resident Refused Delivery / Cancelled at Doorstep</option>
+                    <option value="QUALITY_REJECTED">🥦 Produce Quality Rejected by Resident</option>
+                    <option value="SOCIETY_GATE_DENIED">⛔ Society Security / Association Denied Entry</option>
+                    <option value="OTHER">✏️ Other Delivery Exception</option>
+                  </select>
+                </div>
+
+                {/* Additional Rider Notes */}
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 700, display: 'block', marginBottom: '4px', color: '#475569' }}>
+                    Rider Delivery Notes (Optional)
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="e.g. Called resident 3 times, flat door locked. Security verified resident not in town."
+                    value={riderCancelNotes}
+                    onChange={(e) => setRiderCancelNotes(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      borderRadius: '8px',
+                      border: '1.5px solid #CBD5E1',
+                      fontSize: '12.5px',
+                      fontFamily: 'inherit',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                {/* Return Produce Notice */}
+                <div style={{
+                  background: '#FEF2F2',
+                  border: '1px solid #FCA5A5',
+                  borderRadius: '8px',
+                  padding: '10px 12px',
+                  marginBottom: '18px',
+                  fontSize: '12px',
+                  color: '#991B1B',
+                  lineHeight: 1.4,
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '8px'
+                }}>
+                  <AlertCircle size={16} color="#DC2626" style={{ flexShrink: 0, marginTop: '2px' }} />
+                  <div>
+                    <strong>Inventory Return Required:</strong> Order will be marked <strong>CANCELLED</strong>. Keep the produce bag sealed in the crate and hand it back to the warehouse lead during return reconciliation.
+                  </div>
+                </div>
+
+                {/* Modal Buttons */}
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                  <button
+                    type="button"
+                    onClick={() => setRiderCancelModalOrder(null)}
+                    style={{
+                      padding: '9px 16px',
+                      borderRadius: '8px',
+                      border: '1px solid #CBD5E1',
+                      background: '#FFF',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      color: '#475569'
+                    }}
+                  >
+                    Back / Keep Stop
+                  </button>
+
+                  <button
+                    type="submit"
+                    style={{
+                      padding: '9px 18px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: '#DC2626',
+                      color: '#FFF',
+                      fontSize: '13px',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: '0 2px 4px rgba(220, 38, 38, 0.25)'
+                    }}
+                  >
+                    <XCircle size={15} />
+                    <span>Confirm Undelivered & Cancel ➔</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

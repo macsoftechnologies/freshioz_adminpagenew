@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
-import { orders as orderResource, procurement as procurementResource, societies as societyResource, employees as employeeResource, usePayouts, useUpdateOrderStatus } from '../hooks/resources';
+import { warehouses as warehouseResource, orders as orderResource, procurement as procurementResource, societies as societyResource, employees as employeeResource, usePayouts, useUpdateOrderStatus } from '../hooks/resources';
 import { exportToExcel } from '../utils/excelExporter';
 
 const HASH_TAB_MAP = {
@@ -52,6 +52,7 @@ export default function FinancialTransactionsPage() {
   const { currentUser } = useAdminRole();
   const { showToast } = useToast();
 
+  const { data: rawWarehouses = [] } = warehouseResource.useList();
   const { data: rawOrders = [] } = orderResource.useList();
   const { data: rawProcurementLogs = [] } = procurementResource.useList();
   const { data: rawWithdrawals = [] } = usePayouts();
@@ -59,11 +60,48 @@ export default function FinancialTransactionsPage() {
   const { data: rawEmployees = [] } = employeeResource.useList();
   const updateOrderStatusMutation = useUpdateOrderStatus();
 
+  const warehouses = Array.isArray(rawWarehouses) ? rawWarehouses : [];
   const orders = Array.isArray(rawOrders) ? rawOrders : [];
   const procurementLogs = Array.isArray(rawProcurementLogs) ? rawProcurementLogs : [];
   const withdrawals = Array.isArray(rawWithdrawals) ? rawWithdrawals : [];
   const societies = Array.isArray(rawSocieties) ? rawSocieties : [];
   const employees = Array.isArray(rawEmployees) ? rawEmployees : [];
+
+  const isSuper = currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN' || currentUser?.email === 'superadmin@gmail.com';
+  const assignedWhId = currentUser?.assignedWarehouseId;
+  const isWarehouseScoped = !isSuper && assignedWhId && assignedWhId !== 'ALL';
+
+  const resolvedWh = useMemo(() => {
+    if (!warehouses || warehouses.length === 0) return null;
+    if (assignedWhId && assignedWhId !== 'ALL') {
+      const match = warehouses.find(w => w.id === assignedWhId || w.code === assignedWhId || w.uuid === assignedWhId);
+      if (match) return match;
+    }
+    return null;
+  }, [warehouses, assignedWhId]);
+
+  const scopedOrders = useMemo(() => {
+    if (!isWarehouseScoped || !resolvedWh) return orders;
+    return orders.filter(o => {
+      const orderWhId = o.warehouseId || o.warehouse?.id || societies.find(s => s.id === o.societyId || s.name === o.societyName)?.warehouseId;
+      const orderWhCode = o.warehouseCode || o.warehouse?.code || warehouses.find(w => w.id === orderWhId)?.code;
+      return (orderWhId && (orderWhId === resolvedWh.id || orderWhId === resolvedWh.code || orderWhId === resolvedWh.uuid)) ||
+             (orderWhCode && (orderWhCode === resolvedWh.code || orderWhCode === resolvedWh.id));
+    });
+  }, [orders, isWarehouseScoped, resolvedWh, societies, warehouses]);
+
+  const scopedProcurementLogs = useMemo(() => {
+    if (!isWarehouseScoped || !resolvedWh) return procurementLogs;
+    return procurementLogs.filter(log => {
+      const destId = log.destinationWarehouseId;
+      return destId === resolvedWh.id || destId === resolvedWh.code || destId === resolvedWh.uuid;
+    });
+  }, [procurementLogs, isWarehouseScoped, resolvedWh]);
+
+  const scopedWithdrawals = useMemo(() => {
+    if (isWarehouseScoped) return [];
+    return withdrawals;
+  }, [withdrawals, isWarehouseScoped]);
 
   const [activeTab, setActiveTab] = useState(getTabFromHash);
   const [confirmDepositModal, setConfirmDepositModal] = useState(null); // { name, pendingHandoverAmount, totalStops, orderIds }
@@ -95,7 +133,7 @@ export default function FinancialTransactionsPage() {
 
   // 1. INFLOWS: Customer Orders Payments
   const customerPayments = useMemo(() => {
-    return orders.map(order => {
+    return scopedOrders.map(order => {
       const isCod = (order.paymentMethod || '').includes('PAY_ON_DELIVERY') || order.paymentMethod === 'COD';
       const isPaid = order.paymentStatus === 'PAID' || order.codPaymentReceived || order.status === 'DELIVERED';
       const receivedMode = order.codReceivedMode || (isCod ? 'CASH' : 'ONLINE_GATEWAY');
@@ -129,11 +167,11 @@ export default function FinancialTransactionsPage() {
         status: order.status
       };
     });
-  }, [orders]);
+  }, [scopedOrders]);
 
   // 2. OUTFLOWS: Mandi Procurement Spend
   const procurementExpenses = useMemo(() => {
-    return procurementLogs.map(log => ({
+    return scopedProcurementLogs.map(log => ({
       id: log.billNumber ? `MB-${log.billNumber}` : log.id,
       originalId: log.id,
       refType: 'MANDI_PURCHASE',
@@ -153,11 +191,11 @@ export default function FinancialTransactionsPage() {
       destinationWarehouse: log.destinationName || 'Central Warehouse Hub',
       destinationWarehouseId: log.destinationWarehouseId
     }));
-  }, [procurementLogs]);
+  }, [scopedProcurementLogs]);
 
   // 3. OUTFLOWS: Society Commission / Cashback Withdrawals
   const societyPayoutOutflows = useMemo(() => {
-    return withdrawals.map(w => ({
+    return scopedWithdrawals.map(w => ({
       id: w.id,
       refType: 'SOCIETY_PAYOUT',
       transactionType: 'OUTFLOW',
@@ -170,7 +208,7 @@ export default function FinancialTransactionsPage() {
       status: w.status,
       handledBy: 'Super Admin Finance Desk'
     }));
-  }, [withdrawals]);
+  }, [scopedWithdrawals]);
 
   // Unified Chronological Ledger
   const allLedgerTransactions = useMemo(() => {
@@ -199,8 +237,7 @@ export default function FinancialTransactionsPage() {
   }, [customerPayments, procurementExpenses, societyPayoutOutflows]);
 
   // Filtered Ledger
-  const isSuper = currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN' || currentUser?.email === 'superadmin@gmail.com';
-  const isWarehouseScoped = !isSuper && currentUser?.assignedWarehouseId && currentUser.assignedWarehouseId !== 'ALL';
+  // (isSuper and isWarehouseScoped defined above)
 
   const filteredTransactions = useMemo(() => {
     return allLedgerTransactions.filter(item => {
@@ -474,10 +511,17 @@ export default function FinancialTransactionsPage() {
       {/* Page Header */}
       <div className="page-title-header" style={{ marginBottom: '16px' }}>
         <div>
-          <h1 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Receipt size={22} color="#059669" />
-            <span>End-to-End Financial & Payment Transactions Ledger</span>
-          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <h1 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Receipt size={22} color="#059669" />
+              <span>End-to-End Financial & Payment Transactions Ledger</span>
+            </h1>
+            {isWarehouseScoped && resolvedWh && (
+              <span style={{ fontSize: '11px', background: '#ECFDF5', border: '1.5px solid #A7F3D0', color: '#065F46', padding: '2px 8px', borderRadius: '6px', fontWeight: 800 }}>
+                🏢 {resolvedWh.code} — {resolvedWh.name} 🔒 Assigned Hub
+              </span>
+            )}
+          </div>
           <p style={{ fontSize: '12.5px', color: '#64748B', margin: '3px 0 0' }}>
             Complete audit trail of all customer revenue inflows, COD cash handovers, APMC Mandi spend, and community payouts.
           </p>

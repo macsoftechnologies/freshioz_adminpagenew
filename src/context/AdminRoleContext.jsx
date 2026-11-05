@@ -115,63 +115,24 @@ export function AdminRoleProvider({ children }) {
   const unitsQuery = unitResource.useList(null, queryOpts);
   const withdrawalsQuery = usePayouts(null, { enabled: !!isAuthenticated && isSuperAdmin });
 
-  const getCachedStore = () => {
-    try {
-      const cached = localStorage.getItem('freshioz_cached_admin_store');
-      if (cached) return JSON.parse(cached);
-    } catch (e) {}
-    return null;
-  };
-  const cachedStoreRef = React.useRef(getCachedStore());
-
-  const societies = societiesQuery.data ?? (cachedStoreRef.current?.societies ?? []);
-  const warehouses = warehousesQuery.data ?? (cachedStoreRef.current?.warehouses ?? []);
-  const employees = employeesQuery.data ?? (cachedStoreRef.current?.employees ?? []);
-  const vendors = vendorsQuery.data ?? (cachedStoreRef.current?.vendors ?? []);
-  const leadsData = leadsQuery.data ?? (cachedStoreRef.current?.societyRequests ?? {});
-  const orders = ordersQuery.data ?? (cachedStoreRef.current?.orders ?? []);
-  const procurementLogs = procurementQuery.data ?? (cachedStoreRef.current?.procurementLogs ?? []);
-  const products = productsQuery.data ?? (cachedStoreRef.current?.products ?? []);
-  const categories = categoriesQuery.data ?? (cachedStoreRef.current?.categories ?? []);
-  const units = unitsQuery.data ?? (cachedStoreRef.current?.units ?? []);
-  const withdrawals = withdrawalsQuery.data ?? (cachedStoreRef.current?.withdrawals ?? []);
-
-  // Persist updated server data to localStorage cache whenever queries succeed
+  // Purge any legacy stale localStorage cache immediately
   useEffect(() => {
-    if (ordersQuery.data || societiesQuery.data || productsQuery.data) {
-      try {
-        const toCache = {
-          societies: societiesQuery.data || cachedStoreRef.current?.societies || [],
-          warehouses: warehousesQuery.data || cachedStoreRef.current?.warehouses || [],
-          employees: employeesQuery.data || cachedStoreRef.current?.employees || [],
-          vendors: vendorsQuery.data || cachedStoreRef.current?.vendors || [],
-          societyRequests: leadsQuery.data?.leads || leadsQuery.data || cachedStoreRef.current?.societyRequests || [],
-          orders: ordersQuery.data || cachedStoreRef.current?.orders || [],
-          procurementLogs: procurementQuery.data || cachedStoreRef.current?.procurementLogs || [],
-          products: productsQuery.data || cachedStoreRef.current?.products || [],
-          categories: categoriesQuery.data || cachedStoreRef.current?.categories || [],
-          units: unitsQuery.data || cachedStoreRef.current?.units || [],
-          withdrawals: withdrawalsQuery.data || cachedStoreRef.current?.withdrawals || [],
-        };
-        cachedStoreRef.current = toCache;
-        localStorage.setItem('freshioz_cached_admin_store', JSON.stringify(toCache));
-      } catch (e) {
-        // Ignore quota limits
-      }
-    }
-  }, [
-    societiesQuery.data,
-    warehousesQuery.data,
-    employeesQuery.data,
-    vendorsQuery.data,
-    leadsQuery.data,
-    ordersQuery.data,
-    procurementQuery.data,
-    productsQuery.data,
-    categoriesQuery.data,
-    unitsQuery.data,
-    withdrawalsQuery.data
-  ]);
+    try {
+      localStorage.removeItem('freshioz_cached_admin_store');
+    } catch (e) {}
+  }, []);
+
+  const societies = Array.isArray(societiesQuery.data) ? societiesQuery.data : [];
+  const warehouses = Array.isArray(warehousesQuery.data) ? warehousesQuery.data : [];
+  const employees = Array.isArray(employeesQuery.data) ? employeesQuery.data : [];
+  const vendors = Array.isArray(vendorsQuery.data) ? vendorsQuery.data : [];
+  const leadsData = leadsQuery.data || [];
+  const orders = Array.isArray(ordersQuery.data) ? ordersQuery.data : [];
+  const procurementLogs = Array.isArray(procurementQuery.data) ? procurementQuery.data : [];
+  const products = Array.isArray(productsQuery.data) ? productsQuery.data : [];
+  const categories = Array.isArray(categoriesQuery.data) ? categoriesQuery.data : [];
+  const units = Array.isArray(unitsQuery.data) ? unitsQuery.data : [];
+  const withdrawals = Array.isArray(withdrawalsQuery.data) ? withdrawalsQuery.data : [];
 
   const allQueries = [
     societiesQuery,
@@ -276,7 +237,7 @@ export function AdminRoleProvider({ children }) {
             roles: authData.user.roles || [chosenRole],
             avatar: (authData.user.name?.[0] || 'A').toUpperCase(),
             assignedWarehouseId: authData.user.assignedWarehouseId || 'ALL',
-            assignedLocationName: 'Freshioz Command Center'
+            assignedLocationName: authData.user.assignedLocationName || 'All Hubs & Warehouses (Citywide)'
           };
           setCurrentRoleId(chosenRole);
           setCurrentUser(userObj);
