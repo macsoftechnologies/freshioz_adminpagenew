@@ -22,5 +22,16 @@ export const paymentSettingsService = {
       body: JSON.stringify(payload),
     });
   },
+
+  async getDeliverySettings() {
+    return apiClient('/payments/delivery/settings');
+  },
+
+  async updateDeliverySettings(payload) {
+    return apiClient('/payments/delivery/settings', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
 };
 

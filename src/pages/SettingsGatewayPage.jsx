@@ -17,7 +17,8 @@ import {
   Server,
   Settings as SettingsIcon,
   HelpCircle,
-  RefreshCw
+  RefreshCw,
+  Truck
 } from 'lucide-react';
 import { paymentSettingsService } from '../services/paymentSettingsService';
 import { useToast } from '../context/ToastContext';
@@ -50,9 +51,46 @@ export default function SettingsGatewayPage() {
   const [showLiveSecret, setShowLiveSecret] = useState(false);
   const [activeTab, setActiveTab] = useState('TEST'); // 'TEST' | 'LIVE'
 
+  // Dynamic Delivery Fee & Shipping Threshold State
+  const [deliveryConfig, setDeliveryConfig] = useState({
+    baseFee: 25.0,
+    freeDeliveryThreshold: 299.0,
+    enableFreeDelivery: true,
+  });
+  const [savingDelivery, setSavingDelivery] = useState(false);
+
   useEffect(() => {
     loadSettings();
+    loadDeliverySettings();
   }, []);
+
+  const loadDeliverySettings = async () => {
+    try {
+      const data = await paymentSettingsService.getDeliverySettings();
+      if (data) {
+        setDeliveryConfig({
+          baseFee: Number(data.baseFee) >= 0 ? Number(data.baseFee) : 25,
+          freeDeliveryThreshold: Number(data.freeDeliveryThreshold) || 299,
+          enableFreeDelivery: data.enableFreeDelivery !== false,
+        });
+      }
+    } catch (e) {
+      console.warn('Could not load delivery settings:', e);
+    }
+  };
+
+  const handleSaveDeliveryConfig = async (e) => {
+    if (e) e.preventDefault();
+    setSavingDelivery(true);
+    try {
+      await paymentSettingsService.updateDeliverySettings(deliveryConfig);
+      showToast('Next-Day delivery fee and shipping policy saved successfully!', 'success');
+    } catch (err) {
+      showToast(err?.message || 'Failed to update delivery settings', 'error');
+    } finally {
+      setSavingDelivery(false);
+    }
+  };
 
   const loadSettings = async () => {
     setLoading(true);
@@ -633,8 +671,192 @@ export default function SettingsGatewayPage() {
           </div>
         </div>
 
-        {/* Right Column: Webhook Integration Guide, Operating Rules & System Environment */}
+        {/* Right Column: Next-Day Delivery Policy & Webhook Integration */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          
+          {/* Next-Day Delivery Fee & Free Shipping Threshold Card */}
+          <div style={{
+            background: '#FFFFFF',
+            border: '1.5px solid #E2E8F0',
+            borderRadius: '12px',
+            padding: '18px 20px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  background: '#FEF3C7',
+                  color: '#D97706',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <Truck size={17} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                    Next-Day Delivery Policy
+                  </h3>
+                  <p style={{ margin: '1px 0 0', fontSize: '11px', color: '#64748B' }}>
+                    Control customer delivery fee and free shipping
+                  </p>
+                </div>
+              </div>
+
+              <span style={{
+                background: deliveryConfig.baseFee === 0 ? '#DCFCE7' : '#EFF6FF',
+                color: deliveryConfig.baseFee === 0 ? '#15803D' : '#1D4ED8',
+                fontSize: '11px',
+                fontWeight: 800,
+                padding: '2px 8px',
+                borderRadius: '6px'
+              }}>
+                {deliveryConfig.baseFee === 0 ? 'FREE DELIVERY FOR ALL' : `₹${deliveryConfig.baseFee} BASE FEE`}
+              </span>
+            </div>
+
+            {/* Dynamic Status Callout Banner */}
+            <div style={{
+              background: deliveryConfig.baseFee === 0 ? '#F0FDF4' : '#F8FAFC',
+              border: `1px solid ${deliveryConfig.baseFee === 0 ? '#BBF7D0' : '#E2E8F0'}`,
+              borderRadius: '8px',
+              padding: '10px 12px',
+              marginBottom: '14px',
+              fontSize: '12px',
+              color: deliveryConfig.baseFee === 0 ? '#15803D' : '#334155',
+              lineHeight: 1.5
+            }}>
+              {deliveryConfig.baseFee === 0 ? (
+                <span>🎉 <strong>Free Delivery Active on ALL Orders:</strong> Zero delivery charge applied to any customer basket at checkout.</span>
+              ) : (
+                <span>Standard delivery is <strong>₹{deliveryConfig.baseFee}</strong>. Orders of <strong>₹{deliveryConfig.freeDeliveryThreshold} and above</strong> qualify for <strong>FREE Doorstep Delivery</strong>.</span>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
+                  Base Next-Day Delivery Fee (₹)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="200"
+                  step="5"
+                  value={deliveryConfig.baseFee}
+                  onChange={(e) => setDeliveryConfig(prev => ({ ...prev, baseFee: Math.max(0, parseFloat(e.target.value) || 0) }))}
+                  placeholder="e.g. 0 for Free Delivery, or 25"
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    border: '1.5px solid #CBD5E1',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    boxSizing: 'border-box'
+                  }}
+                />
+                <span style={{ fontSize: '10.5px', color: '#64748B', marginTop: '2px', display: 'block' }}>
+                  Set to <strong>0</strong> to provide completely free delivery across all apartment communities.
+                </span>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
+                  Free Delivery Threshold (₹)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="1000"
+                  step="10"
+                  value={deliveryConfig.freeDeliveryThreshold}
+                  onChange={(e) => setDeliveryConfig(prev => ({ ...prev, freeDeliveryThreshold: Math.max(0, parseFloat(e.target.value) || 0) }))}
+                  placeholder="e.g. 199 or 299"
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    border: '1.5px solid #CBD5E1',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    boxSizing: 'border-box'
+                  }}
+                />
+                <span style={{ fontSize: '10.5px', color: '#64748B', marginTop: '2px', display: 'block' }}>
+                  Minimum cart value required to waive the delivery fee.
+                </span>
+              </div>
+
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '10px 12px',
+                background: '#F8FAFC',
+                borderRadius: '8px',
+                border: '1px solid #E2E8F0',
+                marginTop: '2px'
+              }}>
+                <div>
+                  <strong style={{ fontSize: '12px', color: '#0F172A', display: 'block' }}>Enable Free Delivery Tier</strong>
+                  <span style={{ fontSize: '11px', color: '#64748B' }}>Waives delivery fee when threshold is met</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDeliveryConfig(prev => ({ ...prev, enableFreeDelivery: !prev.enableFreeDelivery }))}
+                  style={{
+                    width: '42px',
+                    height: '22px',
+                    borderRadius: '11px',
+                    background: deliveryConfig.enableFreeDelivery ? '#16A34A' : '#CBD5E1',
+                    border: 'none',
+                    cursor: 'pointer',
+                    position: 'relative',
+                    padding: 0
+                  }}
+                >
+                  <div style={{
+                    width: '16px',
+                    height: '16px',
+                    borderRadius: '50%',
+                    background: '#FFFFFF',
+                    position: 'absolute',
+                    top: '3px',
+                    left: deliveryConfig.enableFreeDelivery ? '23px' : '3px',
+                    transition: 'left 0.2s'
+                  }} />
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '6px' }}>
+                <button
+                  type="button"
+                  onClick={handleSaveDeliveryConfig}
+                  disabled={savingDelivery}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '7px 16px',
+                    borderRadius: '6px',
+                    background: '#234B3C',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    fontWeight: 700,
+                    fontSize: '12px',
+                    cursor: savingDelivery ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  <Save size={13} />
+                  <span>{savingDelivery ? 'Saving...' : 'Save Delivery Policy'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
           
           {/* Webhook Configuration Instructions Card */}
           <div style={{
