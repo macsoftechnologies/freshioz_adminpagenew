@@ -1464,7 +1464,13 @@ export default function WarehouseCratingPage() {
                             {o.flatNo} — {o.userName}
                           </div>
                           <div style={{ fontSize: '11px', color: '#64748B' }}>
-                            {o.items.map(it => `${it.name} (${it.qty} ${it.unit})`).join(', ')}
+                            {o.items.map(it => {
+                              const q = Number(it.qty) || 1;
+                              const rawUnit = (it.unit || '').trim();
+                              const cleanUnit = rawUnit.replace(/^1\s*/, '');
+                              const unitLabel = cleanUnit ? `${q} ${cleanUnit}${q > 1 && cleanUnit === 'pc' ? 's' : ''}` : (q > 1 ? `×${q}` : '');
+                              return unitLabel ? `${it.name} (${unitLabel})` : it.name;
+                            }).join(', ')}
                           </div>
                         </div>
 
@@ -2183,7 +2189,12 @@ export default function WarehouseCratingPage() {
                             padding: '2px 8px',
                             borderRadius: '5px'
                           }}>
-                            {it.qty} * {it.unit}
+                            {(() => {
+                              const q = Number(it.qty) || 1;
+                              const rawU = (it.unit || '').trim();
+                              const cleanU = rawU.replace(/^1\s*/, '');
+                              return cleanU ? `${q} ${cleanU}${q > 1 && cleanU === 'pc' ? 's' : ''}` : `${q} ${rawU}`;
+                            })()}
                           </span>
                         </div>
                       );
