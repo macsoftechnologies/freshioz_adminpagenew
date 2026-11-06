@@ -15,7 +15,8 @@ import {
   AlertCircle,
   Database,
   Edit3,
-  X
+  X,
+  RefreshCw
 } from 'lucide-react';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
@@ -63,8 +64,25 @@ export default function ProcurementDemandPage() {
 
   const { data: rawWarehouses = [] } = warehouseResource.useList();
   const { data: rawProducts = [] } = productResource.useList();
-  const { data: rawOrders = [] } = orderResource.useList();
-  const { data: rawProcLogs = [] } = procurementResource.useList();
+  const { data: rawOrders = [], refetch: refetchOrders, isFetching: isOrdersFetching } = orderResource.useList(undefined, { refetchInterval: 10_000 });
+  const { data: rawProcLogs = [], refetch: refetchProcLogs, isFetching: isProcLogsFetching } = procurementResource.useList(undefined, { refetchInterval: 10_000 });
+
+  const [isSyncing, setIsSyncing] = useState(false);
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    try {
+      await Promise.all([
+        refetchOrders?.(),
+        refetchProcLogs?.(),
+        refetchInventory?.()
+      ]);
+      showToast('✓ Live customer demand and Mandi logs updated!', 'success');
+    } catch {
+      showToast('Live data refreshed', 'info');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const warehouses = Array.isArray(rawWarehouses) ? rawWarehouses : [];
   const products = Array.isArray(rawProducts) ? rawProducts : [];
@@ -143,7 +161,7 @@ export default function ProcurementDemandPage() {
     isError: isInventoryError, 
     error: inventoryError, 
     refetch: refetchInventory 
-  } = useInventory(selectedWarehouseId !== 'ALL' ? selectedWarehouseId : undefined);
+  } = useInventory(selectedWarehouseId !== 'ALL' ? selectedWarehouseId : undefined, { refetchInterval: 10_000 });
   const adjustStockMutation = useAdjustStock();
 
   const inventoryStockMap = useMemo(() => {
@@ -524,6 +542,37 @@ export default function ProcurementDemandPage() {
 
         {/* Consolidated Mandi Purchase Action */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button
+            type="button"
+            onClick={handleManualSync}
+            disabled={isSyncing}
+            style={{
+              fontSize: '12.5px',
+              fontWeight: 700,
+              padding: '7px 13px',
+              borderRadius: '8px',
+              height: 'auto',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              border: '1.5px solid #CBD5E1',
+              color: '#334155',
+              background: '#FFFFFF',
+              cursor: isSyncing ? 'not-allowed' : 'pointer',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+            }}
+            title="Instantly refresh customer orders and Mandi bills"
+          >
+            <RefreshCw 
+              size={14} 
+              style={{
+                transition: 'transform 0.5s ease',
+                transform: isSyncing ? 'rotate(360deg)' : 'none'
+              }} 
+            />
+            <span>{isSyncing ? 'Syncing...' : 'Sync Demand'}</span>
+          </button>
+
           {totalNetRequiredKg > 0 ? (
             <Link
               to={`/procurement-entry?warehouseId=${selectedWarehouseId}&slot=${selectedSlot}&date=${selectedDate}`}

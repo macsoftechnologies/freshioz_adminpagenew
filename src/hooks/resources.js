@@ -56,7 +56,7 @@ export const societies = makeResource('societies', societyService);
 export const employees = makeResource('employees', employeeService);
 export const categories = makeResource('categories', categoryService);
 export const units = makeResource('units', unitService);
-export const procurement = makeResource('procurement', procurementService);
+export const procurement = makeResource('procurement', procurementService, { refetchMs: 15_000 });
 export const leads = makeResource('leads', inboundService);
 export const orders = makeResource('orders', orderService, { refetchMs: 15_000 }); // ops desk wants near-live
 
