@@ -112,7 +112,7 @@ export default function WarehouseCratingPage() {
   const [slotFilter, setSlotFilter] = useState('ALL'); // 'ALL' | 'Morning' | 'Evening'
   const [societyFilter, setSocietyFilter] = useState('ALL');
   const [blockFilter, setBlockFilter] = useState('ALL');
-  const [packingStageFilter, setPackingStageFilter] = useState('ALL'); // 'ALL' | 'READY_TO_PACK' | 'CONFIRMED' | 'PACKED'
+  const [packingStageFilter, setPackingStageFilter] = useState('READY_TO_PACK'); // 'ALL' | 'READY_TO_PACK' | 'CONFIRMED' | 'PACKED'
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
 
@@ -235,6 +235,7 @@ export default function WarehouseCratingPage() {
   // Filter orders based on user's role and assigned warehouse / route / dispatch slot
   const isSuperDesk = currentRoleId === 'SUPER_ADMIN' && (currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN' || currentUser?.email === 'superadmin@gmail.com');
   const isWarehouseScoped = !isSuperDesk;
+  const isWarehouseStaff = currentRoleId === 'WAREHOUSE_STAFF' || (!isSuperDesk && currentUser?.role === 'WAREHOUSE_STAFF');
 
   const resolvedWh = React.useMemo(() => {
     if (!warehouses || warehouses.length === 0) return null;
@@ -253,6 +254,11 @@ export default function WarehouseCratingPage() {
   const visibleOrders = orders.filter(order => {
     // Exclude cancelled orders from packing desk
     if (order.status === 'CANCELLED') return false;
+
+    // Staff Guard: Packing staff only sees orders once they have arrived at the hub (procured by manager at Mandi)
+    if (isWarehouseStaff && (order.status === 'CONFIRMED' || order.status === 'PROCURING')) {
+      return false;
+    }
 
     if (isWarehouseScoped) {
       const orderWhId = order.warehouseId || order.warehouse?.id || societies.find(s => s.id === order.societyId)?.warehouseId;
@@ -399,6 +405,9 @@ export default function WarehouseCratingPage() {
   visibleOrders.forEach(order => {
     // Only include orders in the run (not cancelled)
     if (order.status === 'CANCELLED') return;
+
+    // Dispatch Isolation: Orders must be procured and arrived at the warehouse (AT_WAREHOUSE / PACKED / OUT_FOR_DELIVERY) to form delivery lots
+    if (order.status === 'CONFIRMED' || order.status === 'PROCURING') return;
     const socName = order.societyName || 'Society Hub';
     const delivDate = order.deliveryDate || 'Morning Run';
     const delivSlot = order.deliverySlot || 'Morning Fresh Slot';
@@ -961,7 +970,9 @@ export default function WarehouseCratingPage() {
                 >
                   <option value="ALL">All Packing Stages</option>
                   <option value="READY_TO_PACK">⚡ Ready to Pack (Produce Received)</option>
-                  <option value="CONFIRMED">⏳ Mandi Procurement (Upcoming)</option>
+                  {!isWarehouseStaff && (
+                    <option value="CONFIRMED">⏳ Mandi Procurement (Upcoming)</option>
+                  )}
                   <option value="PACKED">✓ Packed & Sealed</option>
                 </select>
               </div>
@@ -1467,9 +1478,12 @@ export default function WarehouseCratingPage() {
                             {o.items.map(it => {
                               const q = Number(it.qty) || 1;
                               const rawUnit = (it.unit || '').trim();
-                              const cleanUnit = rawUnit.replace(/^1\s*/, '');
-                              const unitLabel = cleanUnit ? `${q} ${cleanUnit}${q > 1 && cleanUnit === 'pc' ? 's' : ''}` : (q > 1 ? `×${q}` : '');
-                              return unitLabel ? `${it.name} (${unitLabel})` : it.name;
+                              const isPc = /^(1\s*)?pcs?$/i.test(rawUnit);
+                              if (isPc || !rawUnit) {
+                                return q > 1 ? `${it.name} (×${q})` : it.name;
+                              }
+                              const cleanUnit = rawUnit.replace(/^1\s*/, '').trim();
+                              return cleanUnit ? `${it.name} (${q > 1 ? `${q} ` : ''}${cleanUnit})` : (q > 1 ? `${it.name} (×${q})` : it.name);
                             }).join(', ')}
                           </div>
                         </div>
@@ -2192,8 +2206,12 @@ export default function WarehouseCratingPage() {
                             {(() => {
                               const q = Number(it.qty) || 1;
                               const rawU = (it.unit || '').trim();
-                              const cleanU = rawU.replace(/^1\s*/, '');
-                              return cleanU ? `${q} ${cleanU}${q > 1 && cleanU === 'pc' ? 's' : ''}` : `${q} ${rawU}`;
+                              const isPc = /^(1\s*)?pcs?$/i.test(rawU);
+                              if (isPc || !rawU) {
+                                return q > 1 ? `×${q}` : `1 Unit`;
+                              }
+                              const cleanU = rawU.replace(/^1\s*/, '').trim();
+                              return cleanU ? `${q > 1 ? `${q} ` : ''}${cleanU}` : `×${q}`;
                             })()}
                           </span>
                         </div>

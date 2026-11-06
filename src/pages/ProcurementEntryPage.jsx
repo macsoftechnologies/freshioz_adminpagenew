@@ -457,6 +457,7 @@ export default function ProcurementEntryPage() {
         totalAmountPaid: Number(totalAmount) || 0,
         totalAmount: Number(totalAmount) || 0,
         receiptPhoto: receiptPhoto || undefined,
+        fulfilledOrderIds: unprocuredOrders.map(o => o.id),
         items: items.map(i => ({
           name: i.name,
           qty: Number(i.qty) || 1,

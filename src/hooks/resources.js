@@ -21,7 +21,7 @@ function useInvalidate() {
   return (...keys) => keys.forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
 }
 
-function makeResource(key, service, { refetchMs = 0 } = {}) {
+function makeResource(key, service, { refetchMs = 0, extraInvalidate = [] } = {}) {
   return {
     key,
     useList: (params, options = {}) =>
@@ -36,7 +36,7 @@ function makeResource(key, service, { refetchMs = 0 } = {}) {
       }),
     useCreate: () => {
       const inv = useInvalidate();
-      return useMutation({ mutationFn: (data) => service.create(data), onSuccess: () => inv(key) });
+      return useMutation({ mutationFn: (data) => service.create(data), onSuccess: () => inv(key, ...extraInvalidate) });
     },
     useUpdate: () => {
       const inv = useInvalidate();
@@ -56,7 +56,7 @@ export const societies = makeResource('societies', societyService);
 export const employees = makeResource('employees', employeeService);
 export const categories = makeResource('categories', categoryService);
 export const units = makeResource('units', unitService);
-export const procurement = makeResource('procurement', procurementService, { refetchMs: 15_000 });
+export const procurement = makeResource('procurement', procurementService, { refetchMs: 15_000, extraInvalidate: ['orders', 'inventory'] });
 export const leads = makeResource('leads', inboundService);
 export const orders = makeResource('orders', orderService, { refetchMs: 15_000 }); // ops desk wants near-live
 
