@@ -194,6 +194,7 @@ export function AdminRoleProvider({ children }) {
       const updated = { ...currentUser, role: roleId, roles: preservedRoles };
       setCurrentUser(updated);
       localStorage.setItem('freshioz_admin_user', JSON.stringify(updated));
+      queryClient.invalidateQueries();
       return;
     }
 
@@ -207,6 +208,7 @@ export function AdminRoleProvider({ children }) {
     const updated = { ...currentUser, role: roleId };
     setCurrentUser(updated);
     localStorage.setItem('freshioz_admin_user', JSON.stringify(updated));
+    queryClient.invalidateQueries();
   };
 
   const login = async (emailOrPhone, password, roleId = 'SUPER_ADMIN') => {

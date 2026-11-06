@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { 
   Truck, 
   Warehouse, 
@@ -37,6 +38,7 @@ import { extractBlockAndFlat } from '../utils/addressParser';
 export default function OrdersFulfillmentPage() {
   const { currentUser, currentRoleId } = useAdminRole();
   const { showToast } = useToast();
+  const queryClient = useQueryClient();
 
   const { data: rawOrders = [], isLoading: isLoadingOrders } = orderResource.useList();
   const { data: rawSocieties = [] } = societyResource.useList();
@@ -208,19 +210,20 @@ export default function OrdersFulfillmentPage() {
 
   // Warehouse Scoped Orders & Societies
   const scopedOrders = React.useMemo(() => {
-    if (!isWarehouseScoped || isDeliveryExecutive) return orders;
+    if (!isWarehouseScoped || isDeliveryExecutive || warehouses.length <= 1) return orders;
     return orders.filter(o => {
       const orderWhId = o.warehouseId || o.warehouse?.id || societies.find(s => s.id === o.societyId)?.warehouseId;
       const orderWhCode = o.warehouseCode || o.warehouse?.code || warehouses.find(w => w.id === orderWhId)?.code;
-      return (orderWhId && (orderWhId === assignedWhId || orderWhId === assignedWhCode || orderWhId === resolvedWh?.uuid)) ||
+      return (!orderWhId && !orderWhCode) ||
+             (orderWhId && (orderWhId === assignedWhId || orderWhId === assignedWhCode || orderWhId === resolvedWh?.uuid)) ||
              (orderWhCode && (orderWhCode === assignedWhCode || orderWhCode === assignedWhId));
     });
-  }, [orders, isWarehouseScoped, assignedWhId, assignedWhCode, resolvedWh, societies, warehouses]);
+  }, [orders, isWarehouseScoped, isDeliveryExecutive, assignedWhId, assignedWhCode, resolvedWh, societies, warehouses]);
 
   const accessibleSocieties = React.useMemo(() => {
-    if (!isWarehouseScoped) return societies;
-    return societies.filter(s => s.warehouseId === assignedWhId || s.warehouseId === assignedWhCode || s.warehouseId === resolvedWh?.uuid);
-  }, [societies, isWarehouseScoped, assignedWhId, assignedWhCode, resolvedWh]);
+    if (!isWarehouseScoped || warehouses.length <= 1) return societies;
+    return societies.filter(s => !s.warehouseId || s.warehouseId === assignedWhId || s.warehouseId === assignedWhCode || s.warehouseId === resolvedWh?.uuid);
+  }, [societies, isWarehouseScoped, assignedWhId, assignedWhCode, resolvedWh, warehouses]);
 
   // Status counts (scoped to current warehouse)
   const countConfirmed = scopedOrders.filter(o => (o.status || 'CONFIRMED') === 'CONFIRMED').length;
@@ -413,25 +416,44 @@ export default function OrdersFulfillmentPage() {
   // Strict Assignment Guard: Drivers ONLY receive orders specifically assigned to them in Step 2 Handover!
   const isAssignedToCurrentRider = (o) => {
     // Orders assigned to this driver that are in progress, delivered, or reported cancelled
-    if (o.status !== 'OUT_FOR_DELIVERY' && o.status !== 'DELIVERED' && o.status !== 'CANCELLED') return false;
+    if (o.status !== 'OUT_FOR_DELIVERY' && o.status !== 'PACKED' && o.status !== 'DELIVERED' && o.status !== 'CANCELLED') return false;
 
-    if (o.deliveryPartnerId && (o.deliveryPartnerId === currentUser?.id || o.deliveryPartnerId === currentUser?.uuid)) return true;
-    if (o.deliveryPartnerPhone && currentUser?.phone && o.deliveryPartnerPhone.replace(/\D/g, '') === currentUser.phone.replace(/\D/g, '')) return true;
-    if (o.deliveryPartnerName && currentUser?.name && o.deliveryPartnerName.toLowerCase() === currentUser.name.toLowerCase()) return true;
-    if (currentUser?.assignedLocationName && currentUser.assignedLocationName !== 'ALL' && currentUser.assignedLocationName !== 'Citywide' && o.societyName === currentUser.assignedLocationName) return true;
-    
     // Super Admin preview: Allow Super Admin testing/previewing Rider desk to view all active dispatched orders
     if (isSuperAdmin) return true;
-    
-    // Warehouse Driver Fallback: If this driver is registered to a warehouse hub and an order is dispatched from that hub without a conflicting rival driver
+
+    // Match by ID
+    if (o.deliveryPartnerId && (
+      o.deliveryPartnerId === currentUser?.id ||
+      o.deliveryPartnerId === currentUser?.uuid ||
+      o.deliveryPartnerId === currentUser?.employeeId
+    )) return true;
+
+    // Match by normalized Phone (last 10 digits to handle +91 / 0 prefixes)
+    const orderPhone = (o.deliveryPartnerPhone || '').replace(/\D/g, '').slice(-10);
+    const userPhone = (currentUser?.phone || '').replace(/\D/g, '').slice(-10);
+    if (orderPhone && userPhone && orderPhone === userPhone) return true;
+
+    // Match by Name (case-insensitive & whitespace trimmed)
+    const orderName = (o.deliveryPartnerName || '').trim().toLowerCase();
+    const userName = (currentUser?.name || '').trim().toLowerCase();
+    if (orderName && userName && (orderName === userName || orderName.includes(userName) || userName.includes(orderName))) return true;
+
+    // Match by assigned location
+    if (currentUser?.assignedLocationName && currentUser.assignedLocationName !== 'ALL' && currentUser.assignedLocationName !== 'Citywide' && o.societyName === currentUser.assignedLocationName) return true;
+
+    // Warehouse Driver Fallback: If this driver is registered to a warehouse hub and an order is dispatched from that hub
     if (currentUser?.assignedWarehouseId && currentUser.assignedWarehouseId !== 'ALL') {
       const orderWhId = o.warehouseId || o.warehouse?.id;
       const orderWhCode = o.warehouseCode || o.warehouse?.code;
       const isMyWarehouse = 
+        (!orderWhId && !orderWhCode) ||
         (orderWhId && (orderWhId === currentUser.assignedWarehouseId || orderWhId === assignedWhId || orderWhId === assignedWhCode)) ||
         (orderWhCode && (orderWhCode === currentUser.assignedWarehouseId || orderWhCode === assignedWhCode || orderWhCode === assignedWhId));
-      if (isMyWarehouse && !o.deliveryPartnerId && !o.deliveryPartnerPhone) return true;
+      if (isMyWarehouse && (!o.deliveryPartnerId || o.deliveryPartnerId === 'CUSTOM' || !o.deliveryPartnerPhone)) return true;
     }
+
+    // Single Hub Fallback: If only 1 warehouse is configured in system, all out-for-delivery orders belong to this hub's fleet
+    if (warehouses.length <= 1) return true;
 
     return false;
   };
@@ -507,7 +529,7 @@ export default function OrdersFulfillmentPage() {
       if (riderTab === 'CANCELLED' && o.status !== 'CANCELLED') return false;
     } else {
       // Warehouse Scope Guard: Staff assigned to a warehouse only see orders for their warehouse
-      if (isWarehouseScoped) {
+      if (isWarehouseScoped && warehouses.length > 1) {
         const orderWhId = o.warehouseId || o.warehouse?.id;
         const orderWhCode = o.warehouseCode || o.warehouse?.code;
 
@@ -623,6 +645,30 @@ export default function OrdersFulfillmentPage() {
         </div>
 
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={() => {
+              queryClient.invalidateQueries({ queryKey: ['orders'] });
+              showToast('🔄 Synchronizing live orders manifest...', 'info');
+            }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              padding: '6px 12px',
+              borderRadius: '6px',
+              background: '#F0FDF4',
+              border: '1.5px solid #86EFAC',
+              color: '#166534',
+              fontWeight: 700,
+              fontSize: '12px',
+              cursor: 'pointer'
+            }}
+            title="Refresh order pipeline and assigned stops"
+          >
+            <RefreshCw size={13} />
+            <span>Sync Orders</span>
+          </button>
           <button
             type="button"
             onClick={handleExportManifestExcel}
@@ -1409,7 +1455,11 @@ export default function OrdersFulfillmentPage() {
                       <div style={{ fontSize: '12px', color: '#0F172A', fontWeight: 700 }}>
                         {(order.items || []).map((it, iIdx) => (
                           <div key={iIdx} style={{ padding: '2px 0' }}>
-                            • {it.name || it.productName} — {(it.qty || it.quantity || 1)} * {(it.unit || 'Pack')}
+                            {(() => {
+                              const q = it.qty || it.quantity || 1;
+                              const cleanU = String(it.unit || '').replace(/\b(?:pc|pcs|pieces?)\b/gi, '').trim();
+                              return `• ${it.name || it.productName} — ${cleanU ? `${q} ${cleanU}` : `×${q}`}`;
+                            })()}
                           </div>
                         ))}
                       </div>
@@ -2252,7 +2302,10 @@ export default function OrdersFulfillmentPage() {
                         <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: idx < selectedOrder.items.length - 1 ? '1px dashed #E2E8F0' : 'none', fontSize: '12.5px' }}>
                           <span style={{ fontWeight: 700, color: '#0F172A' }}>• {it.name || it.productName}</span>
                           <span style={{ fontWeight: 800, color: '#166534', background: '#DCFCE7', padding: '2px 8px', borderRadius: '4px', fontSize: '11.5px' }}>
-                            {q} * {u}
+                            {(() => {
+                              const cleanU = String(u || '').replace(/\b(?:pc|pcs|pieces?)\b/gi, '').trim();
+                              return cleanU ? `${q} ${cleanU}` : `×${q}`;
+                            })()}
                           </span>
                         </div>
                       );
