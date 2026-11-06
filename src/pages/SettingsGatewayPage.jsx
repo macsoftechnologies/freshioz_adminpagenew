@@ -52,6 +52,7 @@ export default function SettingsGatewayPage() {
   const [showTestSecret, setShowTestSecret] = useState(false);
   const [showLiveSecret, setShowLiveSecret] = useState(false);
   const [activeTab, setActiveTab] = useState('TEST'); // 'TEST' | 'LIVE'
+  const [sectionTab, setSectionTab] = useState(window.location.hash === '#fresh-coins' ? 'FRESH_COINS' : 'GATEWAY');
 
   // FreshCoins Loyalty Settings State
   const [coinsConfig, setCoinsConfig] = useState({
@@ -66,6 +67,16 @@ export default function SettingsGatewayPage() {
   useEffect(() => {
     loadSettings();
     loadCoinsSettings();
+
+    const handleHashChange = () => {
+      if (window.location.hash === '#fresh-coins') {
+        setSectionTab('FRESH_COINS');
+      } else {
+        setSectionTab('GATEWAY');
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
   const loadCoinsSettings = async () => {
@@ -246,11 +257,95 @@ export default function SettingsGatewayPage() {
         </div>
       </div>
 
-      {/* Main 2-Column Responsive Layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.8fr) minmax(0, 1.2fr)', gap: '16px' }}>
-        
-        {/* Left Column: Razorpay Configuration Form */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {/* Top Main Section Switcher Tabs */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        marginBottom: '20px',
+        background: '#FFFFFF',
+        padding: '5px',
+        borderRadius: '10px',
+        border: '1.5px solid #E2E8F0',
+        width: 'fit-content',
+        flexWrap: 'wrap'
+      }}>
+        <button
+          type="button"
+          onClick={() => {
+            setSectionTab('GATEWAY');
+            window.location.hash = '';
+          }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 16px',
+            borderRadius: '7px',
+            border: 'none',
+            background: sectionTab === 'GATEWAY' ? '#234B3C' : 'transparent',
+            color: sectionTab === 'GATEWAY' ? '#FFFFFF' : '#64748B',
+            fontWeight: 800,
+            fontSize: '12.5px',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <CreditCard size={15} />
+          <span>Payment Gateway (Razorpay)</span>
+          <span style={{
+            background: sectionTab === 'GATEWAY' ? 'rgba(255,255,255,0.2)' : '#F1F5F9',
+            color: sectionTab === 'GATEWAY' ? '#FFFFFF' : '#64748B',
+            fontSize: '10px',
+            fontWeight: 800,
+            padding: '1px 6px',
+            borderRadius: '4px'
+          }}>
+            {formData.razorpayEnabled ? 'ENABLED' : 'OFF'}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setSectionTab('FRESH_COINS');
+            window.location.hash = 'fresh-coins';
+          }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 16px',
+            borderRadius: '7px',
+            border: 'none',
+            background: sectionTab === 'FRESH_COINS' ? '#D97706' : 'transparent',
+            color: sectionTab === 'FRESH_COINS' ? '#FFFFFF' : '#64748B',
+            fontWeight: 800,
+            fontSize: '12.5px',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <Coins size={15} color={sectionTab === 'FRESH_COINS' ? '#FEF08A' : '#D97706'} />
+          <span>FreshCoins Loyalty Engine</span>
+          <span style={{
+            background: sectionTab === 'FRESH_COINS' ? 'rgba(255,255,255,0.2)' : '#FEF3C7',
+            color: sectionTab === 'FRESH_COINS' ? '#FFFFFF' : '#92400E',
+            fontSize: '10px',
+            fontWeight: 800,
+            padding: '1px 6px',
+            borderRadius: '4px'
+          }}>
+            {coinsConfig.isEnabled ? `${coinsConfig.earningRatePercent}% CASHBACK` : 'OFF'}
+          </span>
+        </button>
+      </div>
+      {/* Section 1: Razorpay Payment Gateway */}
+      {sectionTab === 'GATEWAY' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.8fr) minmax(0, 1.2fr)', gap: '16px' }}>
+          
+          {/* Left Column: Razorpay Configuration Form */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           
           {/* Card 1: Master Gateway Switch & Environment Mode */}
           <div style={{
@@ -675,8 +770,12 @@ export default function SettingsGatewayPage() {
               </button>
             </div>
           </div>
+        </div>
 
-          {/* Card 3: FreshCoins Loyalty & Rewards Engine */}
+        {/* Right Column: Webhook Integration Guide, Operating Rules & System Environment */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          
+          {/* Webhook Configuration Instructions Card */}
           <div style={{
             background: '#FFFFFF',
             border: '1.5px solid #E2E8F0',
@@ -684,25 +783,103 @@ export default function SettingsGatewayPage() {
             padding: '18px 20px',
             boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
           }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+              <div style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: '6px',
+                background: '#F0FDF4',
+                color: '#16A34A',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <Zap size={15} />
+              </div>
+              <h3 style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                Automated Webhook Integration
+              </h3>
+            </div>
+
+            <p style={{ fontSize: '11.5px', color: '#64748B', margin: '0 0 10px', lineHeight: 1.5 }}>
+              Configure this Webhook URL inside your Razorpay Dashboard (&rarr; Settings &rarr; Webhooks) with the event <code>payment.captured</code> and <code>order.paid</code>:
+            </p>
+
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              background: '#F8FAFC',
+              border: '1px solid #CBD5E1',
+              borderRadius: '6px',
+              padding: '6px 10px',
+              marginBottom: '12px'
+            }}>
+              <span style={{ flex: 1, fontSize: '11.5px', fontFamily: 'monospace', color: '#0F172A', wordBreak: 'break-all' }}>
+                {webhookUrl}
+              </span>
+              <button
+                type="button"
+                onClick={handleCopyWebhook}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: copiedWebhook ? '#059669' : '#234B3C',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+                title="Copy Webhook URL"
+              >
+                {copiedWebhook ? <Check size={16} /> : <Copy size={16} />}
+              </button>
+            </div>
+
+            <div style={{ fontSize: '11px', color: '#64748B', lineHeight: 1.6 }}>
+              <strong>Steps to complete integration:</strong>
+              <ol style={{ paddingLeft: '18px', margin: '4px 0 0' }}>
+                <li>Log in to <a href="https://dashboard.razorpay.com" target="_blank" rel="noreferrer" style={{ color: '#0284C7', fontWeight: 600 }}>dashboard.razorpay.com</a>.</li>
+                <li>Go to <strong>Account & Settings</strong> &rarr; <strong>API Keys</strong>.</li>
+                <li>Generate and paste your <strong>Key ID</strong> and <strong>Secret</strong> on the left.</li>
+                <li>Go to <strong>Webhooks</strong> &rarr; Add Webhook URL and select <code>order.paid</code>.</li>
+              </ol>
+            </div>
+          </div>
+
+        </div>
+      </div>
+      )}
+
+      {/* Section 2: FreshCoins Loyalty Program */}
+      {sectionTab === 'FRESH_COINS' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.8fr) minmax(0, 1.2fr)', gap: '16px' }}>
+          {/* Card: FreshCoins Loyalty & Rewards Engine */}
+          <div style={{
+            background: '#FFFFFF',
+            border: '1.5px solid #E2E8F0',
+            borderRadius: '12px',
+            padding: '20px 22px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+          }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <div style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '8px',
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '10px',
                   background: '#FEF3C7',
                   color: '#D97706',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center'
                 }}>
-                  <Coins size={18} />
+                  <Coins size={20} />
                 </div>
                 <div>
-                  <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
                     FreshCoins Resident Loyalty & Rewards Engine
                   </h3>
-                  <p style={{ margin: '2px 0 0', fontSize: '11.5px', color: '#64748B' }}>
+                  <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#64748B' }}>
                     Reward residents with automated coin cashback upon doorstep delivery to build repeat orders.
                   </p>
                 </div>
@@ -715,9 +892,9 @@ export default function SettingsGatewayPage() {
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px',
-                  padding: '5px 12px',
+                  padding: '6px 14px',
                   borderRadius: '9999px',
-                  fontSize: '11.5px',
+                  fontSize: '12px',
                   fontWeight: 800,
                   cursor: 'pointer',
                   border: coinsConfig.isEnabled ? '1.5px solid #10B981' : '1.5px solid #CBD5E1',
@@ -730,7 +907,7 @@ export default function SettingsGatewayPage() {
               </button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginTop: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginTop: '16px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
                   Cashback Earning Rate (%)
@@ -851,22 +1028,22 @@ export default function SettingsGatewayPage() {
               background: '#F0FDF4',
               border: '1px solid #BBF7D0',
               borderRadius: '8px',
-              padding: '10px 14px',
-              marginTop: '14px',
-              fontSize: '12px',
+              padding: '12px 14px',
+              marginTop: '16px',
+              fontSize: '12.5px',
               color: '#166534',
               display: 'flex',
               alignItems: 'center',
-              gap: '8px'
+              gap: '10px'
             }}>
-              <Sparkles size={16} color="#16A34A" />
+              <Sparkles size={18} color="#16A34A" />
               <span>
                 <strong>Live Example:</strong> When a resident orders <strong>₹500</strong> worth of fresh vegetables, they will earn <strong>{((500 * coinsConfig.earningRatePercent) / 100).toFixed(0)} FreshCoins</strong> (worth <strong>₹{(((500 * coinsConfig.earningRatePercent) / 100) * coinsConfig.coinRupeeValue).toFixed(2)}</strong>) directly upon doorstep delivery. On their next order, they can redeem up to <strong>{coinsConfig.maxRedemptionPercent}%</strong> of their bill.
               </span>
             </div>
 
             {/* Save Button */}
-            <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end' }}>
+            <div style={{ marginTop: '18px', display: 'flex', justifyContent: 'flex-end' }}>
               <button
                 type="button"
                 onClick={handleSaveCoinsConfig}
@@ -875,99 +1052,83 @@ export default function SettingsGatewayPage() {
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '6px',
-                  padding: '8px 20px',
+                  padding: '9px 24px',
                   borderRadius: '6px',
                   background: '#047857',
                   color: '#FFFFFF',
                   border: 'none',
                   fontWeight: 700,
-                  fontSize: '12.5px',
-                  cursor: savingCoins ? 'not-allowed' : 'pointer'
+                  fontSize: '13px',
+                  cursor: savingCoins ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 2px 6px rgba(4, 120, 87, 0.25)'
                 }}
               >
-                <Save size={14} />
+                <Save size={15} />
                 <span>{savingCoins ? 'Saving...' : 'Save FreshCoins Settings'}</span>
               </button>
             </div>
           </div>
-        </div>
 
-        {/* Right Column: Webhook Integration Guide, Operating Rules & System Environment */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          
-          {/* Webhook Configuration Instructions Card */}
-          <div style={{
-            background: '#FFFFFF',
-            border: '1.5px solid #E2E8F0',
-            borderRadius: '12px',
-            padding: '18px 20px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-              <div style={{
-                width: '28px',
-                height: '28px',
-                borderRadius: '6px',
-                background: '#F0FDF4',
-                color: '#16A34A',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <Zap size={15} />
-              </div>
-              <h3 style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                Automated Webhook Integration
-              </h3>
-            </div>
-
-            <p style={{ fontSize: '11.5px', color: '#64748B', margin: '0 0 10px', lineHeight: 1.5 }}>
-              Configure this Webhook URL inside your Razorpay Dashboard (&rarr; Settings &rarr; Webhooks) with the event <code>payment.captured</code> and <code>order.paid</code>:
-            </p>
-
+          {/* Right Column: Loyalty Operational Rules & Verification */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              background: '#F8FAFC',
-              border: '1px solid #CBD5E1',
-              borderRadius: '6px',
-              padding: '6px 10px',
-              marginBottom: '12px'
+              background: '#FFFFFF',
+              border: '1.5px solid #E2E8F0',
+              borderRadius: '12px',
+              padding: '18px 20px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
             }}>
-              <span style={{ flex: 1, fontSize: '11.5px', fontFamily: 'monospace', color: '#0F172A', wordBreak: 'break-all' }}>
-                {webhookUrl}
-              </span>
-              <button
-                type="button"
-                onClick={handleCopyWebhook}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: copiedWebhook ? '#059669' : '#234B3C',
-                  cursor: 'pointer',
-                  padding: '4px',
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                <div style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '6px',
+                  background: '#FEF3C7',
+                  color: '#D97706',
                   display: 'flex',
-                  alignItems: 'center'
-                }}
-                title="Copy Webhook URL"
-              >
-                {copiedWebhook ? <Check size={16} /> : <Copy size={16} />}
-              </button>
-            </div>
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <Coins size={16} />
+                </div>
+                <h3 style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                  Automated Loyalty Lifecycle
+                </h3>
+              </div>
 
-            <div style={{ fontSize: '11px', color: '#64748B', lineHeight: 1.6 }}>
-              <strong>Steps to complete integration:</strong>
-              <ol style={{ paddingLeft: '18px', margin: '4px 0 0' }}>
-                <li>Log in to <a href="https://dashboard.razorpay.com" target="_blank" rel="noreferrer" style={{ color: '#0284C7', fontWeight: 600 }}>dashboard.razorpay.com</a>.</li>
-                <li>Go to <strong>Account & Settings</strong> &rarr; <strong>API Keys</strong>.</li>
-                <li>Generate and paste your <strong>Key ID</strong> and <strong>Secret</strong> on the left.</li>
-                <li>Go to <strong>Webhooks</strong> &rarr; Add Webhook URL and select <code>order.paid</code>.</li>
-              </ol>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '12px', color: '#475569', lineHeight: 1.5 }}>
+                <div style={{ background: '#F8FAFC', padding: '10px 12px', borderRadius: '8px', borderLeft: '3px solid #10B981' }}>
+                  <strong style={{ color: '#0F172A' }}>1. Earning Strictly upon Doorstep Delivery:</strong>
+                  <div style={{ marginTop: '2px' }}>
+                    FreshCoins are credited to resident accounts exclusively when hub operations or delivery drivers confirm <code>DELIVERED</code> status.
+                  </div>
+                </div>
+
+                <div style={{ background: '#F8FAFC', padding: '10px 12px', borderRadius: '8px', borderLeft: '3px solid #F59E0B' }}>
+                  <strong style={{ color: '#0F172A' }}>2. 1-Click Checkout Redemption:</strong>
+                  <div style={{ marginTop: '2px' }}>
+                    Residents toggle <em>[x] Apply FreshCoins</em> in Checkout. The system deducts the coins atomically from their balance and discounts their bill.
+                  </div>
+                </div>
+
+                <div style={{ background: '#F8FAFC', padding: '10px 12px', borderRadius: '8px', borderLeft: '3px solid #3B82F6' }}>
+                  <strong style={{ color: '#0F172A' }}>3. Auto-Refund on Cancellations:</strong>
+                  <div style={{ marginTop: '2px' }}>
+                    If an order is cancelled before morning dispatch, any FreshCoins used are automatically refunded back to the customer's wallet ledger.
+                  </div>
+                </div>
+
+                <div style={{ background: '#F8FAFC', padding: '10px 12px', borderRadius: '8px', borderLeft: '3px solid #6366F1' }}>
+                  <strong style={{ color: '#0F172A' }}>4. Resident Passbook Visibility:</strong>
+                  <div style={{ marginTop: '2px' }}>
+                    Residents can review their real-time coin balance, rupee valuation, and historical ledger under <strong>My Account &rarr; FreshCoins & Rewards</strong>.
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-
         </div>
-      </div>
+      )}
     </div>
   );
 }

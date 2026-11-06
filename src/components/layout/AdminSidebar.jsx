@@ -112,11 +112,18 @@ export default function AdminSidebar() {
                 MAIN
               </span>
             </NavLink>
-            <NavLink to="/settings" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
+            <NavLink to="/settings" className={({ isActive }) => `sidebar-nav-item ${isActive && location.hash !== '#fresh-coins' ? 'active' : ''}`}>
               <Settings size={18} />
               <span style={{ flex: 1 }}>Settings & Gateway</span>
               <span style={{ background: '#E6F4EA', color: '#137333', fontSize: '10px', fontWeight: 800, padding: '1px 6px', borderRadius: '4px' }}>
                 RZP
+              </span>
+            </NavLink>
+            <NavLink to="/settings#fresh-coins" className={() => `sidebar-nav-item ${location.pathname === '/settings' && location.hash === '#fresh-coins' ? 'active' : ''}`}>
+              <Coins size={18} color="#D97706" />
+              <span style={{ flex: 1 }}>FreshCoins Loyalty</span>
+              <span style={{ background: '#FEF3C7', color: '#92400E', fontSize: '10px', fontWeight: 800, padding: '1px 6px', borderRadius: '4px' }}>
+                COINS
               </span>
             </NavLink>
             {/* Collapsible: Master Data Catalog */}
