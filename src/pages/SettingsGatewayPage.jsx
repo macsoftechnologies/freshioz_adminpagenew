@@ -17,7 +17,10 @@ import {
   Server,
   Settings as SettingsIcon,
   HelpCircle,
-  RefreshCw
+  RefreshCw,
+  Coins,
+  Sparkles,
+  Gift
 } from 'lucide-react';
 import { paymentSettingsService } from '../services/paymentSettingsService';
 import { useToast } from '../context/ToastContext';
@@ -50,9 +53,50 @@ export default function SettingsGatewayPage() {
   const [showLiveSecret, setShowLiveSecret] = useState(false);
   const [activeTab, setActiveTab] = useState('TEST'); // 'TEST' | 'LIVE'
 
+  // FreshCoins Loyalty Settings State
+  const [coinsConfig, setCoinsConfig] = useState({
+    isEnabled: true,
+    earningRatePercent: 5.0,
+    coinRupeeValue: 1.0,
+    maxRedemptionPercent: 25.0,
+    minOrderValue: 100.0,
+  });
+  const [savingCoins, setSavingCoins] = useState(false);
+
   useEffect(() => {
     loadSettings();
+    loadCoinsSettings();
   }, []);
+
+  const loadCoinsSettings = async () => {
+    try {
+      const data = await paymentSettingsService.getFreshCoinsSettings();
+      if (data) {
+        setCoinsConfig({
+          isEnabled: Boolean(data.isEnabled),
+          earningRatePercent: Number(data.earningRatePercent) || 5.0,
+          coinRupeeValue: Number(data.coinRupeeValue) || 1.0,
+          maxRedemptionPercent: Number(data.maxRedemptionPercent) || 25.0,
+          minOrderValue: Number(data.minOrderValue) || 100.0,
+        });
+      }
+    } catch (e) {
+      console.warn('Could not load fresh coins settings:', e);
+    }
+  };
+
+  const handleSaveCoinsConfig = async (e) => {
+    if (e) e.preventDefault();
+    setSavingCoins(true);
+    try {
+      await paymentSettingsService.updateFreshCoinsSettings(coinsConfig);
+      showToast('FreshCoins loyalty program settings saved successfully!', 'success');
+    } catch (err) {
+      showToast(err?.message || 'Failed to update FreshCoins settings', 'error');
+    } finally {
+      setSavingCoins(false);
+    }
+  };
 
   const loadSettings = async () => {
     setLoading(true);
@@ -628,6 +672,221 @@ export default function SettingsGatewayPage() {
               >
                 <Save size={14} />
                 <span>{saving ? 'Saving...' : 'Save Razorpay Settings'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Card 3: FreshCoins Loyalty & Rewards Engine */}
+          <div style={{
+            background: '#FFFFFF',
+            border: '1.5px solid #E2E8F0',
+            borderRadius: '12px',
+            padding: '18px 20px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  background: '#FEF3C7',
+                  color: '#D97706',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <Coins size={18} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                    FreshCoins Resident Loyalty & Rewards Engine
+                  </h3>
+                  <p style={{ margin: '2px 0 0', fontSize: '11.5px', color: '#64748B' }}>
+                    Reward residents with automated coin cashback upon doorstep delivery to build repeat orders.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setCoinsConfig(prev => ({ ...prev, isEnabled: !prev.isEnabled }))}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '5px 12px',
+                  borderRadius: '9999px',
+                  fontSize: '11.5px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  border: coinsConfig.isEnabled ? '1.5px solid #10B981' : '1.5px solid #CBD5E1',
+                  background: coinsConfig.isEnabled ? '#ECFDF5' : '#F1F5F9',
+                  color: coinsConfig.isEnabled ? '#047857' : '#64748B'
+                }}
+              >
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: coinsConfig.isEnabled ? '#10B981' : '#94A3B8' }} />
+                <span>{coinsConfig.isEnabled ? 'Program Active' : 'Program Paused'}</span>
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginTop: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
+                  Cashback Earning Rate (%)
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    max="100"
+                    value={coinsConfig.earningRatePercent}
+                    onChange={(e) => setCoinsConfig(prev => ({ ...prev, earningRatePercent: Number(e.target.value) }))}
+                    style={{
+                      width: '100%',
+                      padding: '8px 26px 8px 10px',
+                      borderRadius: '6px',
+                      border: '1.5px solid #CBD5E1',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                  <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '12px', color: '#64748B', fontWeight: 700 }}>%</span>
+                </div>
+                <span style={{ fontSize: '10.5px', color: '#64748B', marginTop: '3px', display: 'block' }}>
+                  Calculated on delivered order subtotal.
+                </span>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
+                  1 FreshCoin Value (₹)
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '12px', color: '#64748B', fontWeight: 700 }}>₹</span>
+                  <input
+                    type="number"
+                    step="0.25"
+                    min="0.1"
+                    value={coinsConfig.coinRupeeValue}
+                    onChange={(e) => setCoinsConfig(prev => ({ ...prev, coinRupeeValue: Number(e.target.value) }))}
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px 8px 26px',
+                      borderRadius: '6px',
+                      border: '1.5px solid #CBD5E1',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+                <span style={{ fontSize: '10.5px', color: '#64748B', marginTop: '3px', display: 'block' }}>
+                  Rupee redemption exchange rate.
+                </span>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
+                  Max Cart Redemption Cap (%)
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="number"
+                    step="1"
+                    min="1"
+                    max="100"
+                    value={coinsConfig.maxRedemptionPercent}
+                    onChange={(e) => setCoinsConfig(prev => ({ ...prev, maxRedemptionPercent: Number(e.target.value) }))}
+                    style={{
+                      width: '100%',
+                      padding: '8px 26px 8px 10px',
+                      borderRadius: '6px',
+                      border: '1.5px solid #CBD5E1',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                  <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '12px', color: '#64748B', fontWeight: 700 }}>%</span>
+                </div>
+                <span style={{ fontSize: '10.5px', color: '#64748B', marginTop: '3px', display: 'block' }}>
+                  Max % of cart that can be paid via coins.
+                </span>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
+                  Min Order Required (₹)
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '12px', color: '#64748B', fontWeight: 700 }}>₹</span>
+                  <input
+                    type="number"
+                    step="10"
+                    min="0"
+                    value={coinsConfig.minOrderValue}
+                    onChange={(e) => setCoinsConfig(prev => ({ ...prev, minOrderValue: Number(e.target.value) }))}
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px 8px 26px',
+                      borderRadius: '6px',
+                      border: '1.5px solid #CBD5E1',
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+                <span style={{ fontSize: '10.5px', color: '#64748B', marginTop: '3px', display: 'block' }}>
+                  Minimum bill to earn or redeem coins.
+                </span>
+              </div>
+            </div>
+
+            {/* Live Example Callout */}
+            <div style={{
+              background: '#F0FDF4',
+              border: '1px solid #BBF7D0',
+              borderRadius: '8px',
+              padding: '10px 14px',
+              marginTop: '14px',
+              fontSize: '12px',
+              color: '#166534',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              <Sparkles size={16} color="#16A34A" />
+              <span>
+                <strong>Live Example:</strong> When a resident orders <strong>₹500</strong> worth of fresh vegetables, they will earn <strong>{((500 * coinsConfig.earningRatePercent) / 100).toFixed(0)} FreshCoins</strong> (worth <strong>₹{(((500 * coinsConfig.earningRatePercent) / 100) * coinsConfig.coinRupeeValue).toFixed(2)}</strong>) directly upon doorstep delivery. On their next order, they can redeem up to <strong>{coinsConfig.maxRedemptionPercent}%</strong> of their bill.
+              </span>
+            </div>
+
+            {/* Save Button */}
+            <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={handleSaveCoinsConfig}
+                disabled={savingCoins}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 20px',
+                  borderRadius: '6px',
+                  background: '#047857',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  fontWeight: 700,
+                  fontSize: '12.5px',
+                  cursor: savingCoins ? 'not-allowed' : 'pointer'
+                }}
+              >
+                <Save size={14} />
+                <span>{savingCoins ? 'Saving...' : 'Save FreshCoins Settings'}</span>
               </button>
             </div>
           </div>
