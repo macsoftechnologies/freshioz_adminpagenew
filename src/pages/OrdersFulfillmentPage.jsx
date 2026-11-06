@@ -130,6 +130,9 @@ export default function OrdersFulfillmentPage() {
   // Order Details Modal
   const [selectedOrder, setSelectedOrder] = useState(null);
 
+  // Delivery Confirmation Modal State
+  const [deliveryConfirmOrder, setDeliveryConfirmOrder] = useState(null);
+
   // COD Payment Collection Modal state
   const [codModalOrder, setCodModalOrder] = useState(null);
   const [codPaymentMode, setCodPaymentMode] = useState('CASH'); // 'CASH' | 'UPI_QR'
@@ -1481,7 +1484,7 @@ export default function OrdersFulfillmentPage() {
 
                         <button
                           type="button"
-                          onClick={() => handleUpdateOrderStatus(order.id, 'DELIVERED')}
+                          onClick={() => setDeliveryConfirmOrder(order)}
                           style={{
                             display: 'inline-flex',
                             alignItems: 'center',
@@ -1758,7 +1761,13 @@ export default function OrdersFulfillmentPage() {
                           {isSuperAdmin ? (
                             <select
                               value={currentStatus}
-                              onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
+                              onChange={(e) => {
+                                if (e.target.value === 'DELIVERED') {
+                                  setDeliveryConfirmOrder(order);
+                                } else {
+                                  handleUpdateOrderStatus(order.id, e.target.value);
+                                }
+                              }}
                               style={{
                                 padding: '4px 8px',
                                 borderRadius: '6px',
@@ -1812,7 +1821,7 @@ export default function OrdersFulfillmentPage() {
                           {currentStatus === 'OUT_FOR_DELIVERY' && isSuperAdmin && (
                             <button
                               type="button"
-                              onClick={() => handleUpdateOrderStatus(order.id, 'DELIVERED')}
+                              onClick={() => setDeliveryConfirmOrder(order)}
                               style={{
                                 background: '#059669',
                                 color: '#FFF',
@@ -2288,7 +2297,7 @@ export default function OrdersFulfillmentPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      handleUpdateOrderStatus(selectedOrder.id, 'DELIVERED');
+                      setDeliveryConfirmOrder(selectedOrder);
                       setSelectedOrder(null);
                     }}
                     style={{
@@ -2310,6 +2319,162 @@ export default function OrdersFulfillmentPage() {
           </div>
         );
       })()}
+
+      {/* ================= ORDER DELIVERY CONFIRMATION MODAL ================= */}
+      {deliveryConfirmOrder && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 11000,
+          padding: '16px'
+        }}>
+          <div style={{
+            background: '#FFFFFF',
+            borderRadius: '16px',
+            maxWidth: '460px',
+            width: '100%',
+            overflow: 'hidden',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.25)',
+            border: '1.5px solid #E2E8F0'
+          }}>
+            <div style={{
+              background: '#F0FDF4',
+              padding: '18px 20px',
+              borderBottom: '1.5px solid #BBF7D0',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
+            }}>
+              <div style={{
+                width: '38px',
+                height: '38px',
+                borderRadius: '50%',
+                background: '#DCFCE7',
+                color: '#15803D',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <CheckCircle2 size={22} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#166534', margin: 0 }}>
+                  Confirm Order Delivery
+                </h3>
+                <p style={{ fontSize: '12px', color: '#15803D', margin: '2px 0 0' }}>
+                  Society Doorstep Drop Verification
+                </p>
+              </div>
+            </div>
+            <div style={{ padding: '20px' }}>
+              <div style={{
+                background: '#F8FAFC',
+                border: '1px solid #E2E8F0',
+                borderRadius: '10px',
+                padding: '14px',
+                marginBottom: '16px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '12px', color: '#64748B' }}>Order ID:</span>
+                  <strong style={{ fontSize: '13px', color: '#0F172A', fontFamily: 'monospace' }}>#{deliveryConfirmOrder.id}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '12px', color: '#64748B' }}>Customer:</span>
+                  <strong style={{ fontSize: '13px', color: '#0F172A' }}>{deliveryConfirmOrder.userName || 'Resident'}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '12px', color: '#64748B' }}>Flat / Society:</span>
+                  <strong style={{ fontSize: '13px', color: '#0F172A', textAlign: 'right', maxWidth: '240px' }}>
+                    {deliveryConfirmOrder.flat ? `${deliveryConfirmOrder.flat}, ` : ''}{deliveryConfirmOrder.societyName}
+                  </strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', borderTop: '1px solid #E2E8F0' }}>
+                  <span style={{ fontSize: '12px', color: '#64748B' }}>Amount & Mode:</span>
+                  <strong style={{ fontSize: '13px', color: '#059669' }}>
+                    ₹{deliveryConfirmOrder.totalAmount || 0} ({deliveryConfirmOrder.paymentMethod || 'PAID'})
+                  </strong>
+                </div>
+              </div>
+              {deliveryConfirmOrder.paymentMethod === 'COD' && (
+                <div style={{
+                  background: '#FEF3C7',
+                  border: '1px solid #FCD34D',
+                  color: '#92400E',
+                  borderRadius: '8px',
+                  padding: '10px 12px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  marginBottom: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <AlertCircle size={16} />
+                  <span>Cash on Delivery: Ensure ₹{deliveryConfirmOrder.totalAmount} cash was collected.</span>
+                </div>
+              )}
+              <p style={{ fontSize: '13px', color: '#475569', margin: '0 0 4px', lineHeight: 1.5 }}>
+                Are you sure you want to mark this order as <strong>DELIVERED</strong>?
+              </p>
+            </div>
+            <div style={{
+              padding: '14px 20px',
+              background: '#F8FAFC',
+              borderTop: '1px solid #E2E8F0',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '10px'
+            }}>
+              <button
+                type="button"
+                onClick={() => setDeliveryConfirmOrder(null)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  background: '#FFFFFF',
+                  border: '1.5px solid #CBD5E1',
+                  color: '#475569',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handleUpdateOrderStatus(deliveryConfirmOrder.id, 'DELIVERED');
+                  setDeliveryConfirmOrder(null);
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 18px',
+                  borderRadius: '8px',
+                  background: '#059669',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  fontWeight: 800,
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 6px rgba(5, 150, 105, 0.3)'
+                }}
+              >
+                <CheckCircle2 size={15} />
+                <span>Yes, Confirm Delivered</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ================= COD PAYMENT COLLECTION CONFIRMATION MODAL ================= */}
       {codModalOrder && (

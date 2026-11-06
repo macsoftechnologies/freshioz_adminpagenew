@@ -55,6 +55,15 @@ const parseUnitWeightInKg = (unitStr) => {
   return 1;
 };
 
+// Mask resident phone with *** leaving only the last 3 digits, while preserving full tel: link for calling
+const formatMaskedPhone = (phone) => {
+  if (!phone) return '';
+  const digits = String(phone).replace(/\D/g, '');
+  if (digits.length <= 3) return '***';
+  const last3 = digits.slice(-3);
+  return `+91 *******${last3}`;
+};
+
 export default function WarehouseCratingPage() {
   const { currentUser, currentRoleId } = useAdminRole();
   const { showToast } = useToast();
@@ -1173,7 +1182,30 @@ export default function WarehouseCratingPage() {
 
                                   <td>
                                     <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>{order.userName || 'Resident'}</div>
-                                    <div style={{ fontSize: '11px', color: '#64748B' }}>+91 {order.userPhone}</div>
+                                    <div style={{ fontSize: '11px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                                      <span>{formatMaskedPhone(order.userPhone)}</span>
+                                      {order.userPhone && (
+                                        <a
+                                          href={`tel:${order.userPhone}`}
+                                          title={`Call Resident: ${formatMaskedPhone(order.userPhone)}`}
+                                          style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '3px',
+                                            color: '#15803D',
+                                            background: '#DCFCE7',
+                                            padding: '1px 6px',
+                                            borderRadius: '4px',
+                                            textDecoration: 'none',
+                                            fontSize: '10px',
+                                            fontWeight: 700
+                                          }}
+                                        >
+                                          <Phone size={10} />
+                                          <span>Call</span>
+                                        </a>
+                                      )}
+                                    </div>
                                   </td>
 
                                   <td>
@@ -1822,7 +1854,7 @@ export default function WarehouseCratingPage() {
 
                   <div>
                     <span style={{ color: '#64748B' }}>Phone:</span>{' '}
-                    <strong style={{ color: '#0F172A' }}>+91 {labelModalOrder.userPhone}</strong>
+                    <strong style={{ color: '#0F172A' }}>{formatMaskedPhone(labelModalOrder.userPhone)}</strong>
                   </div>
 
                   {/* DESTINATION WITH DIRECT MAP NAVIGATION */}
@@ -2054,7 +2086,7 @@ export default function WarehouseCratingPage() {
 
                   <div style={{ fontSize: '12px', color: '#475569', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
                     <span><strong>Order:</strong> #{packingModalOrder.id}</span>
-                    <span><strong>Resident:</strong> {packingModalOrder.userName || 'Customer'} ({packingModalOrder.userPhone ? `+91 ${packingModalOrder.userPhone}` : 'No phone'})</span>
+                    <span><strong>Resident:</strong> {packingModalOrder.userName || 'Customer'} ({packingModalOrder.userPhone ? formatMaskedPhone(packingModalOrder.userPhone) : 'No phone'})</span>
                     <span><strong>Slot:</strong> {packingModalOrder.deliverySlot || 'Morning Run'}</span>
                   </div>
                 </div>

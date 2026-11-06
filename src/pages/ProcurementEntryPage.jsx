@@ -1083,7 +1083,7 @@ export default function ProcurementEntryPage() {
                     <input
                       type="number"
                       min="0"
-                      step="10"
+                      step="any"
                       value={transportCharge}
                       onChange={(e) => setTransportCharge(Math.max(0, parseFloat(e.target.value) || 0))}
                       style={{ width: '100px', height: '34px', padding: '0 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13px', fontWeight: 800, textAlign: 'right' }}
