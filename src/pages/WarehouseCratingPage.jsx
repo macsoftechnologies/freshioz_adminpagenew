@@ -26,7 +26,7 @@ import {
 } from 'lucide-react';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
-import { orders as orderResource, employees as employeeResource, warehouses as warehouseResource, societies as societyResource, useUpdateOrderStatus } from '../hooks/resources';
+import { orders as orderResource, employees as employeeResource, warehouses as warehouseResource, societies as societyResource, procurement as procurementResource, useUpdateOrderStatus } from '../hooks/resources';
 import AdminPagination from '../components/common/AdminPagination';
 import { extractBlockAndFlat } from '../utils/addressParser';
 
@@ -74,11 +74,17 @@ export default function WarehouseCratingPage() {
   const { data: rawEmployees = [] } = employeeResource.useList();
   const { data: rawWarehouses = [] } = warehouseResource.useList();
   const { data: rawSocieties = [] } = societyResource.useList();
+  const { data: rawProcurement = [], isLoading: isLoadingProcurement } = procurementResource.useList();
 
   const orders = Array.isArray(rawOrders) ? rawOrders : [];
   const employees = Array.isArray(rawEmployees) ? rawEmployees : [];
   const warehouses = Array.isArray(rawWarehouses) ? rawWarehouses : [];
   const societies = Array.isArray(rawSocieties) ? rawSocieties : [];
+  const procurementBills = Array.isArray(rawProcurement) ? rawProcurement : [];
+
+  // Modal to preview Mandi Weighing Slip
+  const [viewSlipBill, setViewSlipBill] = useState(null);
+  const [isAdvancingOrders, setIsAdvancingOrders] = useState(false);
 
   const updateOrderStatusMutation = useUpdateOrderStatus();
   const deliveryRiders = useMemo(() => {
@@ -281,6 +287,41 @@ export default function WarehouseCratingPage() {
     }
     return true;
   });
+
+  // Recent Mandi procurement bills inwarded for this warehouse
+  const warehouseProcurements = useMemo(() => {
+    return procurementBills.filter(b => {
+      if (isWarehouseScoped && warehouses.length > 1) {
+        const dest = b.destinationWarehouseId;
+        const isMatch = !dest || dest === assignedWhId || dest === assignedWhCode || dest === resolvedWh?.uuid;
+        if (!isMatch) return false;
+      }
+      return true;
+    });
+  }, [procurementBills, isWarehouseScoped, warehouses.length, assignedWhId, assignedWhCode, resolvedWh]);
+
+  const handleAdvanceOrdersToPacking = async () => {
+    const pendingOrders = visibleOrders.filter(o => o.status === 'CONFIRMED' || o.status === 'PROCURING');
+    if (pendingOrders.length === 0) {
+      showToast('All active orders are already at warehouse or packed.', 'info');
+      return;
+    }
+    setIsAdvancingOrders(true);
+    try {
+      await Promise.all(pendingOrders.map(order => 
+        updateOrderStatusMutation.mutateAsync({
+          id: order.id,
+          status: 'AT_WAREHOUSE',
+          notes: 'Advanced from Mandi produce arrival by Warehouse Staff'
+        })
+      ));
+      showToast(`✓ Advanced ${pendingOrders.length} order(s) to Ready to Pack Station!`, 'success');
+    } catch (err) {
+      showToast(`Failed to advance some orders: ${err?.message || 'Error'}`, 'error');
+    } finally {
+      setIsAdvancingOrders(false);
+    }
+  };
 
   // Available societies and blocks from active orders
   const availableSocieties = useMemo(() => {
@@ -851,6 +892,122 @@ export default function WarehouseCratingPage() {
       {/* VIEW 1: PACKING STATION (APARTMENT & BLOCK-WISE CRATING) */}
       {activeTab === 'PACKING_STATION' && (
         <div>
+          {/* LIVE MANDI INWARD CONSIGNMENT ARRIVALS DOCK */}
+          {warehouseProcurements.length > 0 && (
+            <div style={{
+              background: '#F0FDF4',
+              border: '1.5px solid #86EFAC',
+              borderRadius: '12px',
+              padding: '14px 18px',
+              marginBottom: '16px',
+              boxShadow: '0 2px 6px rgba(5, 150, 105, 0.05)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginBottom: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: '#059669', color: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Truck size={18} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#064E3B', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <span>Mandi Inward Arrivals (Warehouse Intake Dock)</span>
+                      <span style={{ fontSize: '11px', background: '#DCFCE7', color: '#166534', padding: '1px 8px', borderRadius: '999px', fontWeight: 800, border: '1px solid #86EFAC' }}>
+                        ✓ {warehouseProcurements.length} Consignment(s) Inwarded
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '11.5px', color: '#047857', marginTop: '2px' }}>
+                      Produce arrived from Mandi vendors ready for sorting into resident bags
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {visibleOrders.some(o => o.status === 'CONFIRMED' || o.status === 'PROCURING') && (
+                    <button
+                      type="button"
+                      onClick={handleAdvanceOrdersToPacking}
+                      disabled={isAdvancingOrders}
+                      style={{
+                        padding: '6px 14px',
+                        background: '#059669',
+                        color: '#FFF',
+                        borderRadius: '6px',
+                        fontSize: '12px',
+                        fontWeight: 800,
+                        border: 'none',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <PackageCheck size={14} />
+                      <span>{isAdvancingOrders ? 'Advancing...' : '⚡ Unlock Matching Orders to Pack'}</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Consignment Items Cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '10px' }}>
+                {warehouseProcurements.slice(0, 3).map(bill => (
+                  <div key={bill.id} style={{
+                    background: '#FFFFFF',
+                    border: '1px solid #BBF7D0',
+                    borderRadius: '8px',
+                    padding: '10px 14px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 800, color: '#0F172A' }}>
+                        Bill #{bill.billNumber} • {bill.vendorName}
+                      </span>
+                      <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>
+                        {bill.procuredAtTime || 'Today'}
+                      </span>
+                    </div>
+                    
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+                      {(bill.items || []).map((it, idx) => (
+                        <span key={idx} style={{
+                          fontSize: '11px',
+                          background: '#F1F5F9',
+                          color: '#334155',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          fontWeight: 700
+                        }}>
+                          {it.name}: <strong>{it.qty} {it.unit || 'kg'}</strong>
+                        </span>
+                      ))}
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '6px', borderTop: '1px dashed #E2E8F0', fontSize: '11.5px' }}>
+                      <span style={{ color: '#059669', fontWeight: 800 }}>
+                        Total: {bill.totalWeightKg || (bill.items || []).reduce((s, i) => s + (Number(i.qty) || 0), 0)} kg
+                      </span>
+                      {bill.receiptPhoto && (
+                        <button
+                          type="button"
+                          onClick={() => setViewSlipBill(bill)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#0284C7',
+                            fontWeight: 700,
+                            fontSize: '11.5px',
+                            cursor: 'pointer',
+                            textDecoration: 'underline'
+                          }}
+                        >
+                          View Weighing Slip
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* CONSOLIDATED SINGLE-BAR PACKING CONTROLS */}
           <div style={{
             background: '#FFFFFF',
@@ -966,9 +1123,7 @@ export default function WarehouseCratingPage() {
                 >
                   <option value="ALL">All Packing Stages</option>
                   <option value="READY_TO_PACK">⚡ Ready to Pack (Produce Received)</option>
-                  {!isWarehouseStaff && (
-                    <option value="CONFIRMED">⏳ Mandi Procurement (Upcoming)</option>
-                  )}
+                  <option value="CONFIRMED">⏳ Awaiting Mandi Inflow (Pending Orders)</option>
                   <option value="PACKED">✓ Packed & Sealed</option>
                 </select>
               </div>
@@ -1002,11 +1157,41 @@ export default function WarehouseCratingPage() {
                     <PackageCheck size={26} color="#059669" />
                   </div>
                   <div className="admin-empty-state-title" style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>
-                    No Orders Matching Packing Criteria
+                    {warehouseProcurements.length > 0 
+                      ? 'Mandi Consignment Inwarded & Ready at Dock'
+                      : 'No Orders Matching Packing Criteria'}
                   </div>
-                  <div className="admin-empty-state-desc" style={{ fontSize: '13px', color: '#64748B', maxWidth: '420px', margin: '6px auto 0' }}>
-                    Select another Apartment or Block, or adjust the stage filter to view orders.
+                  <div className="admin-empty-state-desc" style={{ fontSize: '13px', color: '#64748B', maxWidth: '480px', margin: '6px auto 0', lineHeight: 1.5 }}>
+                    {warehouseProcurements.length > 0 ? (
+                      <>
+                        <span style={{ fontWeight: 700, color: '#065F46' }}>✓ Consignment produce safely inwarded at warehouse dock.</span>
+                        <div style={{ marginTop: '4px' }}>
+                          Produce is stored in hub inventory. As soon as resident flat orders for this run are confirmed, they will appear here in Block Crates for weighing, bagging, and address labeling.
+                        </div>
+                      </>
+                    ) : (
+                      'Select another Apartment or Block, or adjust the stage filter to view orders.'
+                    )}
                   </div>
+                  {warehouseProcurements.length > 0 && packingStageFilter !== 'ALL' && (
+                    <button
+                      type="button"
+                      onClick={() => setPackingStageFilter('ALL')}
+                      style={{
+                        marginTop: '14px',
+                        padding: '6px 16px',
+                        background: '#234B3C',
+                        color: '#FFF',
+                        borderRadius: '6px',
+                        border: 'none',
+                        fontWeight: 700,
+                        fontSize: '12px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      View All Orders & Stages
+                    </button>
+                  )}
                 </div>
               ) : (
                 blockCrates.map(crate => {
@@ -2289,6 +2474,87 @@ export default function WarehouseCratingPage() {
           </div>
         );
       })()}
+
+      {/* Mandi Weighing Slip Photo Modal */}
+      {viewSlipBill && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.65)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: '#FFFFFF',
+            borderRadius: '12px',
+            maxWidth: '550px',
+            width: '100%',
+            overflow: 'hidden',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)'
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '14px 18px',
+              borderBottom: '1px solid #E2E8F0',
+              background: '#F8FAFC'
+            }}>
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>
+                  Weighing Slip — Bill #{viewSlipBill.billNumber}
+                </div>
+                <div style={{ fontSize: '11.5px', color: '#64748B' }}>
+                  Vendor: {viewSlipBill.vendorName} • Total: {viewSlipBill.totalWeightKg || 0} kg
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewSlipBill(null)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: '#64748B'
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div style={{ padding: '16px', textAlign: 'center', background: '#0F172A' }}>
+              <img
+                src={viewSlipBill.receiptPhoto}
+                alt="Weighing Slip"
+                style={{ maxWidth: '100%', maxHeight: '420px', borderRadius: '8px', objectFit: 'contain' }}
+              />
+            </div>
+            <div style={{ padding: '10px 18px', borderTop: '1px solid #E2E8F0', textAlign: 'right', background: '#F8FAFC' }}>
+              <button
+                type="button"
+                onClick={() => setViewSlipBill(null)}
+                style={{
+                  padding: '6px 16px',
+                  background: '#234B3C',
+                  color: '#FFF',
+                  borderRadius: '6px',
+                  border: 'none',
+                  fontWeight: 700,
+                  fontSize: '12.5px',
+                  cursor: 'pointer'
+                }}
+              >
+                Close Slip
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

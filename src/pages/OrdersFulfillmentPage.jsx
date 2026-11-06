@@ -482,6 +482,9 @@ export default function OrdersFulfillmentPage() {
   const riderTotalCodToCollect = riderBaseOrders
     .filter(o => o.status !== 'DELIVERED' && o.status !== 'CANCELLED' && (o.paymentMethod || '').includes('PAY_ON_DELIVERY'))
     .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+  const riderCashCollectedInHand = riderBaseOrders
+    .filter(o => o.status === 'DELIVERED' && o.codSettledToHub === false && ((o.paymentMethod || '').includes('PAY_ON_DELIVERY') || o.codReceivedMode === 'CASH'))
+    .reduce((sum, o) => sum + (o.codCollectedAmount || o.totalAmount || 0), 0);
 
   // Rider Cancellation / Exception Modal State
   const [riderCancelModalOrder, setRiderCancelModalOrder] = useState(null);
@@ -745,6 +748,15 @@ export default function OrdersFulfillmentPage() {
               <div style={{ textAlign: 'center', padding: '0 6px' }}>
                 <div style={{ fontSize: '16px', fontWeight: 900, color: '#B91C1C' }}>₹{riderTotalCodToCollect.toLocaleString()}</div>
                 <div style={{ fontSize: '10px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase' }}>COD to Collect</div>
+              </div>
+              <div style={{ height: '24px', width: '1px', background: '#E2E8F0' }} />
+              <div style={{ textAlign: 'center', padding: '2px 8px', borderRadius: '6px', background: riderCashCollectedInHand > 0 ? '#FEF2F2' : '#F0FDF4', border: `1px solid ${riderCashCollectedInHand > 0 ? '#FECACA' : '#BBF7D0'}` }}>
+                <div style={{ fontSize: '16px', fontWeight: 900, color: riderCashCollectedInHand > 0 ? '#B91C1C' : '#15803D' }}>
+                  ₹{riderCashCollectedInHand.toLocaleString()}
+                </div>
+                <div style={{ fontSize: '9.5px', fontWeight: 800, color: riderCashCollectedInHand > 0 ? '#991B1B' : '#166534', textTransform: 'uppercase' }}>
+                  {riderCashCollectedInHand > 0 ? 'Cash in Hand (Pay Hub)' : 'COD Settled'}
+                </div>
               </div>
             </div>
           </div>

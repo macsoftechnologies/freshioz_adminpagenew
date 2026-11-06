@@ -95,6 +95,39 @@ export default function ExecutiveMisPage() {
   const [settlingRiderId, setSettlingRiderId] = useState(null);
   const [selectedProduct, setSelectedProduct] = useState(null);
 
+  // Driver Daily Wage Flat Settlement State
+  const [driverPayoutInputs, setDriverPayoutInputs] = useState({});
+  const [driverDailyPayouts, setDriverDailyPayouts] = useState(() => {
+    try {
+      const stored = localStorage.getItem('freshioz_driver_payouts_ledger');
+      return stored ? JSON.parse(stored) : {};
+    } catch (e) {
+      return {};
+    }
+  });
+
+  const handlePayDriverDaily = (rider) => {
+    const defaultAmount = 2000;
+    const inputVal = driverPayoutInputs[rider.id || rider.riderPhone];
+    const amount = (inputVal !== undefined && inputVal !== '') ? Number(inputVal) : defaultAmount;
+    const dateStr = selectedDate || 'TODAY';
+    const key = `${rider.id || rider.riderPhone}__${dateStr}`;
+    const newEntry = {
+      riderId: rider.id || rider.riderPhone,
+      riderName: rider.riderName,
+      riderPhone: rider.riderPhone,
+      amount,
+      paidAt: new Date().toISOString(),
+      date: dateStr,
+      paidBy: 'Warehouse Operations Manager',
+      ordersDelivered: rider.ordersDelivered
+    };
+    const updated = { ...driverDailyPayouts, [key]: newEntry };
+    setDriverDailyPayouts(updated);
+    localStorage.setItem('freshioz_driver_payouts_ledger', JSON.stringify(updated));
+    showToast(`✓ Settled ₹${amount.toLocaleString('en-IN')} wage for ${rider.riderName} (${dateStr}) into ledger!`, 'success');
+  };
+
   // Warehouse Head-to-Head Comparison States
   const [compareHubA, setCompareHubA] = useState('');
   const [compareHubB, setCompareHubB] = useState('');
@@ -1579,7 +1612,8 @@ export default function ExecutiveMisPage() {
                     <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'right' }}>Settled into Vault</th>
                     <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'right' }}>Cash in Transit</th>
                     <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'center' }}>Vault Status</th>
-                    <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'center' }}>Action</th>
+                    <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'center' }}>COD Reconciliation</th>
+                    <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'center', background: '#F0FDF4', color: '#166534' }}>Daily Driver Pay (Ledger)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1629,6 +1663,53 @@ export default function ExecutiveMisPage() {
                           </button>
                         ) : (
                           <span style={{ fontSize: '11.5px', color: C.emerald, fontWeight: 700 }}>Settled</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '12px 16px', textAlign: 'center', background: '#F9FCF9' }}>
+                        {driverDailyPayouts[`${r.id || r.riderPhone}__${selectedDate || 'TODAY'}`] ? (
+                          <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                            <span style={{ fontSize: '12px', background: '#DCFCE7', color: '#166534', padding: '3px 10px', borderRadius: '6px', fontWeight: 800, border: '1px solid #86EFAC' }}>
+                              ✓ ₹{driverDailyPayouts[`${r.id || r.riderPhone}__${selectedDate || 'TODAY'}`].amount.toLocaleString('en-IN')} Paid
+                            </span>
+                            <span style={{ fontSize: '10px', color: '#64748B' }}>Recorded in Ledger</span>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '13px', fontWeight: 800, color: '#64748B' }}>₹</span>
+                            <input
+                              type="number"
+                              placeholder="2000"
+                              value={driverPayoutInputs[r.id || r.riderPhone] !== undefined ? driverPayoutInputs[r.id || r.riderPhone] : 2000}
+                              onChange={(e) => setDriverPayoutInputs({ ...driverPayoutInputs, [r.id || r.riderPhone]: e.target.value })}
+                              style={{
+                                width: '85px',
+                                padding: '5px 8px',
+                                border: '1.5px solid #CBD5E1',
+                                borderRadius: '6px',
+                                fontSize: '12.5px',
+                                fontWeight: 800,
+                                textAlign: 'right',
+                                background: '#FFF'
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handlePayDriverDaily(r)}
+                              style={{
+                                padding: '5px 14px',
+                                background: '#059669',
+                                color: '#FFF',
+                                border: 'none',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                fontWeight: 800,
+                                cursor: 'pointer',
+                                boxShadow: '0 1px 3px rgba(5,150,105,0.2)'
+                              }}
+                            >
+                              Paid
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>

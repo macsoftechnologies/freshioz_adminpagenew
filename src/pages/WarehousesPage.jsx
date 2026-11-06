@@ -61,6 +61,13 @@ export default function WarehousesPage() {
   const [hubStatusFilter, setHubStatusFilter] = useState('ALL');
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
+  // Default Customer Delivery Slots
+  const DEFAULT_SLOTS = [
+    { id: 'SLOT_DAWN', label: 'Early Dawn Drop (05:30 AM - 07:00 AM)', timeWindow: '05:30 AM - 07:00 AM', desc: 'Security desk / gate drop before morning commute', enabled: true },
+    { id: 'SLOT_MORNING', label: 'Morning Fresh Slot (07:00 AM - 08:30 AM)', timeWindow: '07:00 AM - 08:30 AM', desc: 'Doorstep direct delivery for breakfast preparation', enabled: true },
+    { id: 'SLOT_EVENING', label: 'Evening Fresh Run (05:30 PM - 07:30 PM)', timeWindow: '05:30 PM - 07:30 PM', desc: 'Evening harvest drop for dinner cooking', enabled: true }
+  ];
+
   // Warehouse Form State with Lat / Lng Coordinates
   const [warehouseForm, setWarehouseForm] = useState({
     code: '',
@@ -73,8 +80,18 @@ export default function WarehousesPage() {
     capacityTons: 40,
     managerName: '',
     managerPhone: '',
-    status: 'ACTIVE'
+    status: 'ACTIVE',
+    slots: DEFAULT_SLOTS
   });
+
+  const toggleSlot = (slotId) => {
+    setWarehouseForm(prev => ({
+      ...prev,
+      slots: (prev.slots || DEFAULT_SLOTS).map(s => 
+        s.id === slotId ? { ...s, enabled: !s.enabled } : s
+      )
+    }));
+  };
 
   // ================= EXCEL EXPORT =================
   const handleExportExcel = () => {
@@ -175,7 +192,8 @@ export default function WarehousesPage() {
       capacityTons: 40,
       managerName: '',
       managerPhone: '',
-      status: 'ACTIVE'
+      status: 'ACTIVE',
+      slots: DEFAULT_SLOTS
     });
     setIsWarehouseModalOpen(true);
   };
@@ -198,7 +216,8 @@ export default function WarehousesPage() {
       capacityTons: wh.capacityTons || 40,
       managerName: wh.managerName || '',
       managerPhone: cleanPhone,
-      status: wh.status || 'ACTIVE'
+      status: wh.status || 'ACTIVE',
+      slots: Array.isArray(wh.slots) && wh.slots.length > 0 ? wh.slots : DEFAULT_SLOTS
     });
     setIsWarehouseModalOpen(true);
   };
@@ -478,9 +497,16 @@ export default function WarehousesPage() {
                     </td>
 
                     <td>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#FEF3C7', color: '#B45309', padding: '2px 7px', borderRadius: '5px', fontSize: '11.5px', fontWeight: 700 }}>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#FEF3C7', color: '#B45309', padding: '2px 7px', borderRadius: '5px', fontSize: '11.5px', fontWeight: 700, marginBottom: '4px' }}>
                         <Clock size={11} />
-                        <span>{wh.cutoffTime || '21:00'}</span>
+                        <span>Cutoff: {wh.cutoffTime || '21:00'}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                        {(wh.slots || DEFAULT_SLOTS).filter(s => s.enabled !== false).map(s => (
+                          <span key={s.id} style={{ fontSize: '10px', background: '#F0FDF4', color: '#166534', border: '1px solid #BBF7D0', padding: '1px 5px', borderRadius: '4px', fontWeight: 700 }}>
+                            {s.id === 'SLOT_DAWN' ? '🌅 Dawn' : s.id === 'SLOT_MORNING' ? '☀️ Morning' : '🌆 Evening'}
+                          </span>
+                        ))}
                       </div>
                     </td>
 
@@ -689,6 +715,65 @@ export default function WarehousesPage() {
                     onChange={(e) => setWarehouseForm({ ...warehouseForm, cutoffTime: e.target.value })}
                     required
                   />
+                </div>
+              </div>
+
+              {/* Delivery Slots Configuration */}
+              <div style={{ marginBottom: '16px', background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: '10px', padding: '12px 14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <label className="form-label-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Clock size={14} color="#059669" />
+                    <span>Customer Delivery Slots Allowed at Checkout</span>
+                  </label>
+                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>Toggle active delivery windows</span>
+                </div>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {(warehouseForm.slots || DEFAULT_SLOTS).map(slot => (
+                    <div
+                      key={slot.id}
+                      onClick={() => toggleSlot(slot.id)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        background: slot.enabled ? '#F0FDF4' : '#FFFFFF',
+                        border: slot.enabled ? '1.5px solid #86EFAC' : '1px solid #CBD5E1',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <input
+                          type="checkbox"
+                          checked={!!slot.enabled}
+                          onChange={() => {}} // Handled by container onClick
+                          style={{ cursor: 'pointer', accentColor: '#059669' }}
+                        />
+                        <div>
+                          <div style={{ fontSize: '12.5px', fontWeight: 800, color: slot.enabled ? '#064E3B' : '#64748B' }}>
+                            {slot.label}
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#64748B' }}>
+                            {slot.desc}
+                          </div>
+                        </div>
+                      </div>
+
+                      <span style={{
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        background: slot.enabled ? '#DCFCE7' : '#F1F5F9',
+                        color: slot.enabled ? '#166534' : '#94A3B8'
+                      }}>
+                        {slot.enabled ? 'Active Window' : 'Disabled'}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
 
