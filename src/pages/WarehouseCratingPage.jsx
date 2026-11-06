@@ -252,19 +252,15 @@ export default function WarehouseCratingPage() {
   const assignedWhName = resolvedWh?.name;
 
   const visibleOrders = orders.filter(order => {
-    // Exclude cancelled orders from packing desk
-    if (order.status === 'CANCELLED') return false;
+    // Exclude cancelled and delivered orders from packing desk
+    if (order.status === 'CANCELLED' || order.status === 'DELIVERED') return false;
 
-    // Staff Guard: Packing staff only sees orders once they have arrived at the hub (procured by manager at Mandi)
-    if (isWarehouseStaff && (order.status === 'CONFIRMED' || order.status === 'PROCURING')) {
-      return false;
-    }
-
-    if (isWarehouseScoped) {
+    if (isWarehouseScoped && warehouses.length > 1) {
       const orderWhId = order.warehouseId || order.warehouse?.id || societies.find(s => s.id === order.societyId)?.warehouseId;
       const orderWhCode = order.warehouseCode || order.warehouse?.code || warehouses.find(w => w.id === orderWhId)?.code;
 
       const isWhMatch = 
+        (!orderWhId && !orderWhCode) ||
         (orderWhId && (orderWhId === assignedWhId || orderWhId === assignedWhCode || orderWhId === resolvedWh?.uuid)) ||
         (orderWhCode && (orderWhCode === assignedWhCode || orderWhCode === assignedWhId));
 
@@ -319,7 +315,7 @@ export default function WarehouseCratingPage() {
       if (blockFilter !== 'ALL' && block !== blockFilter) {
         return false;
       }
-      if (packingStageFilter === 'READY_TO_PACK' && order.status !== 'AT_WAREHOUSE') {
+      if (packingStageFilter === 'READY_TO_PACK' && (order.status === 'PACKED' || order.status === 'OUT_FOR_DELIVERY' || order.status === 'DELIVERED')) {
         return false;
       }
       if (packingStageFilter === 'CONFIRMED' && order.status !== 'CONFIRMED' && order.status !== 'PROCURING') {
@@ -684,9 +680,9 @@ export default function WarehouseCratingPage() {
     printWindow.document.close();
   };
 
-  const readyToPackCount = visibleOrders.filter(o => o.status === 'AT_WAREHOUSE').length;
+  const readyToPackCount = visibleOrders.filter(o => o.status !== 'PACKED' && o.status !== 'OUT_FOR_DELIVERY' && o.status !== 'DELIVERED').length;
   const mandiTransitCount = visibleOrders.filter(o => o.status === 'CONFIRMED' || o.status === 'PROCURING').length;
-  const toPackCount = readyToPackCount + mandiTransitCount;
+  const toPackCount = readyToPackCount;
   const packedCount = visibleOrders.filter(o => o.status === 'PACKED').length;
   const outCount = visibleOrders.filter(o => o.status === 'OUT_FOR_DELIVERY').length;
 
