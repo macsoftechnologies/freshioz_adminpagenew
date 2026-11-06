@@ -32,6 +32,7 @@ import FinancialTransactionsPage from './pages/FinancialTransactionsPage';
 import ReviewsModerationPage from './pages/ReviewsModerationPage';
 import ExecutiveMisPage from './pages/ExecutiveMisPage';
 import SettingsGatewayPage from './pages/SettingsGatewayPage';
+import FreshCoinsLoyaltyPage from './pages/FreshCoinsLoyaltyPage';
 
 import ScrollToTop from './components/common/ScrollToTop';
 import { useAdminRole, ROLES } from './context/AdminRoleContext';
@@ -153,6 +154,7 @@ export default function App() {
           <Route path="/reviews-moderation" element={<ProtectedByRole allowedRoles={['SUPER_ADMIN']}><ReviewsModerationPage /></ProtectedByRole>} />
           <Route path="/executive-mis" element={<ProtectedByRole allowedRoles={['SUPER_ADMIN']}><ExecutiveMisPage /></ProtectedByRole>} />
           <Route path="/settings" element={<ProtectedByRole allowedRoles={['SUPER_ADMIN']}><SettingsGatewayPage /></ProtectedByRole>} />
+          <Route path="/freshcoins" element={<ProtectedByRole allowedRoles={['SUPER_ADMIN']}><FreshCoinsLoyaltyPage /></ProtectedByRole>} />
 
           
           <Route path="/login" element={<Navigate to={getHomeRoute()} replace />} />

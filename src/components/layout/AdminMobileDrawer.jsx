@@ -207,6 +207,13 @@ export default function AdminMobileDrawer() {
                   RZP
                 </span>
               </NavLink>
+              <NavLink to="/freshcoins" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
+                <Coins size={17} color="#D97706" />
+                <span style={{ flex: 1 }}>FreshCoins Loyalty</span>
+                <span style={{ background: '#FEF3C7', color: '#92400E', fontSize: '9.5px', fontWeight: 800, padding: '1px 5px', borderRadius: '4px' }}>
+                  COINS
+                </span>
+              </NavLink>
 
               {/* Collapsible: Master Data Catalog */}
               <button 
