@@ -176,8 +176,8 @@ export default function SalesOnboardingPage() {
       showToast('⚠️ No Regional Warehouses found. Please create at least one Regional Warehouse Hub in Warehouses & Hubs first.', 'error');
       return;
     }
-    if (!formData.name || !formData.address || !formData.secretaryPhone || !formData.accountNumber) {
-      showToast('Please fill in all required society and bank fields.', 'error');
+    if (!formData.name || !formData.address || !formData.secretaryPhone) {
+      showToast('Please fill in required society name, address, and secretary contact number.', 'error');
       return;
     }
     setIsConfirmModalOpen(true);
@@ -673,17 +673,25 @@ export default function SalesOnboardingPage() {
             </div>
           </div>
 
-          {/* Section 4: Bank Details (As Requested by User) */}
+          {/* Section 4: Bank Details (Optional during onboarding) */}
           <div style={{ marginBottom: '24px' }}>
-            <h3 style={{ fontSize: '16px', color: '#234B3C', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
-              <CreditCard size={18} />
-              <span>4. Society Settlement Bank Details (For Commission Payouts)</span>
-            </h3>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <h3 style={{ fontSize: '16px', color: '#234B3C', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                <CreditCard size={18} />
+                <span>4. Society Settlement Bank Details</span>
+              </h3>
+              <span style={{ fontSize: '11px', background: '#F1F5F9', color: '#64748B', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
+                OPTIONAL
+              </span>
+            </div>
+            <p style={{ fontSize: '12px', color: '#64748B', margin: '0 0 14px' }}>
+              Bank details are not mandatory for onboarding. They can be added later by the admin or RWA before commission disbursals.
+            </p>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
               <div>
-                <label style={{ fontSize: '12.5px', fontWeight: 700, display: 'block', marginBottom: '4px' }}>
-                  Bank Name *
+                <label style={{ fontSize: '12.5px', fontWeight: 700, display: 'block', marginBottom: '4px', color: '#334155' }}>
+                  Bank Name <span style={{ color: '#94A3B8', fontWeight: 400 }}>(Optional)</span>
                 </label>
                 <input
                   type="text"
@@ -691,13 +699,12 @@ export default function SalesOnboardingPage() {
                   value={formData.bankName}
                   onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
                   style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '8px', border: '1.5px solid #CBD5E1', fontSize: '13.5px' }}
-                  required
                 />
               </div>
 
               <div>
-                <label style={{ fontSize: '12.5px', fontWeight: 700, display: 'block', marginBottom: '4px' }}>
-                  Account Holder Name *
+                <label style={{ fontSize: '12.5px', fontWeight: 700, display: 'block', marginBottom: '4px', color: '#334155' }}>
+                  Account Holder Name <span style={{ color: '#94A3B8', fontWeight: 400 }}>(Optional)</span>
                 </label>
                 <input
                   type="text"
@@ -705,15 +712,14 @@ export default function SalesOnboardingPage() {
                   value={formData.accountHolder}
                   onChange={(e) => setFormData({ ...formData, accountHolder: e.target.value })}
                   style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '8px', border: '1.5px solid #CBD5E1', fontSize: '13.5px' }}
-                  required
                 />
               </div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
               <div>
-                <label style={{ fontSize: '12.5px', fontWeight: 700, display: 'block', marginBottom: '4px' }}>
-                  Bank Account Number *
+                <label style={{ fontSize: '12.5px', fontWeight: 700, display: 'block', marginBottom: '4px', color: '#334155' }}>
+                  Bank Account Number <span style={{ color: '#94A3B8', fontWeight: 400 }}>(Optional)</span>
                 </label>
                 <input
                   type="text"
@@ -721,13 +727,12 @@ export default function SalesOnboardingPage() {
                   value={formData.accountNumber}
                   onChange={(e) => setFormData({ ...formData, accountNumber: e.target.value })}
                   style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '8px', border: '1.5px solid #CBD5E1', fontSize: '13.5px', fontFamily: 'monospace' }}
-                  required
                 />
               </div>
 
               <div>
-                <label style={{ fontSize: '12.5px', fontWeight: 700, display: 'block', marginBottom: '4px' }}>
-                  IFSC Code *
+                <label style={{ fontSize: '12.5px', fontWeight: 700, display: 'block', marginBottom: '4px', color: '#334155' }}>
+                  IFSC Code <span style={{ color: '#94A3B8', fontWeight: 400 }}>(Optional)</span>
                 </label>
                 <input
                   type="text"
@@ -735,7 +740,6 @@ export default function SalesOnboardingPage() {
                   value={formData.ifscCode}
                   onChange={(e) => setFormData({ ...formData, ifscCode: e.target.value.toUpperCase() })}
                   style={{ width: '100%', height: '42px', padding: '0 12px', borderRadius: '8px', border: '1.5px solid #CBD5E1', fontSize: '13.5px', fontFamily: 'monospace' }}
-                  required
                 />
               </div>
             </div>
