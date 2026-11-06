@@ -22,11 +22,13 @@ import {
   Boxes,
   Box,
   Filter,
-  Check
+  Check,
+  RotateCcw,
+  Camera
 } from 'lucide-react';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
-import { orders as orderResource, employees as employeeResource, warehouses as warehouseResource, societies as societyResource, procurement as procurementResource, useUpdateOrderStatus } from '../hooks/resources';
+import { orders as orderResource, employees as employeeResource, warehouses as warehouseResource, societies as societyResource, procurement as procurementResource, useUpdateOrderStatus, useAdjustStock } from '../hooks/resources';
 import AdminPagination from '../components/common/AdminPagination';
 import { extractBlockAndFlat } from '../utils/addressParser';
 
@@ -94,10 +96,11 @@ export default function WarehouseCratingPage() {
     );
   }, [employees]);
 
-  // URL Hash synchronization (#packing, #dispatch, #delivered)
+  // URL Hash synchronization (#packing, #dispatch, #delivered, #returns)
   const getTabFromHash = () => {
     if (typeof window === 'undefined') return 'PACKING_STATION';
     const hash = (window.location.hash || '').toLowerCase();
+    if (hash === '#returns' || hash === '#return-audit') return 'RETURN_AUDIT';
     if (hash === '#dispatch' || hash === '#lots' || hash === '#delivered' || hash === '#out-for-delivery' || hash === '#ready') return 'SOCIETY_LOTS';
     return 'PACKING_STATION';
   };
@@ -112,7 +115,7 @@ export default function WarehouseCratingPage() {
     return 'ALL';
   };
 
-  // Active view tab: 'PACKING_STATION' | 'SOCIETY_LOTS'
+  // Active view tab: 'PACKING_STATION' | 'SOCIETY_LOTS' | 'RETURN_AUDIT'
   const [activeTab, setActiveTab] = useState(getTabFromHash);
   const [lotFilter, setLotFilter] = useState(getLotFilterFromHash); // 'ALL' | 'READY_FOR_HANDOVER' | 'OUT_FOR_DELIVERY' | 'DELIVERED'
   const [slotFilter, setSlotFilter] = useState('ALL'); // 'ALL' | 'Morning' | 'Evening'
@@ -121,6 +124,29 @@ export default function WarehouseCratingPage() {
   const [packingStageFilter, setPackingStageFilter] = useState('READY_TO_PACK'); // 'ALL' | 'READY_TO_PACK' | 'CONFIRMED' | 'PACKED'
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
+
+  // Return & Wastage Quality Audit Desk State
+  const adjustStockMutation = useAdjustStock();
+  const [returnAudits, setReturnAudits] = useState(() => {
+    try {
+      const stored = localStorage.getItem('freshioz_warehouse_return_audits');
+      return stored ? JSON.parse(stored) : {};
+    } catch (e) {
+      return {};
+    }
+  });
+  const [returnItemAdjustments, setReturnItemAdjustments] = useState({});
+  const [previewPhotoModal, setPreviewPhotoModal] = useState(null);
+  const [isSubmittingAudit, setIsSubmittingAudit] = useState(false);
+
+  const parseCancelDetails = (reasonStr) => {
+    if (!reasonStr) return { reason: 'Cancelled at Doorstep', photo: null };
+    const parts = reasonStr.split(' [PROOF_PHOTO]');
+    return {
+      reason: parts[0] || 'Cancelled at Doorstep',
+      photo: parts[1] || null
+    };
+  };
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -136,9 +162,11 @@ export default function WarehouseCratingPage() {
 
   const handleTabChange = (newTab) => {
     setActiveTab(newTab);
-    const targetHash = newTab === 'SOCIETY_LOTS' 
-      ? (lotFilter === 'DELIVERED' ? '#delivered' : (lotFilter === 'OUT_FOR_DELIVERY' ? '#out-for-delivery' : '#dispatch')) 
-      : '#packing';
+    const targetHash = newTab === 'RETURN_AUDIT'
+      ? '#returns'
+      : (newTab === 'SOCIETY_LOTS' 
+        ? (lotFilter === 'DELIVERED' ? '#delivered' : (lotFilter === 'OUT_FOR_DELIVERY' ? '#out-for-delivery' : '#dispatch')) 
+        : '#packing');
     if (window.location.hash !== targetHash) {
       window.location.hash = targetHash;
     }
@@ -299,6 +327,71 @@ export default function WarehouseCratingPage() {
       return true;
     });
   }, [procurementBills, isWarehouseScoped, warehouses.length, assignedWhId, assignedWhCode, resolvedWh]);
+
+  // Filter returned / cancelled orders for this warehouse
+  const returnedOrders = useMemo(() => {
+    return orders.filter(order => {
+      if (order.status !== 'CANCELLED') return false;
+      if (isWarehouseScoped && warehouses.length > 1) {
+        const orderWhId = order.warehouseId || order.warehouse?.id || societies.find(s => s.id === order.societyId)?.warehouseId;
+        const orderWhCode = order.warehouseCode || order.warehouse?.code || warehouses.find(w => w.id === orderWhId)?.code;
+        const isWhMatch = 
+          (!orderWhId && !orderWhCode) ||
+          (orderWhId && (orderWhId === assignedWhId || orderWhId === assignedWhCode || orderWhId === resolvedWh?.uuid)) ||
+          (orderWhCode && (orderWhCode === assignedWhCode || orderWhCode === assignedWhId));
+        if (!isWhMatch) return false;
+      }
+      return true;
+    });
+  }, [orders, isWarehouseScoped, warehouses.length, assignedWhId, assignedWhCode, resolvedWh, societies]);
+
+  const handleApproveReturnAudit = async (order) => {
+    setIsSubmittingAudit(true);
+    try {
+      const targetWhId = order.warehouseId || assignedWhId || resolvedWh?.id || 'WH_HEBBAL_01';
+      const items = Array.isArray(order.items) ? order.items : [];
+      let totalGoodKg = 0;
+      let totalWastageKg = 0;
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (!item.productId) continue;
+        const key = `${order.id}_${i}`;
+        const enteredGood = returnItemAdjustments[key]?.goodQty;
+        const goodQty = enteredGood !== undefined ? Number(enteredGood) : (item.qty || 1);
+        const wastageQty = Math.max(0, (item.qty || 1) - goodQty);
+        totalGoodKg += goodQty;
+        totalWastageKg += wastageQty;
+
+        if (goodQty > 0) {
+          await adjustStockMutation.mutateAsync({
+            warehouseId: targetWhId,
+            productId: item.productId,
+            qty: goodQty,
+            action: 'ADD',
+            remarks: `Quality Restock from returned Order #${order.id} (${goodQty} kg good produce, ${wastageQty} kg wastage)`
+          });
+        }
+      }
+
+      const auditRecord = {
+        auditedAt: new Date().toISOString(),
+        auditedBy: currentUser?.name || 'Warehouse Operations Lead',
+        totalGoodKg,
+        totalWastageKg,
+        itemsCount: items.length
+      };
+
+      const updatedAudits = { ...returnAudits, [order.id]: auditRecord };
+      setReturnAudits(updatedAudits);
+      localStorage.setItem('freshioz_warehouse_return_audits', JSON.stringify(updatedAudits));
+      showToast(`✓ Quality Audit Completed for Order #${order.id}. Restocked ${totalGoodKg} kg produce to hub; ${totalWastageKg} kg written off as wastage.`, 'success');
+    } catch (err) {
+      showToast(err.message || 'Failed to complete quality audit.', 'error');
+    } finally {
+      setIsSubmittingAudit(false);
+    }
+  };
 
   const handleAdvanceOrdersToPacking = async () => {
     const pendingOrders = visibleOrders.filter(o => o.status === 'CONFIRMED' || o.status === 'PROCURING');
@@ -887,6 +980,57 @@ export default function WarehouseCratingPage() {
             </div>
           </div>
         </button>
+
+        {/* Step 3: Return Produce & Wastage Audit */}
+        <button
+          type="button"
+          onClick={() => handleTabChange('RETURN_AUDIT')}
+          style={{
+            flex: '1 1 280px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            padding: '12px 18px',
+            borderRadius: '10px',
+            border: activeTab === 'RETURN_AUDIT' ? '2px solid #DC2626' : '1.5px solid #E2E8F0',
+            background: activeTab === 'RETURN_AUDIT' ? '#FEF2F2' : '#FFFFFF',
+            cursor: 'pointer',
+            textAlign: 'left',
+            boxShadow: activeTab === 'RETURN_AUDIT' ? '0 2px 6px rgba(220, 38, 38, 0.1)' : 'none',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <div style={{
+            width: '36px',
+            height: '36px',
+            borderRadius: '8px',
+            background: activeTab === 'RETURN_AUDIT' ? '#DC2626' : '#F1F5F9',
+            color: activeTab === 'RETURN_AUDIT' ? '#FFFFFF' : '#64748B',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontWeight: 900,
+            fontSize: '15px',
+            flexShrink: 0
+          }}>
+            3
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '13.5px', fontWeight: 900, color: activeTab === 'RETURN_AUDIT' ? '#991B1B' : '#1E293B' }}>
+                Step 3: Return Produce Audit
+              </span>
+              {returnedOrders.length > 0 && (
+                <span style={{ background: '#FEE2E2', color: '#DC2626', fontSize: '11px', padding: '1px 7px', borderRadius: '9999px', fontWeight: 800 }}>
+                  {returnedOrders.length} returned
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
+              Review doorstep refusal photo, restock good produce & write off wastage
+            </div>
+          </div>
+        </button>
       </div>
 
       {/* VIEW 1: PACKING STATION (APARTMENT & BLOCK-WISE CRATING) */}
@@ -909,13 +1053,13 @@ export default function WarehouseCratingPage() {
                   </div>
                   <div>
                     <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#064E3B', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      <span>Mandi Inward Arrivals (Warehouse Intake Dock)</span>
+                      <span>Wholesale Produce Intake (Dock Arrivals)</span>
                       <span style={{ fontSize: '11px', background: '#DCFCE7', color: '#166534', padding: '1px 8px', borderRadius: '999px', fontWeight: 800, border: '1px solid #86EFAC' }}>
                         ✓ {warehouseProcurements.length} Consignment(s) Inwarded
                       </span>
                     </div>
                     <div style={{ fontSize: '11.5px', color: '#047857', marginTop: '2px' }}>
-                      Produce arrived from Mandi vendors ready for sorting into resident bags
+                      Produce arrived from wholesale procurement ready for sorting into resident bags
                     </div>
                   </div>
                 </div>
@@ -1773,6 +1917,335 @@ export default function WarehouseCratingPage() {
               </div>
             ))
           )}
+        </div>
+      )}
+
+      {/* VIEW 3: RETURN PRODUCE & WASTAGE QUALITY AUDIT DESK */}
+      {activeTab === 'RETURN_AUDIT' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* Header Summary Banner */}
+          <div style={{
+            background: '#FEF2F2',
+            border: '1.5px solid #FECACA',
+            borderRadius: '12px',
+            padding: '16px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '14px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: '#DC2626', color: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <RotateCcw size={22} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '15px', fontWeight: 900, color: '#991B1B', margin: 0 }}>
+                  Returned Produce Quality & Wastage Audit Desk
+                </h3>
+                <p style={{ fontSize: '12px', color: '#B91C1C', margin: '3px 0 0' }}>
+                  Physically inspect undelivered resident bags returned by riders. Separate fresh produce to restock into warehouse stock vs damaged quantity written off as spoilage.
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '12px', fontWeight: 800, background: '#FFFFFF', color: '#991B1B', border: '1px solid #FECACA', padding: '4px 12px', borderRadius: '999px' }}>
+                {returnedOrders.length} Undelivered Order(s)
+              </span>
+            </div>
+          </div>
+
+          {returnedOrders.length === 0 ? (
+            <div style={{
+              background: '#FFFFFF',
+              border: '1.5px solid #E2E8F0',
+              borderRadius: '12px',
+              padding: '60px 20px',
+              textAlign: 'center',
+              color: '#64748B'
+            }}>
+              <CheckCircle2 size={44} color="#059669" style={{ margin: '0 auto 12px' }} />
+              <div style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>
+                Zero Pending Returns
+              </div>
+              <div style={{ fontSize: '13px', color: '#64748B', maxWidth: '440px', margin: '6px auto 0' }}>
+                All dispatched crates and delivery runs are successfully accounted for. There are no undelivered orders awaiting quality inspection.
+              </div>
+            </div>
+          ) : (
+            returnedOrders.map((order) => {
+              const { reason, photo } = parseCancelDetails(order.cancelledReason);
+              const isAudited = Boolean(returnAudits[order.id]);
+              const auditData = returnAudits[order.id];
+              const items = Array.isArray(order.items) ? order.items : [];
+
+              return (
+                <div
+                  key={order.id}
+                  style={{
+                    background: '#FFFFFF',
+                    border: isAudited ? '1.5px solid #86EFAC' : '1.5px solid #FECACA',
+                    borderRadius: '12px',
+                    padding: '18px',
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.04)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '14px'
+                  }}
+                >
+                  {/* Top Order Information Bar */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '14px', fontWeight: 900, color: '#0F172A' }}>
+                        Order #{order.id}
+                      </span>
+                      <span style={{ fontSize: '12px', fontWeight: 700, background: '#F1F5F9', color: '#475569', padding: '2px 8px', borderRadius: '6px' }}>
+                        {order.societyName || 'Society Hub'} • Flat {order.flatNo || 'N/A'}
+                      </span>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748B' }}>
+                        Value: ₹{(order.totalAmount || 0).toLocaleString('en-IN')}
+                      </span>
+                      <span style={{ fontSize: '11px', color: '#94A3B8' }}>
+                        {order.cancelledAt ? new Date(order.cancelledAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }) : 'Today'}
+                      </span>
+                    </div>
+
+                    <div>
+                      {isAudited ? (
+                        <span style={{ background: '#DCFCE7', color: '#166534', border: '1px solid #86EFAC', padding: '4px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                          <CheckCircle2 size={14} />
+                          <span>Audited & Restocked by {auditData.auditedBy}</span>
+                        </span>
+                      ) : (
+                        <span style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A', padding: '4px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: 800 }}>
+                          ⏳ Pending Quality Inspection
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Rider Doorstep Exception Reason & Photo Proof Card */}
+                  <div style={{
+                    background: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    borderRadius: '10px',
+                    padding: '12px 14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '12px'
+                  }}>
+                    <div style={{ flex: 1, minWidth: '240px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '2px' }}>
+                        Doorstep Cancellation / Refusal Reason
+                      </div>
+                      <div style={{ fontSize: '13px', fontWeight: 800, color: '#DC2626' }}>
+                        {reason}
+                      </div>
+                      {order.dispatchedToRiderName && (
+                        <div style={{ fontSize: '11.5px', color: '#475569', marginTop: '2px' }}>
+                          Delivery Partner: <strong style={{ color: '#0F172A' }}>{order.dispatchedToRiderName}</strong>
+                        </div>
+                      )}
+                    </div>
+
+                    {photo ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <img
+                          src={photo}
+                          alt="Cancellation Proof"
+                          onClick={() => setPreviewPhotoModal({ photo, title: `Order #${order.id} Doorstep Proof (${reason})` })}
+                          style={{ width: '56px', height: '56px', objectFit: 'cover', borderRadius: '8px', border: '1.5px solid #CBD5E1', cursor: 'pointer' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setPreviewPhotoModal({ photo, title: `Order #${order.id} Doorstep Proof (${reason})` })}
+                          style={{
+                            background: '#EFF6FF',
+                            border: '1px solid #BFDBFE',
+                            color: '#1D4ED8',
+                            fontSize: '11.5px',
+                            fontWeight: 700,
+                            padding: '6px 12px',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '5px'
+                          }}
+                        >
+                          <Camera size={14} />
+                          <span>Enlarge Photo Proof</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <span style={{ fontSize: '11.5px', color: '#94A3B8', fontStyle: 'italic' }}>
+                        No doorstep photo submitted
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Produce Items Quality Breakdown Table */}
+                  <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12.5px' }}>
+                      <thead>
+                        <tr style={{ background: '#F8FAFC', color: '#475569', textTransform: 'uppercase', fontSize: '11px', letterSpacing: '0.04em' }}>
+                          <th style={{ padding: '8px 12px', borderBottom: '1px solid #E2E8F0' }}>Produce Item</th>
+                          <th style={{ padding: '8px 12px', borderBottom: '1px solid #E2E8F0', textAlign: 'center' }}>Returned Qty</th>
+                          <th style={{ padding: '8px 12px', borderBottom: '1px solid #E2E8F0', textAlign: 'center' }}>Good Qty (Restock to Hub)</th>
+                          <th style={{ padding: '8px 12px', borderBottom: '1px solid #E2E8F0', textAlign: 'center' }}>Wastage / Spoilage Qty</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {items.map((it, idx) => {
+                          const key = `${order.id}_${idx}`;
+                          const enteredGood = returnItemAdjustments[key]?.goodQty;
+                          const goodQty = enteredGood !== undefined ? Number(enteredGood) : (it.qty || 1);
+                          const wastageQty = Math.max(0, (it.qty || 1) - goodQty);
+
+                          return (
+                            <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                              <td style={{ padding: '8px 12px', fontWeight: 700, color: '#1E293B' }}>
+                                {it.name || 'Fresh Produce'} <span style={{ color: '#64748B', fontWeight: 500 }}>({it.unit || '1 kg'})</span>
+                              </td>
+                              <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, color: '#475569' }}>
+                                {it.qty || 1} {it.unit || 'kg'}
+                              </td>
+                              <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                                {isAudited ? (
+                                  <span style={{ fontWeight: 800, color: '#166534' }}>{goodQty} {it.unit || 'kg'}</span>
+                                ) : (
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max={it.qty || 1}
+                                    step="0.1"
+                                    value={goodQty}
+                                    onChange={(e) => {
+                                      const val = parseFloat(e.target.value) || 0;
+                                      setReturnItemAdjustments(prev => ({
+                                        ...prev,
+                                        [key]: { goodQty: Math.min(it.qty || 1, Math.max(0, val)) }
+                                      }));
+                                    }}
+                                    style={{
+                                      width: '80px',
+                                      padding: '4px 8px',
+                                      border: '1.5px solid #86EFAC',
+                                      borderRadius: '6px',
+                                      textAlign: 'center',
+                                      fontWeight: 800,
+                                      color: '#166534',
+                                      background: '#F0FDF4'
+                                    }}
+                                  />
+                                )}
+                              </td>
+                              <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                                <span style={{
+                                  padding: '2px 8px',
+                                  borderRadius: '6px',
+                                  fontSize: '11.5px',
+                                  fontWeight: 800,
+                                  background: wastageQty > 0 ? '#FEE2E2' : '#F1F5F9',
+                                  color: wastageQty > 0 ? '#DC2626' : '#64748B'
+                                }}>
+                                  {wastageQty.toFixed(1)} {it.unit || 'kg'}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Approve Audit Button */}
+                  {!isAudited && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '4px' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleApproveReturnAudit(order)}
+                        disabled={isSubmittingAudit}
+                        style={{
+                          background: '#059669',
+                          color: '#FFFFFF',
+                          border: 'none',
+                          padding: '8px 18px',
+                          borderRadius: '8px',
+                          fontSize: '12.5px',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                      >
+                        <Check size={16} />
+                        <span>{isSubmittingAudit ? 'Restocking Hub...' : '✓ Approve Quality Audit & Restock to Hub'}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {/* MODAL: PREVIEW CANCELLATION PHOTO PROOF */}
+      {previewPhotoModal && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: '#FFFFFF',
+            borderRadius: '16px',
+            maxWidth: '640px',
+            width: '100%',
+            overflow: 'hidden',
+            border: '1.5px solid #CBD5E1',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid #E2E8F0', background: '#F8FAFC' }}>
+              <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Camera size={16} color="#DC2626" />
+                <span>{previewPhotoModal.title || 'Doorstep Photo Proof'}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewPhotoModal(null)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div style={{ padding: '16px', textAlign: 'center', background: '#0F172A' }}>
+              <img
+                src={previewPhotoModal.photo}
+                alt="Enlarged Proof"
+                style={{ maxWidth: '100%', maxHeight: '70vh', borderRadius: '8px', objectFit: 'contain' }}
+              />
+            </div>
+            <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'flex-end', background: '#F8FAFC', borderTop: '1px solid #E2E8F0' }}>
+              <button
+                type="button"
+                onClick={() => setPreviewPhotoModal(null)}
+                style={{ padding: '6px 16px', background: '#0F172A', color: '#FFF', borderRadius: '6px', border: 'none', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

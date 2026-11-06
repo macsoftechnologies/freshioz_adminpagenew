@@ -34,39 +34,41 @@ import {
   BarChart3,
   GitCompare,
   ArrowRight,
-  Plus
+  Plus,
+  Camera,
+  RotateCcw,
+  FileText
 } from 'lucide-react';
 import FreshiozLogo from '../components/common/FreshiozLogo';
-import { useMisAnalytics, useReconcileRiderCash, warehouses as warehouseResource } from '../hooks/resources';
+import { useMisAnalytics, useReconcileRiderCash, warehouses as warehouseResource, orders as orderResource } from '../hooks/resources';
 import { useToast } from '../context/ToastContext';
 
-// Color Palette Constants for Freshioz Official Logo & Brand Theme
+// Clean Executive Palette for Official Brand & Audit Review
 const C = {
-  bg: '#FFFFFF',             // Pure White Canvas
-  panel: '#FFFFFF',          // Clean White Card Panels
+  bg: '#FFFFFF',
+  panel: '#FFFFFF',
   panelHover: '#FAFAF9',
-  border: '#E2E8F0',         // Soft Clean Slate Border
+  border: '#E2E8F0',
   borderLight: '#F1F5F9',
-  text: '#0F172A',           // Slate-900 High Contrast Text
-  textMuted: '#64748B',      // Slate-500
-  textDim: '#94A3B8',        // Slate-400
+  text: '#0F172A',
+  textMuted: '#64748B',
+  textDim: '#94A3B8',
   
-  // Official Freshioz Logo Colors:
-  spruce: '#234B3C',         // Deep Evergreen / Vegetable Spruce (Primary Brand)
+  spruce: '#234B3C',
   spruceLight: '#2D5D4B',
   spruceSurface: '#EBF2EE',
   spruceBorder: '#A7C4B8',
 
-  citrus: '#F28E14',         // Fresh Citrus Fruit Orange (Secondary Brand Accent)
+  citrus: '#F28E14',
   citrusDark: '#DE7D09',
-  citrusSurface: '#FFF7ED',  // Warm Orange Surface
+  citrusSurface: '#FFF7ED',
   citrusBorder: '#FED7AA',
 
-  emerald: '#059669',        // Fresh Farm Leaf Emerald
+  emerald: '#059669',
   emeraldSurface: '#ECFDF5',
   emeraldBorder: '#A7F3D0',
 
-  amber: '#D97706',          // Mandi Harvest Gold
+  amber: '#D97706',
   amberSurface: '#FEF3C7',
   amberBorder: '#FDE68A',
 
@@ -85,8 +87,8 @@ export default function ExecutiveMisPage() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  // Active Deep-Dive Navigation Tab: 'economics' | 'warehouseCompare' | 'monthCompare' | 'fieldCash'
-  const [activeTab, setActiveTab] = useState('economics');
+  // Active Statutory Audit Tabs: 'stockLedger' | 'pnl' | 'driverLedger' | 'cashAudit' | 'cancellationsAudit' | 'warehouseCompare'
+  const [activeTab, setActiveTab] = useState('stockLedger');
 
   // Produce SKU Table filters
   const [skuSearch, setSkuSearch] = useState('');
@@ -94,8 +96,10 @@ export default function ExecutiveMisPage() {
   const [marginTier, setMarginTier] = useState('ALL'); // 'ALL' | 'HIGH' | 'STAPLE' | 'THIN'
   const [settlingRiderId, setSettlingRiderId] = useState(null);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [photoPreviewModal, setPhotoPreviewModal] = useState(null);
 
-  // Driver Daily Wage Flat Settlement State
+  // Delivery Partner Date-Wise Wage Settlement State
+  const [selectedPayoutDate, setSelectedPayoutDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [driverPayoutInputs, setDriverPayoutInputs] = useState({});
   const [driverDailyPayouts, setDriverDailyPayouts] = useState(() => {
     try {
@@ -110,17 +114,18 @@ export default function ExecutiveMisPage() {
     const defaultAmount = 2000;
     const inputVal = driverPayoutInputs[rider.id || rider.riderPhone];
     const amount = (inputVal !== undefined && inputVal !== '') ? Number(inputVal) : defaultAmount;
-    const dateStr = selectedDate || 'TODAY';
+    const dateStr = selectedPayoutDate || new Date().toISOString().slice(0, 10);
     const key = `${rider.id || rider.riderPhone}__${dateStr}`;
     const newEntry = {
+      id: `PAY_${Date.now()}`,
       riderId: rider.id || rider.riderPhone,
       riderName: rider.riderName,
       riderPhone: rider.riderPhone,
       amount,
       paidAt: new Date().toISOString(),
       date: dateStr,
-      paidBy: 'Warehouse Operations Manager',
-      ordersDelivered: rider.ordersDelivered
+      paidBy: 'Warehouse Operations Lead',
+      ordersDelivered: rider.ordersDelivered || 0
     };
     const updated = { ...driverDailyPayouts, [key]: newEntry };
     setDriverDailyPayouts(updated);
@@ -132,21 +137,20 @@ export default function ExecutiveMisPage() {
   const [compareHubA, setCompareHubA] = useState('');
   const [compareHubB, setCompareHubB] = useState('');
 
-  // Month Comparison States
-  const [compareMonthA, setCompareMonthA] = useState('');
-  const [compareMonthB, setCompareMonthB] = useState('');
-
   // Live Warehouses list from database
   const { data: rawWarehouses = [] } = warehouseResource.useList();
   const warehouseList = Array.isArray(rawWarehouses) ? rawWarehouses : [];
+
+  // Live Orders list for audit fallback
+  const { data: rawOrders = [] } = orderResource.useList();
+  const allOrders = Array.isArray(rawOrders) ? rawOrders : [];
 
   // MIS Data Hook directly connected to backend /api/mis/executive-summary
   const { 
     data: misData, 
     isLoading, 
     isFetching, 
-    refetch, 
-    error 
+    refetch 
   } = useMisAnalytics({
     range,
     startDate: range === 'custom' ? startDate : undefined,
@@ -166,6 +170,7 @@ export default function ExecutiveMisPage() {
     cancelledRevenue: 0,
     totalProduceDispatchedKg: 0,
     totalMandiOutflow: 0,
+    wholesalePurchasesTotal: 0,
     produceProcuredAmount: 0,
     freightLogisticsAmount: 0,
     procurementBillsCount: 0,
@@ -182,22 +187,30 @@ export default function ExecutiveMisPage() {
 
   const productEconomics = misData?.productEconomics || [];
   const riderLedger = misData?.riderCashLedger || [];
-  const dailySeries = misData?.charts?.dailySeries || [];
   const warehouseBreakdown = misData?.warehouseBreakdown || [];
-  const monthlySeries = misData?.monthlySeries || misData?.charts?.monthlySeries || [];
 
-  // Selected Months for Dynamic Comparison
-  const monthAData = useMemo(() => {
-    if (monthlySeries.length === 0) return null;
-    const targetKey = compareMonthA || monthlySeries[0]?.key;
-    return monthlySeries.find(m => m.key === targetKey) || monthlySeries[0];
-  }, [monthlySeries, compareMonthA]);
-
-  const monthBData = useMemo(() => {
-    if (monthlySeries.length < 2) return null;
-    const targetKey = compareMonthB || monthlySeries[1]?.key;
-    return monthlySeries.find(m => m.key === targetKey) || monthlySeries[1];
-  }, [monthlySeries, compareMonthB]);
+  // Cancelled Orders List directly from backend or fallback
+  const cancelledOrders = useMemo(() => {
+    if (misData?.cancelledOrdersList && misData.cancelledOrdersList.length > 0) {
+      return misData.cancelledOrdersList;
+    }
+    return allOrders.filter(o => o.status === 'CANCELLED').map(o => {
+      const [reasonText, photoProof] = (o.cancelledReason || '').split(' [PROOF_PHOTO]');
+      return {
+        id: o.id,
+        createdAt: o.createdAt,
+        cancelledAt: o.cancelledAt,
+        reasonText: reasonText || 'Doorstep Delivery Exception / Refusal',
+        photoProof: photoProof || null,
+        totalAmount: o.totalAmount || 0,
+        societyName: o.societyName || 'N/A',
+        flatNo: o.flatNo || 'N/A',
+        userPhone: o.userPhone || 'N/A',
+        dispatchedToRiderName: o.dispatchedToRiderName || o.codCollectedBy || 'Field Driver',
+        items: Array.isArray(o.items) ? o.items : []
+      };
+    });
+  }, [misData?.cancelledOrdersList, allOrders]);
 
   // Extract dynamic categories directly from the database response
   const availableCategories = useMemo(() => {
@@ -229,25 +242,56 @@ export default function ExecutiveMisPage() {
     });
   }, [productEconomics, skuSearch, categoryFilter, marginTier]);
 
+  // Complete Stock Summary Totals for Statutory Audit Table
+  const stockSummary = useMemo(() => {
+    let totalBoughtQty = 0;
+    let totalPurchaseCost = 0;
+    let totalSoldQty = 0;
+    let totalSalesRevenue = 0;
+    let totalGrossMargin = 0;
+    let totalWastageQty = 0;
+
+    filteredProducts.forEach(p => {
+      const bQty = p.boughtQtyKg !== undefined ? p.boughtQtyKg : (p.sourcedQtyKg || 0);
+      const bRate = p.purchaseRatePerKg !== undefined ? p.purchaseRatePerKg : (p.sourcingRatePerKg || 0);
+      const bCost = p.purchaseCost !== undefined ? p.purchaseCost : Math.round(bQty * bRate);
+      const sQty = p.soldQtyKg || 0;
+      const sRev = p.revenue || 0;
+      const margin = p.netProfitContribution !== undefined ? p.netProfitContribution : Math.round(sRev - (sQty * bRate));
+      const wQty = p.wastageQtyKg !== undefined ? p.wastageQtyKg : Math.max(0, Number((bQty - sQty).toFixed(1)));
+
+      totalBoughtQty += bQty;
+      totalPurchaseCost += bCost;
+      totalSoldQty += sQty;
+      totalSalesRevenue += sRev;
+      totalGrossMargin += margin;
+      totalWastageQty += wQty;
+    });
+
+    const avgMarginPct = totalSalesRevenue > 0 ? Number(((totalGrossMargin / totalSalesRevenue) * 100).toFixed(1)) : 0;
+
+    return {
+      totalBoughtQty: Number(totalBoughtQty.toFixed(1)),
+      totalPurchaseCost,
+      totalSoldQty: Number(totalSoldQty.toFixed(1)),
+      totalSalesRevenue,
+      totalGrossMargin,
+      totalWastageQty: Number(totalWastageQty.toFixed(1)),
+      avgMarginPct
+    };
+  }, [filteredProducts]);
+
   // Active warehouse name helper
   const activeWarehouseName = useMemo(() => {
-    if (selectedWarehouseId === 'ALL') return 'All Warehouses (Consolidated Network)';
+    if (selectedWarehouseId === 'ALL') return 'All Regional Warehouses (Consolidated Network)';
     const found = warehouseList.find(w => w.id === selectedWarehouseId);
     return found ? `${found.name} (${found.code})` : selectedWarehouseId;
   }, [selectedWarehouseId, warehouseList]);
 
-  // Selected Hubs for Comparison
-  const hubAData = useMemo(() => {
-    if (warehouseBreakdown.length === 0) return null;
-    const targetId = compareHubA || warehouseBreakdown[0]?.id;
-    return warehouseBreakdown.find(w => w.id === targetId) || warehouseBreakdown[0];
-  }, [warehouseBreakdown, compareHubA]);
-
-  const hubBData = useMemo(() => {
-    if (warehouseBreakdown.length < 2) return null;
-    const targetId = compareHubB || warehouseBreakdown[1]?.id;
-    return warehouseBreakdown.find(w => w.id === targetId) || warehouseBreakdown[1];
-  }, [warehouseBreakdown, compareHubB]);
+  // Total Settled Driver Payouts
+  const totalDriverWagesSettled = useMemo(() => {
+    return Object.values(driverDailyPayouts).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  }, [driverDailyPayouts]);
 
   // Handle Rider Cash Reconcile
   const handleReconcileRider = async (rider) => {
@@ -256,8 +300,8 @@ export default function ExecutiveMisPage() {
       await reconcileMutation.mutateAsync({
         riderPhone: rider.riderPhone,
         amountSettled: rider.cashInTransit,
-        settledBy: 'Super Admin Operations Desk',
-        notes: `Reconciled from Executive Command Center for ${rider.riderName}`,
+        settledBy: 'Warehouse Operations Desk',
+        notes: `Reconciled from Executive MIS for ${rider.riderName}`,
       });
       showToast(`Settled ₹${rider.cashInTransit.toLocaleString('en-IN')} for ${rider.riderName} into Hub Vault!`, 'success');
       refetch();
@@ -268,65 +312,91 @@ export default function ExecutiveMisPage() {
     }
   };
 
-  // CSV Export with ALL rich product details
+  // CSV Export for Statutory Audit & Chartered Accountant Review
   const handleExportCSV = () => {
     const headers = [
-      'Product ID',
+      'Product SKU Code',
       'Produce Name',
-      'Kannada Name',
+      'Regional Language',
       'Category',
       'Unit',
-      'Mandi Sourcing Rate (₹)',
-      'Retail Price (₹)',
-      'Market Benchmark (₹)',
-      'Margin Spread (₹)',
-      'Margin Spread %',
-      'Sourced Qty (Kg)',
-      'Sold Qty (Kg)',
-      'Consumer Revenue (₹)',
-      'Profit Contribution (₹)',
-      'Origin Mandi Yard',
-      'Shelf Life',
-      'Stock Status'
+      'Inward Bought Qty',
+      'Wholesale Purchase Rate (₹)',
+      'Total Purchase Cost (₹)',
+      'Outward Sold Qty',
+      'Selling Rate (₹)',
+      'Total Sales Revenue (₹)',
+      'Wastage / Unsold Qty',
+      'Gross Profit Spread (₹)',
+      'Gross Margin %',
+      'Sourcing Origin',
+      'Shelf Life'
     ];
     
-    const rows = filteredProducts.map(p => [
-      `"${p.id || ''}"`,
-      `"${p.name || ''}"`,
-      `"${p.kannadaName || ''}"`,
-      `"${p.category || ''}"`,
-      `"${p.unit || ''}"`,
-      p.sourcingRatePerKg,
-      p.sellingRatePerKg,
-      p.retailMarketPrice || p.sellingRatePerKg,
-      p.marginSpreadPerKg,
-      `${p.marginPercent}%`,
-      p.sourcedQtyKg,
-      p.soldQtyKg,
-      p.revenue,
-      p.netProfitContribution,
-      `"${p.origin || ''}"`,
-      `"${p.shelfLife || ''}"`,
-      p.inStock ? 'IN_STOCK' : 'OUT_OF_STOCK'
+    const rows = filteredProducts.map(p => {
+      const bQty = p.boughtQtyKg !== undefined ? p.boughtQtyKg : (p.sourcedQtyKg || 0);
+      const bRate = p.purchaseRatePerKg !== undefined ? p.purchaseRatePerKg : (p.sourcingRatePerKg || 0);
+      const bCost = p.purchaseCost !== undefined ? p.purchaseCost : Math.round(bQty * bRate);
+      const sQty = p.soldQtyKg || 0;
+      const sRev = p.revenue || 0;
+      const margin = p.netProfitContribution !== undefined ? p.netProfitContribution : Math.round(sRev - (sQty * bRate));
+      const wQty = p.wastageQtyKg !== undefined ? p.wastageQtyKg : Math.max(0, Number((bQty - sQty).toFixed(1)));
+
+      return [
+        `"${p.id || ''}"`,
+        `"${p.name || ''}"`,
+        `"${p.kannadaName || ''}"`,
+        `"${p.category || ''}"`,
+        `"${p.unit || ''}"`,
+        bQty,
+        bRate.toFixed(2),
+        bCost,
+        sQty,
+        (p.sellingRatePerKg || 0).toFixed(2),
+        sRev,
+        wQty,
+        margin,
+        `${(p.marginPercent || 0).toFixed(1)}%`,
+        `"${p.origin || 'Direct Farm Intake'}"`,
+        `"${p.shelfLife || '3-5 Days'}"`
+      ];
+    });
+
+    // Add Summary Totals Row at the bottom
+    rows.push([
+      '"TOTAL SUMMARY"',
+      `"${filteredProducts.length} Items"`,
+      '""',
+      '""',
+      '""',
+      stockSummary.totalBoughtQty,
+      '""',
+      stockSummary.totalPurchaseCost,
+      stockSummary.totalSoldQty,
+      '""',
+      stockSummary.totalSalesRevenue,
+      stockSummary.totalWastageQty,
+      stockSummary.totalGrossMargin,
+      `${stockSummary.avgMarginPct}%`,
+      '""',
+      '""'
     ]);
 
     const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Freshioz_MIS_Report_${selectedWarehouseId}_${range}_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `Freshioz_Statutory_Stock_Ledger_${selectedWarehouseId}_${range}_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    showToast(`Exported report to CSV!`, 'success');
   };
 
-  // Close or navigate back
   const handleClose = () => {
-    if (window.opener && !window.opener.closed) {
-      window.close();
+    if (window.history.length > 1) {
+      navigate(-1);
     } else {
-      navigate('/dashboard');
+      navigate('/orders-fulfillment');
     }
   };
 
@@ -340,7 +410,7 @@ export default function ExecutiveMisPage() {
       boxSizing: 'border-box',
     }}>
       {/* =========================================================================
-          TOP COMMAND HEADER (WITH OFFICIAL FRESHIOZ BRAND IDENTITY)
+          TOP COMMAND HEADER (STATUTORY AUDIT & EXECUTIVE DESK)
          ========================================================================= */}
       <header style={{
         display: 'flex',
@@ -353,19 +423,18 @@ export default function ExecutiveMisPage() {
         marginBottom: '24px',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          {/* Official Freshioz Logo */}
           <FreshiozLogo height={44} showTagline={false} />
 
           <div style={{ borderLeft: `1.5px solid ${C.border}`, paddingLeft: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               <h1 style={{
                 margin: 0,
-                fontSize: '21px',
-                fontWeight: 800,
+                fontSize: '20px',
+                fontWeight: 900,
                 color: C.spruce,
                 letterSpacing: '-0.02em',
               }}>
-                Executive MIS & Cash Flow Command Center
+                Executive Financial MIS & Statutory Audit Ledger
               </h1>
               <span style={{
                 background: C.spruceSurface,
@@ -378,7 +447,7 @@ export default function ExecutiveMisPage() {
                 letterSpacing: '0.04em',
                 textTransform: 'uppercase',
               }}>
-                Super Admin Privilege
+                Chartered Accountant (CA) Ready
               </span>
             </div>
             <p style={{
@@ -386,7 +455,7 @@ export default function ExecutiveMisPage() {
               fontSize: '12.5px',
               color: C.textMuted,
             }}>
-              Active Scope: <strong style={{ color: C.spruce }}>{activeWarehouseName}</strong> • {productEconomics.length} Catalog Items • Zero-Leakage Field Cash
+              Scope: <strong style={{ color: C.spruce }}>{activeWarehouseName}</strong> • Inward Purchases, Outward Sales, Physical Stock & Cash Reconciliation
             </p>
           </div>
         </div>
@@ -409,7 +478,6 @@ export default function ExecutiveMisPage() {
               fontWeight: 700,
               cursor: 'pointer',
               boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-              transition: 'background 0.2s',
             }}
             title="Refresh analytics data"
           >
@@ -433,10 +501,10 @@ export default function ExecutiveMisPage() {
               cursor: 'pointer',
               boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
             }}
-            title="Export CSV of detailed SKU unit economics"
+            title="Export CSV of stock ledger and margins"
           >
             <Download size={14} color="#334155" />
-            <span>Export Excel</span>
+            <span>Export Stock Register</span>
           </button>
 
           <button
@@ -455,10 +523,10 @@ export default function ExecutiveMisPage() {
               cursor: 'pointer',
               boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
             }}
-            title="Print PDF report"
+            title="Print PDF audit report"
           >
             <Printer size={14} color="#334155" />
-            <span>Print PDF</span>
+            <span>Print Audit Report</span>
           </button>
 
           <button
@@ -476,44 +544,32 @@ export default function ExecutiveMisPage() {
               fontWeight: 700,
               cursor: 'pointer',
             }}
-            title="Return to Ops Desk or Close Window"
           >
-            <X size={15} />
-            <span>Back to Ops Desk</span>
+            <X size={14} />
+            <span>Close Desk</span>
           </button>
         </div>
       </header>
 
       {/* =========================================================================
-          WAREHOUSE HUB & TIME HORIZON COMMAND BAR
+          CONTROL & AUDIT SCOPE BAR
          ========================================================================= */}
       <div style={{
         display: 'flex',
         flexWrap: 'wrap',
-        justifyContent: 'space-between',
         alignItems: 'center',
+        justifyContent: 'space-between',
         gap: '14px',
-        background: C.panel,
-        padding: '12px 18px',
-        borderRadius: '12px',
+        background: '#F8FAFC',
         border: `1.5px solid ${C.border}`,
-        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+        borderRadius: '12px',
+        padding: '12px 18px',
         marginBottom: '24px',
       }}>
-        {/* Left Side: Warehouse Hub Dropdown + Time Horizon Buttons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          
-          {/* Dynamic Warehouse Hub Selector */}
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            background: '#FFFFFF',
-            border: `1.5px solid ${selectedWarehouseId !== 'ALL' ? C.spruce : C.border}`,
-            borderRadius: '8px',
-            padding: '6px 12px',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
-          }}>
+        {/* Left Controls: Warehouse + Date Horizon Filter */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+          {/* Warehouse Selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Warehouse size={15} color={C.spruce} />
             <select
               value={selectedWarehouseId}
@@ -607,20 +663,20 @@ export default function ExecutiveMisPage() {
 
         {/* Right Side: Active Scope Badge */}
         <div style={{ color: C.spruce, fontSize: '12.5px', fontWeight: 800 }}>
-          Period: <span style={{ color: C.citrusDark }}>{misData?.period?.label || 'Today (Live)'}</span>
+          Audit Period: <span style={{ color: C.citrusDark }}>{misData?.period?.label || 'Today (Live)'}</span>
         </div>
       </div>
 
       {/* =========================================================================
-          5 HERO KPI CARDS (DYNAMIC TO SELECTED WAREHOUSE & TIME HORIZON)
+          5 EXECUTIVE FINANCIAL KPI CARDS (AUDITED STATUTORY NUMBERS)
          ========================================================================= */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
         gap: '16px',
         marginBottom: '28px',
       }}>
-        {/* KPI 1: Customer Inflow (GMV) */}
+        {/* KPI 1: Gross Sales Revenue */}
         <div style={{
           background: C.panel,
           border: `1.5px solid ${C.border}`,
@@ -633,7 +689,7 @@ export default function ExecutiveMisPage() {
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: C.spruce }} />
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
             <span style={{ fontSize: '12px', fontWeight: 800, color: C.spruce, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Customer Inflow (GMV)
+              Gross Sales Revenue
             </span>
             <div style={{ padding: '6px', borderRadius: '8px', background: C.spruceSurface, color: C.spruce }}>
               <IndianRupee size={16} />
@@ -643,22 +699,22 @@ export default function ExecutiveMisPage() {
             ₹{kpis.totalGrossInflow.toLocaleString('en-IN')}
           </div>
           <div style={{ fontSize: '12px', color: C.textMuted, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span><strong>{kpis.totalOrdersCount}</strong> Live Orders</span>
+            <span><strong>{kpis.totalOrdersCount}</strong> Fulfilled Orders</span>
             {kpis.cancelledOrdersCount > 0 ? (
               <span style={{ color: C.rose, fontWeight: 700, fontSize: '11px', background: C.roseSurface, padding: '1px 6px', borderRadius: '4px', border: `1px solid ${C.roseBorder}` }}>
                 {kpis.cancelledOrdersCount} Cancelled (-₹{kpis.cancelledRevenue.toLocaleString('en-IN')})
               </span>
             ) : (
-              <span style={{ color: C.spruce, fontWeight: 800 }}>Realized Net</span>
+              <span style={{ color: C.spruce, fontWeight: 800 }}>Net Realized</span>
             )}
           </div>
           <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: `1px solid ${C.borderLight}`, fontSize: '11px', color: C.textMuted, display: 'flex', justifyContent: 'space-between' }}>
             <span>Billing: ₹{kpis.grossBillingValue.toLocaleString('en-IN')}</span>
-            <span>Bulk Savings: -₹{kpis.bulkDiscountSavings.toLocaleString('en-IN')}</span>
+            <span>Discounts: -₹{kpis.bulkDiscountSavings.toLocaleString('en-IN')}</span>
           </div>
         </div>
 
-        {/* KPI 2: Mandi & Sourcing Outflow */}
+        {/* KPI 2: Wholesale Purchases / Cost of Goods Sourced */}
         <div style={{
           background: C.panel,
           border: `1.5px solid ${C.border}`,
@@ -671,26 +727,26 @@ export default function ExecutiveMisPage() {
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: C.citrus }} />
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
             <span style={{ fontSize: '12px', fontWeight: 800, color: C.citrusDark, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Mandi Sourcing Outflow
+              Wholesale Sourcing (COGS)
             </span>
             <div style={{ padding: '6px', borderRadius: '8px', background: C.citrusSurface, color: C.citrus }}>
               <Truck size={16} />
             </div>
           </div>
           <div style={{ fontSize: '26px', fontWeight: 900, color: C.text, marginBottom: '6px' }}>
-            ₹{kpis.totalMandiOutflow.toLocaleString('en-IN')}
+            ₹{(kpis.wholesalePurchasesTotal || kpis.totalMandiOutflow).toLocaleString('en-IN')}
           </div>
           <div style={{ fontSize: '12px', color: C.textMuted, display: 'flex', justifyContent: 'space-between' }}>
-            <span><strong>{kpis.procurementBillsCount}</strong> APMC Mandi Bills</span>
-            <span style={{ color: C.citrusDark, fontWeight: 800 }}>Wholesale Cost</span>
+            <span><strong>{kpis.procurementBillsCount}</strong> Inward Consignments</span>
+            <span style={{ color: C.citrusDark, fontWeight: 800 }}>Direct Cost</span>
           </div>
           <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: `1px solid ${C.borderLight}`, fontSize: '11px', color: C.textMuted, display: 'flex', justifyContent: 'space-between' }}>
             <span>Produce: ₹{kpis.produceProcuredAmount.toLocaleString('en-IN')}</span>
-            <span>Freight: ₹{kpis.freightLogisticsAmount.toLocaleString('en-IN')}</span>
+            <span>Inward Freight: ₹{kpis.freightLogisticsAmount.toLocaleString('en-IN')}</span>
           </div>
         </div>
 
-        {/* KPI 3: Net Operating Spread */}
+        {/* KPI 3: Gross Trading Profit */}
         <div style={{
           background: C.panel,
           border: `1.5px solid ${C.border}`,
@@ -703,26 +759,56 @@ export default function ExecutiveMisPage() {
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: C.emerald }} />
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
             <span style={{ fontSize: '12px', fontWeight: 800, color: C.emerald, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Net Operating Spread
+              Gross Trading Profit
             </span>
             <div style={{ padding: '6px', borderRadius: '8px', background: C.emeraldSurface, color: C.emerald }}>
               <Scale size={16} />
             </div>
           </div>
           <div style={{ fontSize: '26px', fontWeight: 900, color: C.emerald, marginBottom: '6px' }}>
+            ₹{kpis.grossMarginSpread.toLocaleString('en-IN')}
+          </div>
+          <div style={{ fontSize: '12px', color: C.textMuted, display: 'flex', justifyContent: 'space-between' }}>
+            <span>Gross Margin: <strong style={{ color: C.emerald }}>{kpis.grossMarginPercent}%</strong></span>
+            <span>Volume: <strong>{kpis.totalProduceDispatchedKg} kg</strong></span>
+          </div>
+          <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: `1px solid ${C.borderLight}`, fontSize: '11px', color: C.textMuted }}>
+            Sales Revenue minus Direct Wholesale Produce Cost
+          </div>
+        </div>
+
+        {/* KPI 4: Net Operating Profit */}
+        <div style={{
+          background: C.panel,
+          border: `1.5px solid ${C.border}`,
+          borderRadius: '12px',
+          padding: '18px 20px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+          position: 'relative',
+          overflow: 'hidden',
+        }}>
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: '#3B82F6' }} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 800, color: '#1D4ED8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Net Operating Profit
+            </span>
+            <div style={{ padding: '6px', borderRadius: '8px', background: '#EFF6FF', color: '#2563EB' }}>
+              <TrendingUp size={16} />
+            </div>
+          </div>
+          <div style={{ fontSize: '26px', fontWeight: 900, color: '#1E293B', marginBottom: '6px' }}>
             ₹{kpis.netOperatingProfit.toLocaleString('en-IN')}
           </div>
           <div style={{ fontSize: '12px', color: C.textMuted, display: 'flex', justifyContent: 'space-between' }}>
-            <span>Margin: <strong style={{ color: C.emerald }}>{kpis.grossMarginPercent}%</strong></span>
-            <span>Net Profit: <strong>{kpis.netProfitPercent}%</strong></span>
+            <span>Net Margin: <strong style={{ color: '#1D4ED8' }}>{kpis.netProfitPercent}%</strong></span>
+            <span>Commissions: ₹{kpis.societyCommissionsEarned.toLocaleString('en-IN')}</span>
           </div>
-          <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: `1px solid ${C.borderLight}`, fontSize: '11px', color: C.textMuted, display: 'flex', justifyContent: 'space-between' }}>
-            <span>Gross Spread: ₹{kpis.grossMarginSpread.toLocaleString('en-IN')}</span>
-            <span>Society Comm: -₹{kpis.societyCommissionsEarned.toLocaleString('en-IN')}</span>
+          <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: `1px solid ${C.borderLight}`, fontSize: '11px', color: C.textMuted }}>
+            Trading Profit after Driver Wages & Society Commissions
           </div>
         </div>
 
-        {/* KPI 4: Dispatched Volume */}
+        {/* KPI 5: Field Cash Collected & Vault Inflow */}
         <div style={{
           background: C.panel,
           border: `1.5px solid ${C.border}`,
@@ -732,44 +818,12 @@ export default function ExecutiveMisPage() {
           position: 'relative',
           overflow: 'hidden',
         }}>
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: C.amber }} />
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: kpis.cashInTransitWithRiders > 0 ? C.rose : C.emerald }} />
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-            <span style={{ fontSize: '12px', fontWeight: 800, color: C.amber, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Produce Dispatched
+            <span style={{ fontSize: '12px', fontWeight: 800, color: C.spruce, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Field Cash Vault Inflow
             </span>
-            <div style={{ padding: '6px', borderRadius: '8px', background: C.amberSurface, color: C.amber }}>
-              <Layers size={16} />
-            </div>
-          </div>
-          <div style={{ fontSize: '26px', fontWeight: 900, color: C.text, marginBottom: '6px' }}>
-            {kpis.totalProduceDispatchedKg.toLocaleString('en-IN')} <span style={{ fontSize: '16px', fontWeight: 700, color: C.textMuted }}>Kg</span>
-          </div>
-          <div style={{ fontSize: '12px', color: C.textMuted, display: 'flex', justifyContent: 'space-between' }}>
-            <span>Volume Handled</span>
-            <span style={{ color: C.amber, fontWeight: 800 }}>Hub Lots</span>
-          </div>
-          <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: `1px solid ${C.borderLight}`, fontSize: '11px', color: C.textMuted, display: 'flex', justifyContent: 'space-between' }}>
-            <span>Wholesale Lots Dispatched</span>
-            <span>Morning Fresh Slot</span>
-          </div>
-        </div>
-
-        {/* KPI 5: Field Cash Collected */}
-        <div style={{
-          background: C.panel,
-          border: `1.5px solid ${C.border}`,
-          borderRadius: '12px',
-          padding: '18px 20px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-          position: 'relative',
-          overflow: 'hidden',
-        }}>
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '4px', background: '#0284C7' }} />
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-            <span style={{ fontSize: '12px', fontWeight: 800, color: '#0284C7', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Doorstep Cash (COD)
-            </span>
-            <div style={{ padding: '6px', borderRadius: '8px', background: '#E0F2FE', color: '#0284C7' }}>
+            <div style={{ padding: '6px', borderRadius: '8px', background: C.spruceSurface, color: C.spruce }}>
               <Wallet size={16} />
             </div>
           </div>
@@ -777,33 +831,32 @@ export default function ExecutiveMisPage() {
             ₹{kpis.doorstepCashCollected.toLocaleString('en-IN')}
           </div>
           <div style={{ fontSize: '12px', color: C.textMuted, display: 'flex', justifyContent: 'space-between' }}>
-            <span>Settled: <strong>₹{kpis.cashSettledToHubVault.toLocaleString('en-IN')}</strong></span>
-            <span style={{ color: kpis.cashInTransitWithRiders > 0 ? C.rose : C.emerald, fontWeight: 800 }}>
-              {kpis.cashInTransitWithRiders > 0 ? `₹${kpis.cashInTransitWithRiders} In Transit` : '✓ Reconciled'}
+            <span>Vault Settled: <strong style={{ color: C.emerald }}>₹{kpis.cashSettledToHubVault.toLocaleString('en-IN')}</strong></span>
+            <span style={{ color: kpis.cashInTransitWithRiders > 0 ? C.rose : C.emerald, fontWeight: 700 }}>
+              {kpis.cashInTransitWithRiders > 0 ? `In Transit: ₹${kpis.cashInTransitWithRiders}` : '✓ Reconciled'}
             </span>
           </div>
-          <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: `1px solid ${C.borderLight}`, fontSize: '11px', color: C.textMuted, display: 'flex', justifyContent: 'space-between' }}>
-            <span>Hub Vault Status</span>
-            <span>Zero Cash Leakage</span>
+          <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: `1px solid ${C.borderLight}`, fontSize: '11px', color: C.textMuted }}>
+            Cash collected at doorstep by delivery partners
           </div>
         </div>
       </div>
 
       {/* =========================================================================
-          FOUR EXECUTIVE COMMAND TABS
+          STATUTORY AUDIT & EXECUTIVE NAVIGATION TABS
          ========================================================================= */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
-        gap: '12px',
+        gap: '4px',
         borderBottom: `2px solid ${C.border}`,
-        marginBottom: '22px',
+        marginBottom: '24px',
         paddingBottom: '2px',
         flexWrap: 'wrap'
       }}>
-        {/* Tab 1: Produce SKU Economics */}
+        {/* Tab 1: Product Stock & Trading Ledger */}
         <button
-          onClick={() => setActiveTab('economics')}
+          onClick={() => setActiveTab('stockLedger')}
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -812,8 +865,8 @@ export default function ExecutiveMisPage() {
             fontSize: '13.5px',
             fontWeight: 800,
             cursor: 'pointer',
-            borderBottom: activeTab === 'economics' ? `3px solid ${C.spruce}` : '3px solid transparent',
-            color: activeTab === 'economics' ? C.spruce : C.textMuted,
+            borderBottom: activeTab === 'stockLedger' ? `3px solid ${C.spruce}` : '3px solid transparent',
+            color: activeTab === 'stockLedger' ? C.spruce : C.textMuted,
             background: 'none',
             borderTop: 'none',
             borderLeft: 'none',
@@ -821,11 +874,107 @@ export default function ExecutiveMisPage() {
             transition: 'color 0.15s ease',
           }}
         >
-          <Scale size={16} color={activeTab === 'economics' ? C.spruce : C.textMuted} />
-          <span>Produce SKU Economics & Margins ({productEconomics.length} Active SKUs)</span>
+          <Scale size={16} color={activeTab === 'stockLedger' ? C.spruce : C.textMuted} />
+          <span>Produce Stock & Trading Ledger ({productEconomics.length} SKUs)</span>
         </button>
 
-        {/* Tab 2: Warehouse Hub Performance & Comparison */}
+        {/* Tab 2: Financial P&L Statement */}
+        <button
+          onClick={() => setActiveTab('pnl')}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '10px 18px',
+            fontSize: '13.5px',
+            fontWeight: 800,
+            cursor: 'pointer',
+            borderBottom: activeTab === 'pnl' ? `3px solid ${C.spruce}` : '3px solid transparent',
+            color: activeTab === 'pnl' ? C.spruce : C.textMuted,
+            background: 'none',
+            borderTop: 'none',
+            borderLeft: 'none',
+            borderRight: 'none',
+            transition: 'color 0.15s ease',
+          }}
+        >
+          <FileText size={16} color={activeTab === 'pnl' ? C.spruce : C.textMuted} />
+          <span>Financial P&L Statement (CA Review)</span>
+        </button>
+
+        {/* Tab 3: Delivery Partner Wage Ledger */}
+        <button
+          onClick={() => setActiveTab('driverLedger')}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '10px 18px',
+            fontSize: '13.5px',
+            fontWeight: 800,
+            cursor: 'pointer',
+            borderBottom: activeTab === 'driverLedger' ? `3px solid ${C.citrusDark}` : '3px solid transparent',
+            color: activeTab === 'driverLedger' ? C.citrusDark : C.textMuted,
+            background: 'none',
+            borderTop: 'none',
+            borderLeft: 'none',
+            borderRight: 'none',
+            transition: 'color 0.15s ease',
+          }}
+        >
+          <Truck size={16} color={activeTab === 'driverLedger' ? C.citrusDark : C.textMuted} />
+          <span>Delivery Partner Daily Wage Ledger</span>
+        </button>
+
+        {/* Tab 4: Field Cash & Vault Audit */}
+        <button
+          onClick={() => setActiveTab('cashAudit')}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '10px 18px',
+            fontSize: '13.5px',
+            fontWeight: 800,
+            cursor: 'pointer',
+            borderBottom: activeTab === 'cashAudit' ? `3px solid ${C.emerald}` : '3px solid transparent',
+            color: activeTab === 'cashAudit' ? C.emerald : C.textMuted,
+            background: 'none',
+            borderTop: 'none',
+            borderLeft: 'none',
+            borderRight: 'none',
+            transition: 'color 0.15s ease',
+          }}
+        >
+          <ShieldCheck size={16} color={activeTab === 'cashAudit' ? C.emerald : C.textMuted} />
+          <span>Field Cash & Vault Reconciliation</span>
+        </button>
+
+        {/* Tab 5: Cancelled Orders & Wastage Audit */}
+        <button
+          onClick={() => setActiveTab('cancellationsAudit')}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '10px 18px',
+            fontSize: '13.5px',
+            fontWeight: 800,
+            cursor: 'pointer',
+            borderBottom: activeTab === 'cancellationsAudit' ? `3px solid ${C.rose}` : '3px solid transparent',
+            color: activeTab === 'cancellationsAudit' ? C.rose : C.textMuted,
+            background: 'none',
+            borderTop: 'none',
+            borderLeft: 'none',
+            borderRight: 'none',
+            transition: 'color 0.15s ease',
+          }}
+        >
+          <RotateCcw size={16} color={activeTab === 'cancellationsAudit' ? C.rose : C.textMuted} />
+          <span>Cancelled Orders & Wastage Audit ({cancelledOrders.length})</span>
+        </button>
+
+        {/* Tab 6: Warehouse Hub Performance */}
         <button
           onClick={() => setActiveTab('warehouseCompare')}
           style={{
@@ -846,62 +995,15 @@ export default function ExecutiveMisPage() {
           }}
         >
           <Warehouse size={16} color={activeTab === 'warehouseCompare' ? C.spruce : C.textMuted} />
-          <span>Warehouse Hubs & Comparison ({warehouseList.length} Hubs)</span>
-        </button>
-
-        {/* Tab 3: Month-over-Month & Annual Trends */}
-        <button
-          onClick={() => setActiveTab('monthCompare')}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '10px 18px',
-            fontSize: '13.5px',
-            fontWeight: 800,
-            cursor: 'pointer',
-            borderBottom: activeTab === 'monthCompare' ? `3px solid ${C.spruce}` : '3px solid transparent',
-            color: activeTab === 'monthCompare' ? C.spruce : C.textMuted,
-            background: 'none',
-            borderTop: 'none',
-            borderLeft: 'none',
-            borderRight: 'none',
-            transition: 'color 0.15s ease',
-          }}
-        >
-          <Calendar size={16} color={activeTab === 'monthCompare' ? C.spruce : C.textMuted} />
-          <span>Month-over-Month & Seasonal Trends</span>
-        </button>
-
-        {/* Tab 4: Field Cash & Rider Vault Settlement */}
-        <button
-          onClick={() => setActiveTab('fieldCash')}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '10px 18px',
-            fontSize: '13.5px',
-            fontWeight: 800,
-            cursor: 'pointer',
-            borderBottom: activeTab === 'fieldCash' ? `3px solid ${C.citrus}` : '3px solid transparent',
-            color: activeTab === 'fieldCash' ? C.citrusDark : C.textMuted,
-            background: 'none',
-            borderTop: 'none',
-            borderLeft: 'none',
-            borderRight: 'none',
-            transition: 'color 0.15s ease',
-          }}
-        >
-          <ShieldCheck size={16} color={activeTab === 'fieldCash' ? C.citrusDark : C.textMuted} />
-          <span>Field Cash & Rider Vault Settlement ({riderLedger.length})</span>
+          <span>Warehouse Hubs ({warehouseList.length})</span>
         </button>
       </div>
 
       {/* =========================================================================
-          TAB 1: SKU UNIT ECONOMICS TABLE
+          TAB 1: COMPLETE PRODUCT STOCK & TRADING RECONCILIATION LEDGER
+          ("How much bought, how much sold, and each product")
          ========================================================================= */}
-      {activeTab === 'economics' && (
+      {activeTab === 'stockLedger' && (
         <div style={{
           background: C.panel,
           border: `1.5px solid ${C.border}`,
@@ -917,7 +1019,7 @@ export default function ExecutiveMisPage() {
                 <Search size={15} style={{ position: 'absolute', left: '12px', top: '10px', color: C.textMuted }} />
                 <input
                   type="text"
-                  placeholder="Search by English name, Kannada name (ಟೊಮೆಟೊ), SKU..."
+                  placeholder="Search produce name, Kannada name, SKU code..."
                   value={skuSearch}
                   onChange={(e) => setSkuSearch(e.target.value)}
                   style={{
@@ -986,593 +1088,527 @@ export default function ExecutiveMisPage() {
             </div>
           </div>
 
-          {/* Table */}
+          {/* Complete Itemized Stock & Trading Table */}
           <div style={{ overflowX: 'auto', borderRadius: '8px', border: `1.5px solid ${C.border}` }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12.5px' }}>
               <thead>
                 <tr style={{ background: '#F8FAFC', color: C.spruce, textTransform: 'uppercase', fontSize: '11px', letterSpacing: '0.04em' }}>
-                  <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, fontWeight: 800 }}>Produce Item (SKU & Origin)</th>
-                  <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, fontWeight: 800 }}>Category & Unit</th>
-                  <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'right', fontWeight: 800 }}>Mandi Sourcing (₹)</th>
-                  <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'right', fontWeight: 800 }}>Retail Rate (₹)</th>
-                  <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'right', fontWeight: 800 }}>Spread (₹/unit)</th>
-                  <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'center', fontWeight: 800 }}>Margin %</th>
-                  <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'right', fontWeight: 800 }}>Dispatched Volume</th>
-                  <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'right', fontWeight: 800 }}>Realized Revenue</th>
-                  <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'right', fontWeight: 800 }}>Profit Contribution</th>
-                  <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'center', fontWeight: 800 }}>Spec</th>
+                  <th style={{ padding: '12px 14px', borderBottom: `1.5px solid ${C.border}`, fontWeight: 800 }}>Produce Item & SKU</th>
+                  <th style={{ padding: '12px 14px', borderBottom: `1.5px solid ${C.border}`, fontWeight: 800 }}>Category & Unit</th>
+                  <th style={{ padding: '12px 14px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'right', fontWeight: 800, background: '#EFF6FF', color: '#1E40AF' }}>Inward Bought Qty</th>
+                  <th style={{ padding: '12px 14px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'right', fontWeight: 800, background: '#EFF6FF', color: '#1E40AF' }}>Purchase Rate</th>
+                  <th style={{ padding: '12px 14px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'right', fontWeight: 800, background: '#EFF6FF', color: '#1E40AF' }}>Total Purchase Cost</th>
+                  <th style={{ padding: '12px 14px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'right', fontWeight: 800, background: '#F0FDF4', color: '#166534' }}>Outward Sold Qty</th>
+                  <th style={{ padding: '12px 14px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'right', fontWeight: 800, background: '#F0FDF4', color: '#166534' }}>Selling Rate</th>
+                  <th style={{ padding: '12px 14px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'right', fontWeight: 800, background: '#F0FDF4', color: '#166534' }}>Total Sales Revenue</th>
+                  <th style={{ padding: '12px 14px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'right', fontWeight: 800, color: '#DC2626' }}>Wastage / Unsold</th>
+                  <th style={{ padding: '12px 14px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'right', fontWeight: 800 }}>Gross Margin (₹)</th>
+                  <th style={{ padding: '12px 14px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'center', fontWeight: 800 }}>Margin %</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredProducts.map((p, idx) => {
+                  const bQty = p.boughtQtyKg !== undefined ? p.boughtQtyKg : (p.sourcedQtyKg || 0);
+                  const bRate = p.purchaseRatePerKg !== undefined ? p.purchaseRatePerKg : (p.sourcingRatePerKg || 0);
+                  const bCost = p.purchaseCost !== undefined ? p.purchaseCost : Math.round(bQty * bRate);
+                  const sQty = p.soldQtyKg || 0;
+                  const sRev = p.revenue || 0;
+                  const margin = p.netProfitContribution !== undefined ? p.netProfitContribution : Math.round(sRev - (sQty * bRate));
+                  const wQty = p.wastageQtyKg !== undefined ? p.wastageQtyKg : Math.max(0, Number((bQty - sQty).toFixed(1)));
                   const isHighMargin = p.marginPercent >= 35;
                   const isThinMargin = p.marginPercent < 20;
 
                   return (
                     <tr
                       key={p.id || idx}
+                      onClick={() => setSelectedProduct(p)}
                       style={{
                         borderBottom: `1px solid ${C.border}`,
                         background: idx % 2 === 0 ? '#FFFFFF' : '#FAFAF9',
+                        cursor: 'pointer',
                         transition: 'background 0.15s ease',
                       }}
+                      title="Click to view full specifications"
                     >
-                      <td style={{ padding: '12px 16px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <div>
-                            <div style={{ fontWeight: 800, color: C.text, fontSize: '13.5px' }}>
-                              {p.name}
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px', flexWrap: 'wrap' }}>
-                              {p.kannadaName && (
-                                <span style={{ fontSize: '11px', color: C.spruce, fontWeight: 700, background: C.spruceSurface, padding: '1px 5px', borderRadius: '4px' }}>
-                                  {p.kannadaName}
-                                </span>
-                              )}
-                              <span style={{ fontSize: '11px', color: C.textMuted }}>
-                                📍 {p.origin || 'APMC Mandi'} • ⏱ {p.shelfLife || '3-5 Days'}
-                              </span>
-                            </div>
-                          </div>
+                      <td style={{ padding: '10px 14px' }}>
+                        <div style={{ fontWeight: 800, color: C.text, fontSize: '13px' }}>
+                          {p.name}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '11px', color: '#64748B', fontFamily: 'monospace' }}>
+                            {p.id}
+                          </span>
+                          {p.kannadaName && (
+                            <span style={{ fontSize: '11px', color: C.spruce, fontWeight: 700, background: C.spruceSurface, padding: '1px 5px', borderRadius: '4px' }}>
+                              {p.kannadaName}
+                            </span>
+                          )}
                         </div>
                       </td>
 
-                      <td style={{ padding: '12px 16px' }}>
+                      <td style={{ padding: '10px 14px' }}>
                         <div style={{ fontWeight: 700, color: C.text }}>{p.category}</div>
                         <div style={{ fontSize: '11px', color: C.textMuted }}>per {p.unit}</div>
                       </td>
 
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700, color: '#334155' }}>
-                        ₹{p.sourcingRatePerKg.toFixed(2)}
+                      {/* Inward Bought Qty */}
+                      <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, background: '#F8FAFC', color: '#1E40AF', fontFamily: 'monospace' }}>
+                        {bQty} {p.unit}
                       </td>
 
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 800, color: C.spruce }}>
-                        ₹{p.sellingRatePerKg.toFixed(2)}
+                      {/* Purchase Rate */}
+                      <td style={{ padding: '10px 14px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700, background: '#F8FAFC', color: '#1E40AF' }}>
+                        ₹{bRate.toFixed(2)}
                       </td>
 
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 800, color: C.emerald }}>
-                        +₹{p.marginSpreadPerKg.toFixed(2)}
+                      {/* Total Purchase Cost */}
+                      <td style={{ padding: '10px 14px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 800, background: '#F8FAFC', color: '#1E3A8A' }}>
+                        ₹{bCost.toLocaleString('en-IN')}
                       </td>
 
-                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                      {/* Outward Sold Qty */}
+                      <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 800, background: '#F0FDF4', color: '#166534', fontFamily: 'monospace' }}>
+                        {sQty} {p.unit}
+                      </td>
+
+                      {/* Selling Rate */}
+                      <td style={{ padding: '10px 14px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 800, background: '#F0FDF4', color: '#166534' }}>
+                        ₹{(p.sellingRatePerKg || 0).toFixed(2)}
+                      </td>
+
+                      {/* Total Sales Revenue */}
+                      <td style={{ padding: '10px 14px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 900, background: '#F0FDF4', color: C.spruce }}>
+                        ₹{sRev.toLocaleString('en-IN')}
+                      </td>
+
+                      {/* Wastage / Unsold */}
+                      <td style={{ padding: '10px 14px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 700, color: wQty > 0 ? '#DC2626' : '#64748B' }}>
+                        {wQty > 0 ? `${wQty} ${p.unit}` : '0'}
+                      </td>
+
+                      {/* Gross Margin */}
+                      <td style={{ padding: '10px 14px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 900, color: margin >= 0 ? C.emerald : C.rose }}>
+                        {margin >= 0 ? `+₹${margin.toLocaleString('en-IN')}` : `-₹${Math.abs(margin).toLocaleString('en-IN')}`}
+                      </td>
+
+                      {/* Margin % */}
+                      <td style={{ padding: '10px 14px', textAlign: 'center' }}>
                         <span style={{
                           display: 'inline-block',
                           padding: '3px 8px',
                           borderRadius: '6px',
-                          fontSize: '11.5px',
+                          fontSize: '11px',
                           fontWeight: 800,
                           background: isHighMargin ? C.emeraldSurface : (isThinMargin ? C.roseSurface : C.citrusSurface),
                           color: isHighMargin ? C.emerald : (isThinMargin ? C.rose : C.citrusDark),
                           border: `1px solid ${isHighMargin ? C.emeraldBorder : (isThinMargin ? C.roseBorder : C.citrusBorder)}`,
                         }}>
-                          {p.marginPercent.toFixed(1)}%
+                          {(p.marginPercent || 0).toFixed(1)}%
                         </span>
-                      </td>
-
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, color: C.text }}>
-                        {p.soldQtyKg} {p.unit}
-                      </td>
-
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: C.spruce }}>
-                        ₹{p.revenue.toLocaleString('en-IN')}
-                      </td>
-
-                      <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: C.emerald }}>
-                        ₹{p.netProfitContribution.toLocaleString('en-IN')}
-                      </td>
-
-                      <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                        <button
-                          onClick={() => setSelectedProduct(p)}
-                          style={{
-                            padding: '4px 8px',
-                            borderRadius: '6px',
-                            background: '#FFFFFF',
-                            border: `1px solid ${C.border}`,
-                            color: C.spruce,
-                            fontSize: '11px',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                          }}
-                        >
-                          Details
-                        </button>
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
+              
+              {/* STATUTORY AUDIT SUMMARY TOTALS ROW */}
+              <tfoot>
+                <tr style={{ background: '#F1F5F9', borderTop: `2px solid ${C.spruce}`, fontWeight: 900, fontSize: '12.5px', color: C.text }}>
+                  <td style={{ padding: '12px 14px' }}>
+                    TOTAL RECONCILIATION
+                  </td>
+                  <td style={{ padding: '12px 14px', color: C.textMuted }}>
+                    {filteredProducts.length} Items
+                  </td>
+                  <td style={{ padding: '12px 14px', textAlign: 'right', fontFamily: 'monospace', color: '#1E40AF', background: '#DBEAFE' }}>
+                    {stockSummary.totalBoughtQty.toLocaleString('en-IN')}
+                  </td>
+                  <td style={{ padding: '12px 14px', textAlign: 'right', background: '#DBEAFE', color: '#64748B' }}>
+                    —
+                  </td>
+                  <td style={{ padding: '12px 14px', textAlign: 'right', fontFamily: 'monospace', color: '#1E3A8A', background: '#DBEAFE' }}>
+                    ₹{stockSummary.totalPurchaseCost.toLocaleString('en-IN')}
+                  </td>
+                  <td style={{ padding: '12px 14px', textAlign: 'right', fontFamily: 'monospace', color: '#166534', background: '#DCFCE7' }}>
+                    {stockSummary.totalSoldQty.toLocaleString('en-IN')}
+                  </td>
+                  <td style={{ padding: '12px 14px', textAlign: 'right', background: '#DCFCE7', color: '#64748B' }}>
+                    —
+                  </td>
+                  <td style={{ padding: '12px 14px', textAlign: 'right', fontFamily: 'monospace', color: C.spruce, background: '#DCFCE7' }}>
+                    ₹{stockSummary.totalSalesRevenue.toLocaleString('en-IN')}
+                  </td>
+                  <td style={{ padding: '12px 14px', textAlign: 'right', fontFamily: 'monospace', color: '#DC2626' }}>
+                    {stockSummary.totalWastageQty.toLocaleString('en-IN')}
+                  </td>
+                  <td style={{ padding: '12px 14px', textAlign: 'right', fontFamily: 'monospace', color: C.emerald }}>
+                    +₹{stockSummary.totalGrossMargin.toLocaleString('en-IN')}
+                  </td>
+                  <td style={{ padding: '12px 14px', textAlign: 'center', color: C.emerald }}>
+                    {stockSummary.avgMarginPct}%
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         </div>
       )}
 
       {/* =========================================================================
-          TAB 2: WAREHOUSE HUB PERFORMANCE & COMPARISON
+          TAB 2: STATUTORY FINANCIAL P&L STATEMENT (CHARTERED ACCOUNTANT REVIEW)
          ========================================================================= */}
-      {activeTab === 'warehouseCompare' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          
-          {/* Header & Head-to-Head Hub Selector */}
-          <div style={{
-            background: C.panel,
-            border: `1.5px solid ${C.border}`,
-            borderRadius: '12px',
-            padding: '18px 22px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '16px'
-          }}>
+      {activeTab === 'pnl' && (
+        <div style={{
+          background: C.panel,
+          border: `1.5px solid ${C.border}`,
+          borderRadius: '12px',
+          padding: '24px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+          maxWidth: '960px',
+          margin: '0 auto'
+        }}>
+          <div style={{ borderBottom: `2px solid ${C.spruce}`, paddingBottom: '14px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <h2 style={{ fontSize: '17px', fontWeight: 800, color: C.spruce, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Warehouse size={19} color={C.spruce} />
-                <span>Warehouse Hub Network Performance & Benchmarking</span>
+              <h2 style={{ fontSize: '18px', fontWeight: 900, color: C.spruce, margin: 0 }}>
+                Income Statement / Operating P&L Ledger
               </h2>
-              <p style={{ fontSize: '12.5px', color: C.textMuted, margin: '4px 0 0' }}>
-                Comparative operational volume, APMC sourcing spend & fulfillment margin across all {warehouseList.length} hubs
-              </p>
-            </div>
-
-            {/* Hub vs Hub Comparison Dropdowns */}
-            {warehouseList.length >= 2 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#F8FAFC', padding: '6px 12px', borderRadius: '10px', border: `1px solid ${C.border}` }}>
-                <span style={{ fontSize: '12px', fontWeight: 800, color: C.textMuted }}>Compare:</span>
-                <select
-                  value={compareHubA || warehouseList[0]?.id}
-                  onChange={(e) => setCompareHubA(e.target.value)}
-                  style={{ padding: '4px 8px', borderRadius: '6px', border: `1px solid ${C.border}`, fontSize: '12px', fontWeight: 700, color: C.spruce }}
-                >
-                  {warehouseList.map(w => (
-                    <option key={w.id} value={w.id}>{w.name}</option>
-                  ))}
-                </select>
-                <span style={{ fontSize: '12px', fontWeight: 800, color: C.citrusDark }}>VS</span>
-                <select
-                  value={compareHubB || warehouseList[1]?.id}
-                  onChange={(e) => setCompareHubB(e.target.value)}
-                  style={{ padding: '4px 8px', borderRadius: '6px', border: `1px solid ${C.border}`, fontSize: '12px', fontWeight: 700, color: C.citrusDark }}
-                >
-                  {warehouseList.map(w => (
-                    <option key={w.id} value={w.id}>{w.name}</option>
-                  ))}
-                </select>
+              <div style={{ fontSize: '12px', color: C.textMuted, marginTop: '2px' }}>
+                Scope: {activeWarehouseName} • Period: {misData?.period?.label || 'Today (Live)'}
               </div>
-            )}
+            </div>
+            <button
+              type="button"
+              onClick={() => window.print()}
+              style={{ padding: '6px 14px', background: C.spruce, color: '#FFF', borderRadius: '6px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Printer size={14} />
+              <span>Print Statement</span>
+            </button>
           </div>
 
-          {/* All Hubs Metric Grid */}
-          {warehouseBreakdown.length > 0 ? (
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-              gap: '18px'
-            }}>
-              {warehouseBreakdown.map((wh) => (
-                <div
-                  key={wh.id}
-                  style={{
-                    background: C.panel,
-                    border: `1.5px solid ${C.border}`,
-                    borderRadius: '14px',
-                    padding: '20px',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    position: 'relative'
-                  }}
-                >
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontSize: '15px', fontWeight: 800, color: C.text }}>{wh.name}</span>
-                          <span style={{ fontSize: '10.5px', fontWeight: 800, background: C.spruceSurface, color: C.spruce, padding: '1px 6px', borderRadius: '4px' }}>
-                            {wh.code}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: '11.5px', color: C.textMuted, marginTop: '2px' }}>
-                          📍 {wh.location} • Cut-off {wh.cutoffTime}
-                        </div>
-                      </div>
-                      <div style={{ padding: '6px 10px', borderRadius: '8px', background: C.emeraldSurface, color: C.emerald, fontSize: '12px', fontWeight: 800 }}>
-                        {wh.marginPercent}% Spread
-                      </div>
-                    </div>
-
-                    {/* Financial Figures */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', margin: '14px 0', padding: '12px', background: '#F8FAFC', borderRadius: '10px' }}>
-                      <div>
-                        <div style={{ fontSize: '11px', color: C.textMuted, fontWeight: 700 }}>Realized Revenue</div>
-                        <div style={{ fontSize: '18px', fontWeight: 900, color: C.spruce }}>₹{wh.revenue.toLocaleString('en-IN')}</div>
-                        <div style={{ fontSize: '10.5px', color: C.textMuted }}>{wh.orderCount} orders</div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '11px', color: C.textMuted, fontWeight: 700 }}>Mandi Outflow</div>
-                        <div style={{ fontSize: '18px', fontWeight: 900, color: C.citrusDark }}>₹{wh.procurementSpend.toLocaleString('en-IN')}</div>
-                        <div style={{ fontSize: '10.5px', color: C.textMuted }}>lot sourcing</div>
-                      </div>
-                    </div>
-
-                    {/* Operational Details */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: C.textMuted }}>
-                      <span>Dispatched Volume: <strong style={{ color: C.text }}>{wh.volumeDispatchedKg} Kg</strong></span>
-                      <span>Drop Points: <strong style={{ color: C.text }}>{wh.societiesCount} Communities</strong></span>
-                    </div>
-                  </div>
-
-                  <div style={{ marginTop: '16px', paddingTop: '10px', borderTop: `1px solid ${C.borderLight}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '11.5px', color: C.textMuted }}>Capacity: {wh.capacityTons} Tons</span>
-                    <button
-                      onClick={() => {
-                        setSelectedWarehouseId(wh.id);
-                        setActiveTab('economics');
-                        showToast(`Filtered report to ${wh.name}`, 'info');
-                      }}
-                      style={{
-                        padding: '4px 10px',
-                        borderRadius: '6px',
-                        background: '#FFFFFF',
-                        border: `1px solid ${C.border}`,
-                        color: C.spruce,
-                        fontSize: '11.5px',
-                        fontWeight: 700,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      Filter Analytics &rarr;
-                    </button>
-                  </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            {/* PART 1: REVENUE FROM OPERATIONS */}
+            <div style={{ border: `1px solid ${C.border}`, borderRadius: '10px', overflow: 'hidden' }}>
+              <div style={{ background: '#F8FAFC', padding: '10px 16px', fontWeight: 800, fontSize: '13px', color: C.spruce, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                1. Revenue from Operations
+              </div>
+              <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: C.text }}>
+                  <span>Gross Produce Invoiced Billing to Residents:</span>
+                  <span style={{ fontWeight: 700, fontFamily: 'monospace' }}>₹{kpis.grossBillingValue.toLocaleString('en-IN')}</span>
                 </div>
-              ))}
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#DC2626' }}>
+                  <span>Less: Customer Bulk Savings & Promotions:</span>
+                  <span style={{ fontWeight: 700, fontFamily: 'monospace' }}>-₹{kpis.bulkDiscountSavings.toLocaleString('en-IN')}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#2563EB' }}>
+                  <span>Add: Doorstep Resident Delivery Fees:</span>
+                  <span style={{ fontWeight: 700, fontFamily: 'monospace' }}>+₹{kpis.deliveryFeesCollected.toLocaleString('en-IN')}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: `1.5px solid ${C.border}`, paddingTop: '8px', fontWeight: 900, color: C.spruce, fontSize: '14px' }}>
+                  <span>Net Revenue from Operations (A):</span>
+                  <span style={{ fontFamily: 'monospace' }}>₹{kpis.totalGrossInflow.toLocaleString('en-IN')}</span>
+                </div>
+              </div>
             </div>
-          ) : (
-            <div style={{
-              padding: '40px 24px',
-              textAlign: 'center',
-              background: '#FFFFFF',
-              borderRadius: '16px',
-              border: `1.5px dashed ${C.border}`
-            }}>
-              <Warehouse size={36} color="#94A3B8" style={{ margin: '0 auto 12px' }} />
-              <h3 style={{ fontSize: '16px', fontWeight: 800, color: C.text, margin: '0 0 6px' }}>
-                0 Warehouse Hubs Currently Configured
-              </h3>
-              <p style={{ fontSize: '13px', color: C.textMuted, maxWidth: '460px', margin: '0 auto 18px', lineHeight: 1.4 }}>
-                Add your sorting hubs and cold storage facilities in Bangalore to enable multi-warehouse comparison, inventory lot tracking, and regional dispatch audits.
+
+            {/* PART 2: COST OF GOODS SOURCED (COGS) */}
+            <div style={{ border: `1px solid ${C.border}`, borderRadius: '10px', overflow: 'hidden' }}>
+              <div style={{ background: '#F8FAFC', padding: '10px 16px', fontWeight: 800, fontSize: '13px', color: C.citrusDark, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                2. Cost of Goods Sourced (COGS)
+              </div>
+              <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: C.text }}>
+                  <span>Direct Farm / Wholesale Produce Purchases:</span>
+                  <span style={{ fontWeight: 700, fontFamily: 'monospace' }}>₹{kpis.produceProcuredAmount.toLocaleString('en-IN')}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: C.text }}>
+                  <span>Inward Freight & Logistics Transport:</span>
+                  <span style={{ fontWeight: 700, fontFamily: 'monospace' }}>₹{kpis.freightLogisticsAmount.toLocaleString('en-IN')}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: `1.5px solid ${C.border}`, paddingTop: '8px', fontWeight: 900, color: C.citrusDark, fontSize: '14px' }}>
+                  <span>Total Direct Sourcing Cost (B):</span>
+                  <span style={{ fontFamily: 'monospace' }}>₹{(kpis.wholesalePurchasesTotal || kpis.totalMandiOutflow).toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* PART 3: GROSS TRADING PROFIT */}
+            <div style={{ background: '#ECFDF5', border: `1.5px solid #86EFAC`, borderRadius: '10px', padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: 900, color: '#166534' }}>
+                  3. Gross Trading Margin (A - B)
+                </div>
+                <div style={{ fontSize: '11.5px', color: '#15803D' }}>
+                  Realized Trading Profit Spread on Fulfilled Produce
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '20px', fontWeight: 900, color: '#166534', fontFamily: 'monospace' }}>
+                  ₹{kpis.grossMarginSpread.toLocaleString('en-IN')}
+                </div>
+                <div style={{ fontSize: '12px', fontWeight: 800, color: '#15803D' }}>
+                  {kpis.grossMarginPercent}% of Net Revenue
+                </div>
+              </div>
+            </div>
+
+            {/* PART 4: DIRECT OPERATING DISBURSEMENTS */}
+            <div style={{ border: `1px solid ${C.border}`, borderRadius: '10px', overflow: 'hidden' }}>
+              <div style={{ background: '#F8FAFC', padding: '10px 16px', fontWeight: 800, fontSize: '13px', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                4. Direct Operating Expenses & Disbursements
+              </div>
+              <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: C.text }}>
+                  <span>Delivery Partner Daily Wages (Settled into Ledger):</span>
+                  <span style={{ fontWeight: 700, fontFamily: 'monospace' }}>₹{totalDriverWagesSettled.toLocaleString('en-IN')}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: C.text }}>
+                  <span>Gated Society Association Facility Commissions:</span>
+                  <span style={{ fontWeight: 700, fontFamily: 'monospace' }}>₹{kpis.societyCommissionsEarned.toLocaleString('en-IN')}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#DC2626' }}>
+                  <span>Wastage & Produce Spoilage Write-Off:</span>
+                  <span style={{ fontWeight: 700, fontFamily: 'monospace' }}>₹{Math.round(stockSummary.totalWastageQty * 20).toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* PART 5: NET OPERATING PROFIT (EBITDA) */}
+            <div style={{ background: '#EFF6FF', border: `1.5px solid #93C5FD`, borderRadius: '10px', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: '15px', fontWeight: 900, color: '#1E40AF' }}>
+                  5. Net Operating Profit (EBITDA)
+                </div>
+                <div style={{ fontSize: '11.5px', color: '#3B82F6' }}>
+                  Statutory EBITDA after wholesale cost, driver pay & society revenue-share
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '22px', fontWeight: 900, color: '#1E40AF', fontFamily: 'monospace' }}>
+                  ₹{kpis.netOperatingProfit.toLocaleString('en-IN')}
+                </div>
+                <div style={{ fontSize: '12px', fontWeight: 800, color: '#2563EB' }}>
+                  {kpis.netProfitPercent}% Net Operating Margin
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          TAB 3: DELIVERY PARTNER DAILY WAGE LEDGER (DATE-WISE)
+          ("For Delivery person it should show day wise who and how much were delivered and beside that amount field where they will enter and click paid thats it")
+         ========================================================================= */}
+      {activeTab === 'driverLedger' && (
+        <div style={{
+          background: C.panel,
+          border: `1.5px solid ${C.border}`,
+          borderRadius: '12px',
+          padding: '24px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        }}>
+          {/* Header & Date Selector */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '14px', borderBottom: `1px solid ${C.border}`, paddingBottom: '16px' }}>
+            <div>
+              <h2 style={{ fontSize: '17px', fontWeight: 900, color: C.spruce, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Truck size={20} color={C.citrusDark} />
+                <span>Delivery Partner Daily Wage Desk & Ledger</span>
+              </h2>
+              <p style={{ fontSize: '12px', color: C.textMuted, margin: '4px 0 0' }}>
+                Review active delivery executives by date, verify drops delivered, enter daily wage (e.g. ₹2,000), and click Paid to record into ledger.
               </p>
-              <button
-                onClick={() => navigate('/warehouse-settings')}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '12.5px', fontWeight: 700, color: C.textMuted }}>Shift Date:</span>
+              <input
+                type="date"
+                value={selectedPayoutDate}
+                onChange={(e) => setSelectedPayoutDate(e.target.value)}
                 style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '9px 18px',
-                  background: C.spruce,
-                  color: '#FFFFFF',
-                  borderRadius: '8px',
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  border: `1.5px solid ${C.border}`,
+                  fontSize: '12.5px',
                   fontWeight: 700,
-                  fontSize: '13px',
-                  border: 'none',
-                  cursor: 'pointer'
+                  color: C.spruce,
+                  background: '#FFF'
                 }}
-              >
-                <Plus size={15} />
-                <span>Configure Regional Hubs</span>
-              </button>
+              />
             </div>
-          )}
-
-          {/* Head-to-Head Comparative Cards (When 2+ Hubs Selected) */}
-          {hubAData && hubBData && hubAData.id !== hubBData.id && (
-            <div style={{
-              background: C.panel,
-              border: `1.5px solid ${C.border}`,
-              borderRadius: '14px',
-              padding: '22px 26px',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
-            }}>
-              <h3 style={{ fontSize: '16px', fontWeight: 800, color: C.spruce, margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <GitCompare size={17} color={C.spruce} />
-                <span>Head-to-Head Hub Benchmark: {hubAData.name} vs {hubBData.name}</span>
-              </h3>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
-                {/* Benchmark 1: Revenue (GMV) */}
-                <div style={{ padding: '14px', background: '#F8FAFC', borderRadius: '10px', border: `1px solid ${C.border}` }}>
-                  <div style={{ fontSize: '11.5px', color: C.textMuted, fontWeight: 700, marginBottom: '6px' }}>Realized Revenue (GMV)</div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: C.spruce }}>{hubAData.code}: ₹{hubAData.revenue.toLocaleString('en-IN')}</span>
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: C.citrusDark }}>{hubBData.code}: ₹{hubBData.revenue.toLocaleString('en-IN')}</span>
-                  </div>
-                  <div style={{ width: '100%', height: '8px', background: '#E2E8F0', borderRadius: '9999px', overflow: 'hidden', display: 'flex' }}>
-                    <div style={{ width: `${(hubAData.revenue / (hubAData.revenue + hubBData.revenue || 1)) * 100}%`, background: C.spruce }} />
-                    <div style={{ width: `${(hubBData.revenue / (hubAData.revenue + hubBData.revenue || 1)) * 100}%`, background: C.citrus }} />
-                  </div>
-                </div>
-
-                {/* Benchmark 2: Orders Dispatched */}
-                <div style={{ padding: '14px', background: '#F8FAFC', borderRadius: '10px', border: `1px solid ${C.border}` }}>
-                  <div style={{ fontSize: '11.5px', color: C.textMuted, fontWeight: 700, marginBottom: '6px' }}>Orders Dispatched</div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: C.spruce }}>{hubAData.code}: {hubAData.orderCount} orders</span>
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: C.citrusDark }}>{hubBData.code}: {hubBData.orderCount} orders</span>
-                  </div>
-                  <div style={{ width: '100%', height: '8px', background: '#E2E8F0', borderRadius: '9999px', overflow: 'hidden', display: 'flex' }}>
-                    <div style={{ width: `${(hubAData.orderCount / (hubAData.orderCount + hubBData.orderCount || 1)) * 100}%`, background: C.spruce }} />
-                    <div style={{ width: `${(hubBData.orderCount / (hubAData.orderCount + hubBData.orderCount || 1)) * 100}%`, background: C.citrus }} />
-                  </div>
-                </div>
-
-                {/* Benchmark 3: Gross Margin % */}
-                <div style={{ padding: '14px', background: '#F8FAFC', borderRadius: '10px', border: `1px solid ${C.border}` }}>
-                  <div style={{ fontSize: '11.5px', color: C.textMuted, fontWeight: 700, marginBottom: '6px' }}>Gross Margin Spread %</div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: C.emerald }}>{hubAData.code}: {hubAData.marginPercent}%</span>
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: C.citrusDark }}>{hubBData.code}: {hubBData.marginPercent}%</span>
-                  </div>
-                  <div style={{ width: '100%', height: '8px', background: '#E2E8F0', borderRadius: '9999px', overflow: 'hidden', display: 'flex' }}>
-                    <div style={{ width: `${(hubAData.marginPercent / (hubAData.marginPercent + hubBData.marginPercent || 1)) * 100}%`, background: C.emerald }} />
-                    <div style={{ width: `${(hubBData.marginPercent / (hubAData.marginPercent + hubBData.marginPercent || 1)) * 100}%`, background: C.citrus }} />
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-        </div>
-      )}
-
-      {/* =========================================================================
-          TAB 3: MONTH-OVER-MONTH & SEASONAL TRENDS
-         ========================================================================= */}
-      {activeTab === 'monthCompare' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          
-          {/* Header */}
-          <div style={{
-            background: C.panel,
-            border: `1.5px solid ${C.border}`,
-            borderRadius: '12px',
-            padding: '18px 22px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '16px'
-          }}>
-            <div>
-              <h2 style={{ fontSize: '17px', fontWeight: 800, color: C.spruce, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Calendar size={19} color={C.spruce} />
-                <span>Month-over-Month & Historical Seasonal Comparison</span>
-              </h2>
-              <p style={{ fontSize: '12.5px', color: C.textMuted, margin: '4px 0 0' }}>
-                Analyze monthly GMV trajectories, seasonal produce demand surges, and basket size deltas
-              </p>
-            </div>
-
-            {/* Month Selectors */}
-            {monthlySeries.length >= 2 ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#F8FAFC', padding: '6px 12px', borderRadius: '10px', border: `1px solid ${C.border}` }}>
-                <span style={{ fontSize: '12px', fontWeight: 800, color: C.textMuted }}>Period A:</span>
-                <select
-                  value={compareMonthA || monthlySeries[0]?.key}
-                  onChange={(e) => setCompareMonthA(e.target.value)}
-                  style={{ padding: '4px 8px', borderRadius: '6px', border: `1px solid ${C.border}`, fontSize: '12px', fontWeight: 700, color: C.spruce }}
-                >
-                  {monthlySeries.map(m => (
-                    <option key={m.key} value={m.key}>
-                      {m.name} {m.isCurrent ? '(Current)' : ''}
-                    </option>
-                  ))}
-                </select>
-
-                <span style={{ fontSize: '12px', fontWeight: 800, color: C.citrusDark }}>VS Period B:</span>
-                <select
-                  value={compareMonthB || monthlySeries[1]?.key}
-                  onChange={(e) => setCompareMonthB(e.target.value)}
-                  style={{ padding: '4px 8px', borderRadius: '6px', border: `1px solid ${C.border}`, fontSize: '12px', fontWeight: 700, color: C.citrusDark }}
-                >
-                  {monthlySeries.map(m => (
-                    <option key={m.key} value={m.key}>
-                      {m.name} {m.isCurrent ? '(Current)' : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : null}
           </div>
 
-          {/* Comparative Metrics Grid */}
-          {monthAData && (
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-              gap: '16px'
-            }}>
-              {/* Metric 1: GMV Growth */}
-              <div style={{ background: C.panel, border: `1.5px solid ${C.border}`, borderRadius: '12px', padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-                <div style={{ fontSize: '12px', fontWeight: 800, color: C.textMuted, textTransform: 'uppercase' }}>
-                  {monthAData.name} Sales (GMV)
-                </div>
-                <div style={{ fontSize: '24px', fontWeight: 900, color: C.spruce, margin: '6px 0 2px' }}>
-                  ₹{monthAData.revenue.toLocaleString('en-IN')}
-                </div>
-                <div style={{ fontSize: '12px', color: monthBData && monthAData.revenue >= monthBData.revenue ? C.emerald : C.rose, fontWeight: 800 }}>
-                  {monthBData ? (
-                    monthBData.revenue > 0 
-                      ? `${monthAData.revenue >= monthBData.revenue ? '↑' : '↓'} ${Math.abs(Number((((monthAData.revenue - monthBData.revenue) / monthBData.revenue) * 100).toFixed(1)))}% vs ${monthBData.name}`
-                      : '0.0% vs ' + monthBData.name
-                  ) : 'Current Period'}
-                </div>
-                <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: `1px solid ${C.borderLight}`, fontSize: '11px', color: C.textMuted }}>
-                  Customer realizations across all communities
-                </div>
-              </div>
+          {/* Table of Drivers for Selected Date */}
+          <div style={{ overflowX: 'auto', borderRadius: '8px', border: `1.5px solid ${C.border}`, marginBottom: '24px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+              <thead>
+                <tr style={{ background: '#F8FAFC', color: C.spruce, textTransform: 'uppercase', fontSize: '11px', letterSpacing: '0.04em' }}>
+                  <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}` }}>Delivery Partner Name & Mobile</th>
+                  <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}` }}>Assigned Route / Society</th>
+                  <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'center' }}>Completed Drops</th>
+                  <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'center', background: '#F0FDF4', color: '#166534' }}>Daily Wage Amount (₹)</th>
+                  <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'center', background: '#F0FDF4', color: '#166534' }}>Action & Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {riderLedger.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" style={{ padding: '30px', textAlign: 'center', color: C.textMuted }}>
+                      No active delivery partner runs recorded for this date.
+                    </td>
+                  </tr>
+                ) : (
+                  riderLedger.map((r, idx) => {
+                    const payoutKey = `${r.id || r.riderPhone}__${selectedPayoutDate}`;
+                    const isPaid = Boolean(driverDailyPayouts[payoutKey]);
+                    const paidData = driverDailyPayouts[payoutKey];
+                    const inputVal = driverPayoutInputs[r.id || r.riderPhone] !== undefined ? driverPayoutInputs[r.id || r.riderPhone] : 2000;
 
-              {/* Metric 2: Order Volume Delta */}
-              <div style={{ background: C.panel, border: `1.5px solid ${C.border}`, borderRadius: '12px', padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-                <div style={{ fontSize: '12px', fontWeight: 800, color: C.textMuted, textTransform: 'uppercase' }}>
-                  {monthAData.name} Orders
-                </div>
-                <div style={{ fontSize: '24px', fontWeight: 900, color: C.text, margin: '6px 0 2px' }}>
-                  {monthAData.orderCount.toLocaleString('en-IN')}
-                </div>
-                <div style={{ fontSize: '12px', color: C.spruce, fontWeight: 800 }}>
-                  {monthBData ? `${monthAData.orderCount - monthBData.orderCount >= 0 ? '+' : ''}${monthAData.orderCount - monthBData.orderCount} Orders vs ${monthBData.name}` : `${monthAData.orderCount} Orders`}
-                </div>
-                <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: `1px solid ${C.borderLight}`, fontSize: '11px', color: C.textMuted }}>
-                  Batch deliveries into society reception gates
-                </div>
-              </div>
+                    return (
+                      <tr key={r.id || idx} style={{ borderBottom: `1px solid ${C.border}`, background: idx % 2 === 0 ? '#FFFFFF' : '#FAFAF9' }}>
+                        <td style={{ padding: '12px 16px' }}>
+                          <div style={{ fontWeight: 800, color: C.text, fontSize: '13.5px' }}>{r.riderName}</div>
+                          <div style={{ fontSize: '11.5px', color: C.textMuted }}>{r.riderPhone}</div>
+                        </td>
+                        <td style={{ padding: '12px 16px', fontWeight: 600, color: '#475569' }}>
+                          {r.societyAssigned}
+                        </td>
+                        <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 800, color: C.spruce, fontSize: '14px' }}>
+                          {r.ordersDelivered} drops
+                        </td>
+                        <td style={{ padding: '12px 16px', textAlign: 'center', background: '#F9FCF9' }}>
+                          {isPaid ? (
+                            <span style={{ fontSize: '14px', fontWeight: 900, color: '#166534', fontFamily: 'monospace' }}>
+                              ₹{paidData.amount.toLocaleString('en-IN')}
+                            </span>
+                          ) : (
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <span style={{ fontSize: '13px', fontWeight: 800, color: '#64748B' }}>₹</span>
+                              <input
+                                type="number"
+                                value={inputVal}
+                                onChange={(e) => setDriverPayoutInputs({ ...driverPayoutInputs, [r.id || r.riderPhone]: e.target.value })}
+                                style={{
+                                  width: '90px',
+                                  padding: '5px 8px',
+                                  border: '1.5px solid #CBD5E1',
+                                  borderRadius: '6px',
+                                  fontSize: '13px',
+                                  fontWeight: 800,
+                                  textAlign: 'right',
+                                  background: '#FFF'
+                                }}
+                              />
+                            </div>
+                          )}
+                        </td>
+                        <td style={{ padding: '12px 16px', textAlign: 'center', background: '#F9FCF9' }}>
+                          {isPaid ? (
+                            <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                              <span style={{ fontSize: '12px', background: '#DCFCE7', color: '#166534', padding: '4px 12px', borderRadius: '999px', fontWeight: 800, border: '1px solid #86EFAC', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                <Check size={14} />
+                                <span>Paid (Recorded in Ledger)</span>
+                              </span>
+                              <span style={{ fontSize: '10.5px', color: '#64748B' }}>
+                                at {new Date(paidData.paidAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handlePayDriverDaily(r)}
+                              style={{
+                                padding: '6px 16px',
+                                background: '#059669',
+                                color: '#FFFFFF',
+                                border: 'none',
+                                borderRadius: '6px',
+                                fontSize: '12.5px',
+                                fontWeight: 800,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                              }}
+                            >
+                              <Check size={14} />
+                              <span>Paid</span>
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
 
-              {/* Metric 3: Average Order Value (AOV) */}
-              <div style={{ background: C.panel, border: `1.5px solid ${C.border}`, borderRadius: '12px', padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-                <div style={{ fontSize: '12px', fontWeight: 800, color: C.textMuted, textTransform: 'uppercase' }}>
-                  Average Order Value (AOV)
-                </div>
-                <div style={{ fontSize: '24px', fontWeight: 900, color: '#9333EA', margin: '6px 0 2px' }}>
-                  ₹{monthAData.aov.toLocaleString('en-IN')}
-                </div>
-                <div style={{ fontSize: '12px', color: '#9333EA', fontWeight: 800 }}>
-                  {monthBData ? `₹${monthAData.aov - monthBData.aov >= 0 ? '+' : ''}${monthAData.aov - monthBData.aov} vs ${monthBData.name}` : 'Basket Size Benchmark'}
-                </div>
-                <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: `1px solid ${C.borderLight}`, fontSize: '11px', color: C.textMuted }}>
-                  Produce quantity and basket composition
-                </div>
-              </div>
-
-              {/* Metric 4: Volume Dispatched */}
-              <div style={{ background: C.panel, border: `1.5px solid ${C.border}`, borderRadius: '12px', padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-                <div style={{ fontSize: '12px', fontWeight: 800, color: C.textMuted, textTransform: 'uppercase' }}>
-                  Volume Handled
-                </div>
-                <div style={{ fontSize: '24px', fontWeight: 900, color: C.amber, margin: '6px 0 2px' }}>
-                  {monthAData.volumeKg.toLocaleString('en-IN')} <span style={{ fontSize: '15px', color: C.textMuted }}>Kg</span>
-                </div>
-                <div style={{ fontSize: '12px', color: C.amber, fontWeight: 800 }}>
-                  {monthBData ? `${monthAData.volumeKg - monthBData.volumeKg >= 0 ? '+' : ''}${monthAData.volumeKg - monthBData.volumeKg} Kg vs ${monthBData.name}` : 'Produce Dispatched'}
-                </div>
-                <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: `1px solid ${C.borderLight}`, fontSize: '11px', color: C.textMuted }}>
-                  Wholesale crate lot volume
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Head-to-Head Comparative Month Bar Benchmark */}
-          {monthAData && monthBData && monthAData.key !== monthBData.key && (
-            <div style={{
-              background: C.panel,
-              border: `1.5px solid ${C.border}`,
-              borderRadius: '14px',
-              padding: '22px 26px',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
-            }}>
-              <h3 style={{ fontSize: '16px', fontWeight: 800, color: C.spruce, margin: '0 0 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <GitCompare size={17} color={C.spruce} />
-                <span>Head-to-Head Monthly Trend: {monthAData.name} vs {monthBData.name}</span>
+          {/* Signed Historical Ledger Table */}
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <h3 style={{ fontSize: '15px', fontWeight: 800, color: C.spruce, margin: 0 }}>
+                Signed Delivery Partner Wage Settlement Ledger
               </h3>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
-                {/* Metric 1: Revenue Benchmark */}
-                <div style={{ padding: '14px', background: '#F8FAFC', borderRadius: '10px', border: `1px solid ${C.border}` }}>
-                  <div style={{ fontSize: '11.5px', color: C.textMuted, fontWeight: 700, marginBottom: '6px' }}>Monthly GMV Realization</div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: C.spruce }}>{monthAData.name.split(' ')[0]}: ₹{monthAData.revenue.toLocaleString('en-IN')}</span>
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: C.citrusDark }}>{monthBData.name.split(' ')[0]}: ₹{monthBData.revenue.toLocaleString('en-IN')}</span>
-                  </div>
-                  <div style={{ width: '100%', height: '8px', background: '#E2E8F0', borderRadius: '9999px', overflow: 'hidden', display: 'flex' }}>
-                    <div style={{ width: `${(monthAData.revenue / (monthAData.revenue + monthBData.revenue || 1)) * 100}%`, background: C.spruce }} />
-                    <div style={{ width: `${(monthBData.revenue / (monthAData.revenue + monthBData.revenue || 1)) * 100}%`, background: C.citrus }} />
-                  </div>
-                </div>
-
-                {/* Metric 2: Orders Dispatched */}
-                <div style={{ padding: '14px', background: '#F8FAFC', borderRadius: '10px', border: `1px solid ${C.border}` }}>
-                  <div style={{ fontSize: '11.5px', color: C.textMuted, fontWeight: 700, marginBottom: '6px' }}>Customer Orders</div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: C.spruce }}>{monthAData.name.split(' ')[0]}: {monthAData.orderCount}</span>
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: C.citrusDark }}>{monthBData.name.split(' ')[0]}: {monthBData.orderCount}</span>
-                  </div>
-                  <div style={{ width: '100%', height: '8px', background: '#E2E8F0', borderRadius: '9999px', overflow: 'hidden', display: 'flex' }}>
-                    <div style={{ width: `${(monthAData.orderCount / (monthAData.orderCount + monthBData.orderCount || 1)) * 100}%`, background: C.spruce }} />
-                    <div style={{ width: `${(monthBData.orderCount / (monthAData.orderCount + monthBData.orderCount || 1)) * 100}%`, background: C.citrus }} />
-                  </div>
-                </div>
-
-                {/* Metric 3: Basket Size (AOV) */}
-                <div style={{ padding: '14px', background: '#F8FAFC', borderRadius: '10px', border: `1px solid ${C.border}` }}>
-                  <div style={{ fontSize: '11.5px', color: C.textMuted, fontWeight: 700, marginBottom: '6px' }}>Average Order Value (AOV)</div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: '#9333EA' }}>{monthAData.name.split(' ')[0]}: ₹{monthAData.aov}</span>
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: C.citrusDark }}>{monthBData.name.split(' ')[0]}: ₹{monthBData.aov}</span>
-                  </div>
-                  <div style={{ width: '100%', height: '8px', background: '#E2E8F0', borderRadius: '9999px', overflow: 'hidden', display: 'flex' }}>
-                    <div style={{ width: `${(monthAData.aov / (monthAData.aov + monthBData.aov || 1)) * 100}%`, background: '#9333EA' }} />
-                    <div style={{ width: `${(monthBData.aov / (monthAData.aov + monthBData.aov || 1)) * 100}%`, background: C.citrus }} />
-                  </div>
-                </div>
-
-                {/* Metric 4: Volume Dispatched */}
-                <div style={{ padding: '14px', background: '#F8FAFC', borderRadius: '10px', border: `1px solid ${C.border}` }}>
-                  <div style={{ fontSize: '11.5px', color: C.textMuted, fontWeight: 700, marginBottom: '6px' }}>Volume Dispatched (Kg)</div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: C.amber }}>{monthAData.name.split(' ')[0]}: {monthAData.volumeKg} Kg</span>
-                    <span style={{ fontSize: '13px', fontWeight: 800, color: C.citrusDark }}>{monthBData.name.split(' ')[0]}: {monthBData.volumeKg} Kg</span>
-                  </div>
-                  <div style={{ width: '100%', height: '8px', background: '#E2E8F0', borderRadius: '9999px', overflow: 'hidden', display: 'flex' }}>
-                    <div style={{ width: `${(monthAData.volumeKg / (monthAData.volumeKg + monthBData.volumeKg || 1)) * 100}%`, background: C.amber }} />
-                    <div style={{ width: `${(monthBData.volumeKg / (monthAData.volumeKg + monthBData.volumeKg || 1)) * 100}%`, background: C.citrus }} />
-                  </div>
-                </div>
-              </div>
+              <span style={{ fontSize: '12px', color: C.textMuted }}>
+                Total Disbursed: <strong style={{ color: C.emerald }}>₹{totalDriverWagesSettled.toLocaleString('en-IN')}</strong>
+              </span>
             </div>
-          )}
 
-          {/* Clean Slate Notice for Historical Comparisons */}
-          <div style={{
-            background: '#F8FAFC',
-            border: `1.5px dashed ${C.border}`,
-            borderRadius: '12px',
-            padding: '24px',
-            textAlign: 'center',
-            color: C.textMuted,
-            fontSize: '12.5px'
-          }}>
-            🌱 <strong>Multi-Month Historical Ledger</strong>: Trend comparisons will dynamically calculate and draw seasonal growth curves as multi-month orders accumulate in the PostgreSQL database.
+            <div style={{ overflowX: 'auto', borderRadius: '8px', border: `1px solid ${C.border}` }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12.5px' }}>
+                <thead>
+                  <tr style={{ background: '#F8FAFC', color: '#475569', textTransform: 'uppercase', fontSize: '11px', letterSpacing: '0.04em' }}>
+                    <th style={{ padding: '8px 12px', borderBottom: `1px solid ${C.border}` }}>Date</th>
+                    <th style={{ padding: '8px 12px', borderBottom: `1px solid ${C.border}` }}>Driver Name</th>
+                    <th style={{ padding: '8px 12px', borderBottom: `1px solid ${C.border}` }}>Mobile</th>
+                    <th style={{ padding: '8px 12px', borderBottom: `1px solid ${C.border}`, textAlign: 'right' }}>Drops Completed</th>
+                    <th style={{ padding: '8px 12px', borderBottom: `1px solid ${C.border}`, textAlign: 'right' }}>Amount Paid (₹)</th>
+                    <th style={{ padding: '8px 12px', borderBottom: `1px solid ${C.border}` }}>Settled At</th>
+                    <th style={{ padding: '8px 12px', borderBottom: `1px solid ${C.border}`, textAlign: 'center' }}>Audit Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.values(driverDailyPayouts).length === 0 ? (
+                    <tr>
+                      <td colSpan="7" style={{ padding: '20px', textAlign: 'center', color: C.textMuted }}>
+                        No settled payouts recorded yet. Enter wage amount above and click Paid.
+                      </td>
+                    </tr>
+                  ) : (
+                    Object.values(driverDailyPayouts).map((entry, idx) => (
+                      <tr key={idx} style={{ borderBottom: `1px solid ${C.border}` }}>
+                        <td style={{ padding: '8px 12px', fontWeight: 700, color: C.spruce }}>{entry.date}</td>
+                        <td style={{ padding: '8px 12px', fontWeight: 700 }}>{entry.riderName}</td>
+                        <td style={{ padding: '8px 12px', color: C.textMuted }}>{entry.riderPhone}</td>
+                        <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700 }}>{entry.ordersDelivered} drops</td>
+                        <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, color: '#166534', fontFamily: 'monospace' }}>
+                          ₹{Number(entry.amount).toLocaleString('en-IN')}
+                        </td>
+                        <td style={{ padding: '8px 12px', color: '#64748B', fontSize: '11.5px' }}>
+                          {new Date(entry.paidAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+                        </td>
+                        <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                          <span style={{ background: '#DCFCE7', color: '#166534', padding: '2px 8px', borderRadius: '999px', fontSize: '11px', fontWeight: 800 }}>
+                            ✓ SETTLED
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
 
       {/* =========================================================================
-          TAB 4: ZERO-LEAKAGE FIELD CASH & DELIVERY AUDIT
+          TAB 4: FIELD CASH & VAULT RECONCILIATION
          ========================================================================= */}
-      {activeTab === 'fieldCash' && (
+      {activeTab === 'cashAudit' && (
         <div style={{
           background: C.panel,
           border: `1.5px solid ${C.border}`,
@@ -1584,19 +1620,19 @@ export default function ExecutiveMisPage() {
             <div>
               <h2 style={{ fontSize: '16px', fontWeight: 800, color: C.spruce, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <ShieldCheck size={18} color={C.citrus} />
-                <span>Zero-Leakage Field Cash & Delivery Executive Ledger</span>
+                <span>Field Cash & Warehouse Hub Vault Settlement</span>
               </h2>
               <p style={{ fontSize: '12px', color: C.textMuted, margin: '4px 0 0' }}>
-                Real-time reconciliation of COD cash collected by delivery executives vs deposits into the hub cash vault.
+                Reconciliation of physical COD cash collected at resident doors vs physical cash deposited into the hub vault.
               </p>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <div style={{ padding: '6px 12px', borderRadius: '8px', background: C.spruceSurface, color: C.spruce, fontSize: '12px', fontWeight: 800 }}>
-                Settled to Vault: ₹{kpis.cashSettledToHubVault.toLocaleString('en-IN')}
+                Vault Reconciled: ₹{kpis.cashSettledToHubVault.toLocaleString('en-IN')}
               </div>
               <div style={{ padding: '6px 12px', borderRadius: '8px', background: kpis.cashInTransitWithRiders > 0 ? C.roseSurface : C.emeraldSurface, color: kpis.cashInTransitWithRiders > 0 ? C.rose : C.emerald, fontSize: '12px', fontWeight: 800 }}>
-                In Transit: ₹{kpis.cashInTransitWithRiders.toLocaleString('en-IN')}
+                Cash with Riders: ₹{kpis.cashInTransitWithRiders.toLocaleString('en-IN')}
               </div>
             </div>
           </div>
@@ -1610,10 +1646,9 @@ export default function ExecutiveMisPage() {
                     <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'right' }}>Orders Delivered</th>
                     <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'right' }}>COD Cash Collected</th>
                     <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'right' }}>Settled into Vault</th>
-                    <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'right' }}>Cash in Transit</th>
+                    <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'right' }}>Cash with Rider</th>
                     <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'center' }}>Vault Status</th>
-                    <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'center' }}>COD Reconciliation</th>
-                    <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'center', background: '#F0FDF4', color: '#166534' }}>Daily Driver Pay (Ledger)</th>
+                    <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'center' }}>Hub Deposit Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1659,57 +1694,10 @@ export default function ExecutiveMisPage() {
                               cursor: 'pointer',
                             }}
                           >
-                            {settlingRiderId === r.id ? 'Settling...' : 'Reconcile into Vault'}
+                            {settlingRiderId === r.id ? 'Settling...' : 'Deposit into Vault'}
                           </button>
                         ) : (
-                          <span style={{ fontSize: '11.5px', color: C.emerald, fontWeight: 700 }}>Settled</span>
-                        )}
-                      </td>
-                      <td style={{ padding: '12px 16px', textAlign: 'center', background: '#F9FCF9' }}>
-                        {driverDailyPayouts[`${r.id || r.riderPhone}__${selectedDate || 'TODAY'}`] ? (
-                          <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-                            <span style={{ fontSize: '12px', background: '#DCFCE7', color: '#166534', padding: '3px 10px', borderRadius: '6px', fontWeight: 800, border: '1px solid #86EFAC' }}>
-                              ✓ ₹{driverDailyPayouts[`${r.id || r.riderPhone}__${selectedDate || 'TODAY'}`].amount.toLocaleString('en-IN')} Paid
-                            </span>
-                            <span style={{ fontSize: '10px', color: '#64748B' }}>Recorded in Ledger</span>
-                          </div>
-                        ) : (
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontSize: '13px', fontWeight: 800, color: '#64748B' }}>₹</span>
-                            <input
-                              type="number"
-                              placeholder="2000"
-                              value={driverPayoutInputs[r.id || r.riderPhone] !== undefined ? driverPayoutInputs[r.id || r.riderPhone] : 2000}
-                              onChange={(e) => setDriverPayoutInputs({ ...driverPayoutInputs, [r.id || r.riderPhone]: e.target.value })}
-                              style={{
-                                width: '85px',
-                                padding: '5px 8px',
-                                border: '1.5px solid #CBD5E1',
-                                borderRadius: '6px',
-                                fontSize: '12.5px',
-                                fontWeight: 800,
-                                textAlign: 'right',
-                                background: '#FFF'
-                              }}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => handlePayDriverDaily(r)}
-                              style={{
-                                padding: '5px 14px',
-                                background: '#059669',
-                                color: '#FFF',
-                                border: 'none',
-                                borderRadius: '6px',
-                                fontSize: '12px',
-                                fontWeight: 800,
-                                cursor: 'pointer',
-                                boxShadow: '0 1px 3px rgba(5,150,105,0.2)'
-                              }}
-                            >
-                              Paid
-                            </button>
-                          </div>
+                          <span style={{ fontSize: '11.5px', color: C.emerald, fontWeight: 700 }}>Vault Reconciled</span>
                         )}
                       </td>
                     </tr>
@@ -1718,25 +1706,229 @@ export default function ExecutiveMisPage() {
               </table>
             </div>
           ) : (
-            <div style={{
-              padding: '36px',
-              textAlign: 'center',
-              background: '#F8FAFC',
-              borderRadius: '8px',
-              border: `1.5px dashed ${C.border}`
-            }}>
-              <ShieldCheck size={32} color="#94A3B8" style={{ margin: '0 auto 8px' }} />
-              <div style={{ fontSize: '14px', fontWeight: 800, color: C.text }}>0 Cash-on-Delivery Collections Recorded</div>
-              <div style={{ fontSize: '12px', color: C.textMuted, marginTop: '4px' }}>
-                All customer orders will automatically report doorstep cash and QR payments here for hub vault auditing.
-              </div>
+            <div style={{ textAlign: 'center', padding: '30px', color: C.textMuted }}>
+              No cash delivery runs recorded for this filter scope.
             </div>
           )}
         </div>
       )}
 
       {/* =========================================================================
-          PRODUCT SPEC MODAL
+          TAB 5: CANCELLED ORDERS & SPOILAGE AUDIT TRAIL
+         ========================================================================= */}
+      {activeTab === 'cancellationsAudit' && (
+        <div style={{
+          background: C.panel,
+          border: `1.5px solid ${C.border}`,
+          borderRadius: '12px',
+          padding: '20px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+            <div>
+              <h2 style={{ fontSize: '16px', fontWeight: 800, color: '#991B1B', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <RotateCcw size={18} color="#DC2626" />
+                <span>Cancelled Orders & Produce Spoilage Audit Trail</span>
+              </h2>
+              <p style={{ fontSize: '12px', color: C.textMuted, margin: '4px 0 0' }}>
+                Complete statutory audit register of doorstep refusals, reasons from standardized dropdown, and photographic proof taken by delivery partners.
+              </p>
+            </div>
+
+            <div style={{ padding: '6px 14px', borderRadius: '999px', background: '#FEE2E2', color: '#991B1B', fontSize: '12px', fontWeight: 800, border: '1px solid #FECACA' }}>
+              {cancelledOrders.length} Cancelled Order(s)
+            </div>
+          </div>
+
+          <div style={{ overflowX: 'auto', borderRadius: '8px', border: `1.5px solid ${C.border}` }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12.5px' }}>
+              <thead>
+                <tr style={{ background: '#F8FAFC', color: '#475569', textTransform: 'uppercase', fontSize: '11px', letterSpacing: '0.04em' }}>
+                  <th style={{ padding: '10px 14px', borderBottom: `1.5px solid ${C.border}` }}>Order ID & Date</th>
+                  <th style={{ padding: '10px 14px', borderBottom: `1.5px solid ${C.border}` }}>Customer Location</th>
+                  <th style={{ padding: '10px 14px', borderBottom: `1.5px solid ${C.border}` }}>Delivery Partner</th>
+                  <th style={{ padding: '10px 14px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'right' }}>Order Amount</th>
+                  <th style={{ padding: '10px 14px', borderBottom: `1.5px solid ${C.border}` }}>Cancellation Reason (Dropdown)</th>
+                  <th style={{ padding: '10px 14px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'center' }}>Photo Proof</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cancelledOrders.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" style={{ padding: '30px', textAlign: 'center', color: C.textMuted }}>
+                      No cancelled orders found in this period.
+                    </td>
+                  </tr>
+                ) : (
+                  cancelledOrders.map((ord, idx) => (
+                    <tr key={ord.id || idx} style={{ borderBottom: `1px solid ${C.border}`, background: idx % 2 === 0 ? '#FFFFFF' : '#FAFAF9' }}>
+                      <td style={{ padding: '10px 14px' }}>
+                        <div style={{ fontWeight: 800, color: C.text }}>#{ord.id}</div>
+                        <div style={{ fontSize: '11px', color: C.textMuted }}>
+                          {ord.cancelledAt ? new Date(ord.cancelledAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }) : 'Today'}
+                        </div>
+                      </td>
+                      <td style={{ padding: '10px 14px' }}>
+                        <div style={{ fontWeight: 700, color: C.text }}>{ord.societyName}</div>
+                        <div style={{ fontSize: '11px', color: C.textMuted }}>Flat: {ord.flatNo}</div>
+                      </td>
+                      <td style={{ padding: '10px 14px', fontWeight: 600, color: '#334155' }}>
+                        {ord.dispatchedToRiderName || 'Delivery Partner'}
+                      </td>
+                      <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 800, color: '#DC2626', fontFamily: 'monospace' }}>
+                        ₹{(ord.totalAmount || 0).toLocaleString('en-IN')}
+                      </td>
+                      <td style={{ padding: '10px 14px', fontWeight: 700, color: '#991B1B' }}>
+                        {ord.reasonText || 'Customer Refused / Door Locked'}
+                      </td>
+                      <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                        {ord.photoProof ? (
+                          <button
+                            type="button"
+                            onClick={() => setPhotoPreviewModal({ photo: ord.photoProof, title: `Order #${ord.id} Photo Proof`, reason: ord.reasonText })}
+                            style={{
+                              padding: '4px 10px',
+                              borderRadius: '6px',
+                              background: '#EFF6FF',
+                              border: '1px solid #BFDBFE',
+                              color: '#1D4ED8',
+                              fontSize: '11.5px',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            <Camera size={13} />
+                            <span>View Photo</span>
+                          </button>
+                        ) : (
+                          <span style={{ fontSize: '11px', color: '#94A3B8', fontStyle: 'italic' }}>
+                            None attached
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          TAB 6: WAREHOUSE HUB BENCHMARKING
+         ========================================================================= */}
+      {activeTab === 'warehouseCompare' && (
+        <div style={{
+          background: C.panel,
+          border: `1.5px solid ${C.border}`,
+          borderRadius: '12px',
+          padding: '20px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        }}>
+          <h2 style={{ fontSize: '16px', fontWeight: 800, color: C.spruce, marginBottom: '16px' }}>
+            Regional Warehouse Hub Network Comparison
+          </h2>
+          <div style={{ overflowX: 'auto', borderRadius: '8px', border: `1px solid ${C.border}` }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+              <thead>
+                <tr style={{ background: '#F8FAFC', color: C.spruce, textTransform: 'uppercase', fontSize: '11px', letterSpacing: '0.04em' }}>
+                  <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}` }}>Hub Code & Name</th>
+                  <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}` }}>Location</th>
+                  <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'right' }}>Active Societies</th>
+                  <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'right' }}>Orders Fulfilled</th>
+                  <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'right' }}>Volume Dispatched (kg)</th>
+                  <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'right' }}>Revenue Realized (₹)</th>
+                  <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'right' }}>Wholesale Sourcing Spend (₹)</th>
+                  <th style={{ padding: '12px 16px', borderBottom: `1.5px solid ${C.border}`, textAlign: 'center' }}>Gross Margin %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {warehouseBreakdown.map((w, idx) => (
+                  <tr key={w.id || idx} style={{ borderBottom: `1px solid ${C.border}` }}>
+                    <td style={{ padding: '12px 16px', fontWeight: 800, color: C.text }}>
+                      {w.name} <span style={{ color: C.textMuted, fontWeight: 500 }}>({w.code || w.id})</span>
+                    </td>
+                    <td style={{ padding: '12px 16px', color: C.textMuted }}>{w.location}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700 }}>{w.societiesCount}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700 }}>{w.orderCount}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700 }}>{w.volumeDispatchedKg} kg</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 800, color: C.spruce }}>₹{w.revenue.toLocaleString('en-IN')}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, color: C.citrusDark }}>₹{w.procurementSpend.toLocaleString('en-IN')}</td>
+                    <td style={{ padding: '12px 16px', textAlign: 'center', fontWeight: 800, color: C.emerald }}>{w.marginPercent}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          MODAL: FULL HIGH-RES PHOTO PROOF VIEWER
+         ========================================================================= */}
+      {photoPreviewModal && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+          padding: '20px',
+        }}>
+          <div style={{
+            background: '#FFFFFF',
+            borderRadius: '16px',
+            maxWidth: '600px',
+            width: '100%',
+            overflow: 'hidden',
+            border: `1.5px solid ${C.border}`,
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+          }}>
+            <div style={{ padding: '14px 18px', borderBottom: `1px solid ${C.border}`, background: '#F8FAFC', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontSize: '14px', fontWeight: 800, color: C.spruce, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Camera size={16} color="#DC2626" />
+                <span>{photoPreviewModal.title}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPhotoPreviewModal(null)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textMuted }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div style={{ padding: '12px 18px', background: '#FEF2F2', borderBottom: `1px solid #FECACA`, fontSize: '12.5px', color: '#991B1B', fontWeight: 700 }}>
+              Exception Reason: {photoPreviewModal.reason}
+            </div>
+            <div style={{ padding: '16px', textAlign: 'center', background: '#0F172A' }}>
+              <img
+                src={photoPreviewModal.photo}
+                alt="Doorstep Photo Proof"
+                style={{ maxWidth: '100%', maxHeight: '65vh', borderRadius: '8px', objectFit: 'contain' }}
+              />
+            </div>
+            <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'flex-end', background: '#F8FAFC', borderTop: `1px solid ${C.border}` }}>
+              <button
+                type="button"
+                onClick={() => setPhotoPreviewModal(null)}
+                style={{ padding: '6px 16px', background: C.spruce, color: '#FFF', borderRadius: '6px', border: 'none', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+              >
+                Close Proof
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          MODAL: PRODUCT SPECIFICATION & SOURCING DETAILS
          ========================================================================= */}
       {selectedProduct && (
         <div style={{
@@ -1759,7 +1951,6 @@ export default function ExecutiveMisPage() {
             boxShadow: '0 20px 40px -15px rgba(0,0,0,0.3)',
             border: `1.5px solid ${C.border}`,
           }}>
-            {/* Modal Header */}
             <div style={{
               padding: '18px 24px',
               background: C.spruce,
@@ -1784,9 +1975,7 @@ export default function ExecutiveMisPage() {
               </button>
             </div>
 
-            {/* Modal Body */}
             <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {/* Financial Snapshot */}
               <div style={{
                 display: 'grid',
                 gridTemplateColumns: '1fr 1fr 1fr',
@@ -1798,63 +1987,46 @@ export default function ExecutiveMisPage() {
                 textAlign: 'center',
               }}>
                 <div>
-                  <div style={{ fontSize: '11px', color: C.spruceLight, fontWeight: 700, textTransform: 'uppercase' }}>Retail Selling Rate</div>
-                  <div style={{ fontSize: '18px', fontWeight: 900, color: C.spruce }}>₹{selectedProduct.sellingRatePerKg.toFixed(2)}</div>
+                  <div style={{ fontSize: '11px', color: C.spruceLight, fontWeight: 700, textTransform: 'uppercase' }}>Selling Rate</div>
+                  <div style={{ fontSize: '18px', fontWeight: 900, color: C.spruce }}>₹{(selectedProduct.sellingRatePerKg || 0).toFixed(2)}</div>
                   <div style={{ fontSize: '10.5px', color: C.textMuted }}>per {selectedProduct.unit}</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '11px', color: C.spruceLight, fontWeight: 700, textTransform: 'uppercase' }}>Mandi Sourcing Cost</div>
-                  <div style={{ fontSize: '18px', fontWeight: 900, color: '#334155' }}>₹{selectedProduct.sourcingRatePerKg.toFixed(2)}</div>
-                  <div style={{ fontSize: '10.5px', color: C.textMuted }}>wholesale benchmark</div>
+                  <div style={{ fontSize: '11px', color: C.spruceLight, fontWeight: 700, textTransform: 'uppercase' }}>Purchase Rate</div>
+                  <div style={{ fontSize: '18px', fontWeight: 900, color: '#334155' }}>₹{(selectedProduct.purchaseRatePerKg || selectedProduct.sourcingRatePerKg || 0).toFixed(2)}</div>
+                  <div style={{ fontSize: '10.5px', color: C.textMuted }}>wholesale cost</div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '11px', color: C.spruceLight, fontWeight: 700, textTransform: 'uppercase' }}>Margin Spread</div>
-                  <div style={{ fontSize: '18px', fontWeight: 900, color: C.emerald }}>{selectedProduct.marginPercent.toFixed(1)}%</div>
-                  <div style={{ fontSize: '10.5px', color: C.emerald, fontWeight: 700 }}>+₹{selectedProduct.marginSpreadPerKg.toFixed(2)} net</div>
+                  <div style={{ fontSize: '11px', color: C.spruceLight, fontWeight: 700, textTransform: 'uppercase' }}>Trading Margin</div>
+                  <div style={{ fontSize: '18px', fontWeight: 900, color: C.emerald }}>{(selectedProduct.marginPercent || 0).toFixed(1)}%</div>
+                  <div style={{ fontSize: '10.5px', color: C.emerald, fontWeight: 700 }}>+₹{(selectedProduct.marginSpreadPerKg || 0).toFixed(2)} net</div>
                 </div>
               </div>
 
-              {/* Specifications Grid */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '12.5px' }}>
                 <div style={{ padding: '10px 14px', background: '#F8FAFC', borderRadius: '8px', border: `1px solid ${C.border}` }}>
-                  <div style={{ color: C.textMuted, fontSize: '11px', fontWeight: 600 }}>Farm Sourcing Origin</div>
-                  <div style={{ color: C.text, fontWeight: 800, marginTop: '2px' }}>📍 {selectedProduct.origin || 'APMC Mandi Yard'}</div>
+                  <div style={{ color: C.textMuted, fontSize: '11px', fontWeight: 600 }}>Sourcing Origin</div>
+                  <div style={{ color: C.text, fontWeight: 800, marginTop: '2px' }}>📍 {selectedProduct.origin || 'Direct Farm Intake'}</div>
                 </div>
 
                 <div style={{ padding: '10px 14px', background: '#F8FAFC', borderRadius: '8px', border: `1px solid ${C.border}` }}>
-                  <div style={{ color: C.textMuted, fontSize: '11px', fontWeight: 600 }}>Cold Storage Shelf Life</div>
+                  <div style={{ color: C.textMuted, fontSize: '11px', fontWeight: 600 }}>Shelf Life</div>
                   <div style={{ color: C.text, fontWeight: 800, marginTop: '2px' }}>⏱ {selectedProduct.shelfLife || '3-5 Days'}</div>
-                </div>
-
-                <div style={{ padding: '10px 14px', background: '#F8FAFC', borderRadius: '8px', border: `1px solid ${C.border}` }}>
-                  <div style={{ color: C.textMuted, fontSize: '11px', fontWeight: 600 }}>Volume Bulk Discount</div>
-                  <div style={{ color: C.citrusDark, fontWeight: 800, marginTop: '2px' }}>
-                    {selectedProduct.bulkMinQty > 0 ? `Min ${selectedProduct.bulkMinQty} kg → ${selectedProduct.bulkDiscountPercent}% OFF` : 'Standard Pricing'}
-                  </div>
-                </div>
-
-                <div style={{ padding: '10px 14px', background: '#F8FAFC', borderRadius: '8px', border: `1px solid ${C.border}` }}>
-                  <div style={{ color: C.textMuted, fontSize: '11px', fontWeight: 600 }}>Tax / GST Classification</div>
-                  <div style={{ color: C.spruce, fontWeight: 800, marginTop: '2px' }}>
-                    {selectedProduct.gstPercent === 0 ? '0.0% GST Exempt (Agri Fresh)' : `${selectedProduct.gstPercent}% GST`}
-                  </div>
                 </div>
               </div>
 
-              {/* Order Performance summary */}
               <div style={{ padding: '12px 16px', background: '#FFFFFF', borderRadius: '8px', border: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <div style={{ fontSize: '11px', color: C.textMuted, fontWeight: 600 }}>Dispatched Volume</div>
-                  <div style={{ fontSize: '15px', fontWeight: 800, color: C.text }}>{selectedProduct.soldQtyKg} Kg delivered</div>
+                  <div style={{ fontSize: '11px', color: C.textMuted, fontWeight: 600 }}>Fulfilled Volume</div>
+                  <div style={{ fontSize: '15px', fontWeight: 800, color: C.text }}>{selectedProduct.soldQtyKg} {selectedProduct.unit} delivered</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontSize: '11px', color: C.textMuted, fontWeight: 600 }}>Realized Consumer Revenue</div>
-                  <div style={{ fontSize: '15px', fontWeight: 900, color: C.spruce }}>₹{selectedProduct.revenue.toLocaleString('en-IN')}</div>
+                  <div style={{ fontSize: '15px', fontWeight: 900, color: C.spruce }}>₹{(selectedProduct.revenue || 0).toLocaleString('en-IN')}</div>
                 </div>
               </div>
             </div>
 
-            {/* Modal Footer */}
             <div style={{ padding: '14px 24px', background: '#F8FAFC', borderTop: `1px solid ${C.border}`, textAlign: 'right' }}>
               <button
                 onClick={() => setSelectedProduct(null)}

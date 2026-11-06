@@ -25,7 +25,8 @@ import {
   RefreshCw,
   Printer,
   QrCode,
-  XCircle
+  XCircle,
+  Camera
 } from 'lucide-react';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
@@ -490,6 +491,44 @@ export default function OrdersFulfillmentPage() {
   const [riderCancelModalOrder, setRiderCancelModalOrder] = useState(null);
   const [riderCancelReason, setRiderCancelReason] = useState('CUSTOMER_NOT_AVAILABLE');
   const [riderCancelNotes, setRiderCancelNotes] = useState('');
+  const [riderCancelPhoto, setRiderCancelPhoto] = useState(null);
+  const [isCompressingPhoto, setIsCompressingPhoto] = useState(false);
+
+  const handlePhotoCapture = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsCompressingPhoto(true);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxDim = 800;
+        let width = img.width;
+        let height = img.height;
+        if (width > height) {
+          if (width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          }
+        } else {
+          if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+        setRiderCancelPhoto(compressedBase64);
+        setIsCompressingPhoto(false);
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleConfirmRiderCancel = async (e) => {
     e.preventDefault();
@@ -504,7 +543,8 @@ export default function OrdersFulfillmentPage() {
       SOCIETY_GATE_DENIED: 'Society Security / Association Denied Entry',
       OTHER: 'Other Exception'
     };
-    const fullReason = `${reasonLabelMap[riderCancelReason] || riderCancelReason}${riderCancelNotes ? ` - ${riderCancelNotes}` : ''} (Reported by Rider ${currentUser?.name || 'Driver'})`;
+    const baseReason = `${reasonLabelMap[riderCancelReason] || riderCancelReason}${riderCancelNotes ? ` - ${riderCancelNotes}` : ''} (Reported by Rider ${currentUser?.name || 'Driver'})`;
+    const fullReason = riderCancelPhoto ? `${baseReason} [PROOF_PHOTO]${riderCancelPhoto}` : baseReason;
 
     try {
       await updateOrderStatusMutation.mutateAsync({
@@ -515,6 +555,8 @@ export default function OrdersFulfillmentPage() {
       });
       showToast(`Order #${targetOrder.id} marked Undelivered / Cancelled. Return produce bag to warehouse.`, 'info');
       setRiderCancelModalOrder(null);
+      setRiderCancelPhoto(null);
+      setRiderCancelNotes('');
     } catch (err) {
       showToast(err.message || 'Failed to cancel order.', 'error');
     }
@@ -2909,6 +2951,67 @@ export default function OrdersFulfillmentPage() {
                       boxSizing: 'border-box'
                     }}
                   />
+                </div>
+
+                {/* Doorstep Proof Photo Facility */}
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px', color: '#1E293B' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Camera size={15} color="#DC2626" />
+                      <span>Take Photo Proof (Door Locked / Rejected Produce)</span>
+                    </span>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>Audited by Hub Lead</span>
+                  </label>
+
+                  {riderCancelPhoto ? (
+                    <div style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '1.5px solid #86EFAC', background: '#F0FDF4', padding: '8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <img
+                        src={riderCancelPhoto}
+                        alt="Cancellation Proof"
+                        style={{ width: '64px', height: '64px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #CBD5E1' }}
+                      />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '12px', fontWeight: 800, color: '#166534' }}>✓ Photo Attached</div>
+                        <div style={{ fontSize: '11px', color: '#475569' }}>Will be audited during produce inward review</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setRiderCancelPhoto(null)}
+                        style={{ padding: '4px 8px', background: '#FEE2E2', border: '1px solid #FCA5A5', color: '#991B1B', borderRadius: '6px', fontSize: '11.5px', fontWeight: 700, cursor: 'pointer' }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <label style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      border: '1.5px dashed #CBD5E1',
+                      background: '#F8FAFC',
+                      cursor: 'pointer',
+                      gap: '4px',
+                      transition: 'all 0.15s ease'
+                    }}>
+                      <Camera size={20} color="#64748B" />
+                      <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#2563EB' }}>
+                        {isCompressingPhoto ? 'Processing Camera Photo...' : '📸 Snap Photo via Phone Camera / Upload'}
+                      </span>
+                      <span style={{ fontSize: '11px', color: '#64748B' }}>
+                        Photo of Flat Door #{extractBlockAndFlat(riderCancelModalOrder?.flatNo).flat || ''} or rejected produce
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        onChange={handlePhotoCapture}
+                        style={{ display: 'none' }}
+                      />
+                    </label>
+                  )}
                 </div>
 
                 {/* Return Produce Notice */}
