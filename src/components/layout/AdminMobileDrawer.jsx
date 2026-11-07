@@ -33,9 +33,8 @@ import {
 } from 'lucide-react';
 import FreshiozLogo from '../common/FreshiozLogo';
 import { useAdminRole, ROLES } from '../../context/AdminRoleContext';
-import { useToast } from '../../context/ToastContext';
 
-export default function AdminMobileDrawer() {
+export function AdminMobileDrawer() {
   const { 
     isMobileDrawerOpen, 
     setIsMobileDrawerOpen, 
@@ -48,7 +47,6 @@ export default function AdminMobileDrawer() {
     canSwitchRoles
   } = useAdminRole();
   const location = useLocation();
-  const { showToast } = useToast();
 
   const isWarehouseRoute = location.pathname.startsWith('/warehouse');
   const pendingSocietiesCount = (store.societies || []).filter(s => s.status === 'PENDING').length;
@@ -777,3 +775,6 @@ export default function AdminMobileDrawer() {
     </div>
   );
 }
+
+export default AdminMobileDrawer;
+
