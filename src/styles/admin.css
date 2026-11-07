@@ -965,6 +965,42 @@ select.form-input-control {
 
 @media (max-width: 768px) {
   .admin-mis-standalone-viewport {
-    padding: 12px;
+    padding: 10px;
+  }
+
+  .admin-page-container {
+    padding: 8px 10px !important;
+  }
+
+  .admin-form-card {
+    padding: 12px !important;
+    border-radius: 12px !important;
+  }
+
+  .admin-modal-card {
+    padding: 16px !important;
+    border-radius: 12px !important;
+  }
+
+  .page-title-header {
+    margin-bottom: 8px !important;
+    gap: 6px !important;
+  }
+
+  .page-title-header h1 {
+    font-size: 15px !important;
+    line-height: 1.25 !important;
+  }
+
+  .admin-data-table th,
+  .admin-data-table td {
+    padding: 8px 10px !important;
+    font-size: 11.5px !important;
+  }
+
+  .admin-btn-primary,
+  .admin-btn-accent {
+    padding: 7px 12px !important;
+    font-size: 12px !important;
   }
 }

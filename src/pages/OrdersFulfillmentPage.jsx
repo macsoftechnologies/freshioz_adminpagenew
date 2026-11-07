@@ -707,141 +707,123 @@ export default function OrdersFulfillmentPage() {
 
   return (
     <div className="admin-page-container">
-      {/* High-Density Compact Page Header (Under 50px) */}
+      {/* High-Density Compact Page Header */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         flexWrap: 'wrap',
-        gap: '8px',
-        paddingBottom: '10px',
-        borderBottom: '1.5px solid #E2E8F0',
-        marginBottom: '10px'
+        gap: '6px',
+        paddingBottom: '8px',
+        borderBottom: '1px solid #E2E8F0',
+        marginBottom: '8px'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          <h1 style={{ fontSize: '18px', color: '#0F172A', fontWeight: 800, margin: 0 }}>
-            {isDeliveryExecutive ? `My Delivery Manifest (${currentUser?.name || 'Delivery Partner'})` : 'Order Fulfillment Pipeline'}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <h1 style={{ fontSize: '16px', color: '#0F172A', fontWeight: 800, margin: 0 }}>
+            {isDeliveryExecutive
+              ? (riderTab === 'PENDING' ? `1. To Deliver (${countRiderPending})` :
+                 riderTab === 'DELIVERED' ? `2. Delivered (${countRiderDelivered})` :
+                 riderTab === 'CANCELLED' ? `3. Undelivered (${countRiderCancelled})` :
+                 `4. All Route Stops (${riderBaseOrders.length})`)
+              : 'Order Fulfillment Pipeline'}
           </h1>
-          <span style={{ fontSize: '11px', background: isDeliveryExecutive ? '#DCFCE7' : '#E0F2FE', color: isDeliveryExecutive ? '#15803D' : '#0369A1', fontWeight: 800, padding: '2px 8px', borderRadius: '4px' }}>
-            {isDeliveryExecutive ? `${filteredOrders.length} Assigned Stops` : `${filteredOrders.filter(o => o.status !== 'CANCELLED').length} Orders Active`}
-          </span>
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '3px 8px',
-            borderRadius: '6px',
-            border: isWarehouseScoped ? '1.5px solid #A7F3D0' : '1.5px solid #CBD5E1',
-            background: isWarehouseScoped ? '#ECFDF5' : '#F8FAFC',
-            fontSize: '11.5px',
+          <span style={{
+            fontSize: '10.5px',
+            background: '#ECFDF5',
+            border: '1px solid #A7F3D0',
+            color: '#065F46',
             fontWeight: 800,
-            color: isWarehouseScoped ? '#065F46' : '#1E293B'
+            padding: '2px 7px',
+            borderRadius: '5px'
           }}>
-            <Warehouse size={13} color={isWarehouseScoped ? "#059669" : "#0284C7"} />
-            <span>🏢 {assignedWhCode ? `${assignedWhCode} — ${assignedWhName}` : (assignedWhName || currentUser?.assignedLocationName || (currentUser?.assignedWarehouseId !== 'ALL' ? currentUser?.assignedWarehouseId : 'All Hubs & Warehouses'))}</span>
-            {isWarehouseScoped && (
-              <span style={{ fontSize: '9px', background: '#059669', color: '#FFF', padding: '1px 5px', borderRadius: '3px' }}>🔒 Assigned Hub</span>
-            )}
-          </div>
+            🏢 {assignedWhName || assignedWhCode || 'Hub'}
+          </span>
         </div>
 
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
           <button
             type="button"
             onClick={() => {
               queryClient.invalidateQueries({ queryKey: ['orders'] });
-              showToast('🔄 Synchronizing live orders manifest...', 'info');
+              showToast('🔄 Synced live orders...', 'info');
             }}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '5px',
-              padding: '6px 12px',
+              gap: '4px',
+              padding: '4px 9px',
               borderRadius: '6px',
               background: '#F0FDF4',
-              border: '1.5px solid #86EFAC',
+              border: '1px solid #86EFAC',
               color: '#166534',
               fontWeight: 700,
-              fontSize: '12px',
-              cursor: 'pointer'
-            }}
-            title="Refresh order pipeline and assigned stops"
-          >
-            <RefreshCw size={13} />
-            <span>Sync Orders</span>
-          </button>
-          <button
-            type="button"
-            onClick={handleExportManifestExcel}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '5px',
-              padding: '6px 12px',
-              borderRadius: '6px',
-              background: '#FFFFFF',
-              border: '1.5px solid #CBD5E1',
-              color: '#334155',
-              fontWeight: 700,
-              fontSize: '12px',
+              fontSize: '11px',
               cursor: 'pointer'
             }}
           >
-            <Download size={13} />
-            <span>Export Delivery Manifest</span>
+            <RefreshCw size={12} />
+            <span>Sync</span>
           </button>
+          {!isDeliveryExecutive && (
+            <button
+              type="button"
+              onClick={handleExportManifestExcel}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '4px 9px',
+                borderRadius: '6px',
+                background: '#FFFFFF',
+                border: '1px solid #CBD5E1',
+                color: '#334155',
+                fontWeight: 700,
+                fontSize: '11px',
+                cursor: 'pointer'
+              }}
+            >
+              <Download size={12} />
+              <span>Export</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* RIDER-SPECIFIC STICKY SHIFT & TIME-BATCH BAR (Stage switching is in Left Menu & Bottom Dock) */}
+      {/* RIDER-SPECIFIC COMPACT STICKY BAR (Single unified card: Cash + Date + Time Batch + Search) */}
       {isDeliveryExecutive ? (
         <div style={{
           position: 'sticky',
           top: 0,
           zIndex: 20,
           background: '#FFFFFF',
-          borderRadius: '12px',
+          borderRadius: '10px',
           border: '1.5px solid #E2E8F0',
-          padding: '10px 12px',
+          padding: '8px 10px',
           marginBottom: '10px',
-          boxShadow: '0 2px 8px rgba(15, 23, 42, 0.04)',
+          boxShadow: '0 2px 6px rgba(15, 23, 42, 0.04)',
           display: 'flex',
           flexDirection: 'column',
-          gap: '8px'
+          gap: '6px'
         }}>
-          {/* Row 1: Active Left-Menu Stage Title + Rider Cash Summary Pills */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-              <span style={{
-                padding: '4px 10px',
-                borderRadius: '6px',
-                fontSize: '12px',
-                fontWeight: 900,
-                background: riderTab === 'PENDING' ? '#EA580C' : riderTab === 'DELIVERED' ? '#059669' : riderTab === 'CANCELLED' ? '#DC2626' : '#234B3C',
-                color: '#FFF'
-              }}>
-                {riderTab === 'PENDING' ? `1. To Deliver (${countRiderPending})` :
-                 riderTab === 'DELIVERED' ? `2. Delivered (${countRiderDelivered})` :
-                 riderTab === 'CANCELLED' ? `3. Undelivered (${countRiderCancelled})` :
-                 `4. All Stops (${riderBaseOrders.length})`}
-              </span>
-              <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#B91C1C', background: '#FEF2F2', border: '1px solid #FECACA', padding: '3px 8px', borderRadius: '6px' }}>
-                COD to Collect: ₹{riderTotalCodToCollect.toLocaleString()}
+          {/* Row 1: Cash Summary Pills + Date Toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '11px', fontWeight: 800, color: '#B91C1C', background: '#FEF2F2', border: '1px solid #FECACA', padding: '2px 7px', borderRadius: '5px' }}>
+                COD: ₹{riderTotalCodToCollect.toLocaleString()}
               </span>
               <span style={{
-                fontSize: '11.5px',
+                fontSize: '11px',
                 fontWeight: 900,
                 color: riderCashCollectedInHand > 0 ? '#991B1B' : '#166534',
                 background: riderCashCollectedInHand > 0 ? '#FEE2E2' : '#DCFCE7',
                 border: `1px solid ${riderCashCollectedInHand > 0 ? '#FCA5A5' : '#86EFAC'}`,
-                padding: '3px 8px',
-                borderRadius: '6px'
+                padding: '2px 7px',
+                borderRadius: '5px'
               }}>
                 💵 Cash in Hand: ₹{riderCashCollectedInHand.toLocaleString()}
               </span>
             </div>
 
-            {/* Quick Date Toggle */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               {[
                 { id: 'TODAY', label: 'Today' },
@@ -852,9 +834,9 @@ export default function OrdersFulfillmentPage() {
                   type="button"
                   onClick={() => setDateFilter(d.id)}
                   style={{
-                    padding: '4px 10px',
-                    borderRadius: '6px',
-                    fontSize: '11.5px',
+                    padding: '3px 8px',
+                    borderRadius: '5px',
+                    fontSize: '11px',
                     fontWeight: 800,
                     cursor: 'pointer',
                     border: dateFilter === d.id ? '1.5px solid #234B3C' : '1px solid #CBD5E1',
@@ -868,15 +850,15 @@ export default function OrdersFulfillmentPage() {
             </div>
           </div>
 
-          {/* Row 2: Dynamic Warehouse Time-Batch Pills */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflowX: 'auto', paddingBottom: '2px' }}>
+          {/* Row 2: Compact Warehouse Time-Batch Pills */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', overflowX: 'auto', paddingBottom: '2px' }}>
             <button
               type="button"
               onClick={() => setSlotFilter('ALL')}
               style={{
-                padding: '5px 10px',
-                borderRadius: '6px',
-                fontSize: '11.5px',
+                padding: '4px 8px',
+                borderRadius: '5px',
+                fontSize: '11px',
                 fontWeight: 800,
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
@@ -885,7 +867,7 @@ export default function OrdersFulfillmentPage() {
                 color: slotFilter === 'ALL' ? '#065F46' : '#475569'
               }}
             >
-              All Time Batches ({riderBaseOrders.length})
+              All Slots ({riderBaseOrders.length})
             </button>
             {driverTimeSlots.map(slot => {
               const slotActive = slotFilter.toLowerCase() === slot.label.toLowerCase();
@@ -896,9 +878,9 @@ export default function OrdersFulfillmentPage() {
                   type="button"
                   onClick={() => setSlotFilter(slotActive ? 'ALL' : slot.label)}
                   style={{
-                    padding: '5px 10px',
-                    borderRadius: '6px',
-                    fontSize: '11.5px',
+                    padding: '4px 8px',
+                    borderRadius: '5px',
+                    fontSize: '11px',
                     fontWeight: 800,
                     cursor: 'pointer',
                     whiteSpace: 'nowrap',
@@ -907,17 +889,44 @@ export default function OrdersFulfillmentPage() {
                     color: slotActive ? '#065F46' : '#334155',
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: '5px'
+                    gap: '4px'
                   }}
                 >
                   <span>{slot.label}</span>
-                  {slot.window && <span style={{ fontSize: '10.5px', color: '#059669', fontWeight: 700 }}>({slot.window})</span>}
-                  <span style={{ background: slotActive ? '#059669' : '#E2E8F0', color: slotActive ? '#FFF' : '#334155', padding: '1px 5px', borderRadius: '4px', fontSize: '10px' }}>
+                  {slot.window && <span style={{ fontSize: '10px', color: '#059669', fontWeight: 700 }}>({slot.window})</span>}
+                  <span style={{ background: slotActive ? '#059669' : '#E2E8F0', color: slotActive ? '#FFF' : '#334155', padding: '0 4px', borderRadius: '4px', fontSize: '10px' }}>
                     {slotCount}
                   </span>
                 </button>
               );
             })}
+          </div>
+
+          {/* Row 3: Slim Inline Search + Society Select (No duplicate Date/Slot dropdowns) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', paddingTop: '4px', borderTop: '1px solid #F1F5F9' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flex: '1 1 160px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '6px', padding: '4px 8px' }}>
+              <Search size={13} color="#64748B" />
+              <input
+                type="text"
+                placeholder="Search flat #, name, order #..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{ width: '100%', border: 'none', outline: 'none', fontSize: '11.5px', background: 'transparent' }}
+              />
+            </div>
+            <select
+              value={societyFilter}
+              onChange={(e) => {
+                setSocietyFilter(e.target.value);
+                setBlockFilter('ALL');
+              }}
+              style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '11.5px', fontWeight: 700, color: '#334155', background: '#FFF' }}
+            >
+              <option value="ALL">All Societies</option>
+              {accessibleSocieties.map(s => (
+                <option key={s.id} value={s.name}>{s.name}</option>
+              ))}
+            </select>
           </div>
         </div>
       ) : currentRoleId === 'WAREHOUSE_STAFF' ? null : (
@@ -1156,81 +1165,70 @@ export default function OrdersFulfillmentPage() {
         </>
       )}
 
-      {/* ================= SEARCH & FILTER CONTROLS ================= */}
-      <div style={{
-        background: '#FFFFFF',
-        borderRadius: '12px',
-        border: '1.5px solid #E2E8F0',
-        padding: '10px 14px',
-        marginBottom: '14px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '10px'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '220px' }}>
-          <Search size={15} color="#64748B" />
-          <input
-            type="text"
-            placeholder={isDeliveryExecutive ? "Search my deliveries by order #, resident, society, flat..." : "Search by Order ID, customer, society, or flat number..."}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{ width: '100%', border: 'none', outline: 'none', fontSize: '12.5px' }}
-          />
-        </div>
+      {/* ================= SEARCH & FILTER CONTROLS (NON-RIDER DESKS) ================= */}
+      {!isDeliveryExecutive && (
+        <div style={{
+          background: '#FFFFFF',
+          borderRadius: '12px',
+          border: '1.5px solid #E2E8F0',
+          padding: '8px 12px',
+          marginBottom: '12px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '8px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: '200px' }}>
+            <Search size={14} color="#64748B" />
+            <input
+              type="text"
+              placeholder="Search by Order ID, customer, society, or flat #..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{ width: '100%', border: 'none', outline: 'none', fontSize: '12px' }}
+            />
+          </div>
 
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-          {!isDeliveryExecutive && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#64748B' }}>
-              <Filter size={13} />
-              <span>Status:</span>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                style={{ padding: '3px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '12px' }}
-              >
-                <option value="ALL">All Status ({scopedOrders.length})</option>
-                <option value="CONFIRMED">Confirmed ({countConfirmed})</option>
-                <option value="PROCURING">Procuring ({countProcuring})</option>
-                <option value="AT_WAREHOUSE">At Warehouse ({countWarehouse})</option>
-                <option value="OUT_FOR_DELIVERY">Out for Delivery ({countOut})</option>
-                <option value="DELIVERED">Delivered ({countDelivered})</option>
-              </select>
-            </div>
-          )}
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '11.5px', fontWeight: 600 }}
+            >
+              <option value="ALL">All Status ({scopedOrders.length})</option>
+              <option value="CONFIRMED">Confirmed ({countConfirmed})</option>
+              <option value="PROCURING">Procuring ({countProcuring})</option>
+              <option value="AT_WAREHOUSE">At Warehouse ({countWarehouse})</option>
+              <option value="OUT_FOR_DELIVERY">Out for Delivery ({countOut})</option>
+              <option value="DELIVERED">Delivered ({countDelivered})</option>
+            </select>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#64748B' }}>
-            <span>Society:</span>
             <select
               value={societyFilter}
               onChange={(e) => {
                 setSocietyFilter(e.target.value);
                 setBlockFilter('ALL');
               }}
-              style={{ padding: '3px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '12px' }}
+              style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '11.5px', fontWeight: 600 }}
             >
               <option value="ALL">All Societies</option>
               {accessibleSocieties.map(s => (
                 <option key={s.id} value={s.name}>{s.name}</option>
               ))}
             </select>
-          </div>
 
-          {availableBlocks.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#64748B' }}>
-              <Layers size={13} color="#234B3C" />
-              <span>Block / Wing:</span>
+            {availableBlocks.length > 0 && (
               <select
                 value={blockFilter}
                 onChange={(e) => setBlockFilter(e.target.value)}
                 style={{
-                  padding: '3px 8px',
+                  padding: '4px 8px',
                   borderRadius: '6px',
                   border: blockFilter !== 'ALL' ? '1.5px solid #234B3C' : '1px solid #CBD5E1',
                   background: blockFilter !== 'ALL' ? '#F0FDF4' : '#FFF',
                   color: blockFilter !== 'ALL' ? '#234B3C' : '#334155',
-                  fontSize: '12px',
+                  fontSize: '11.5px',
                   fontWeight: 700
                 }}
               >
@@ -1239,36 +1237,29 @@ export default function OrdersFulfillmentPage() {
                   <option key={b} value={b}>Block {b}</option>
                 ))}
               </select>
-            </div>
-          )}
+            )}
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#64748B' }}>
-            <span>Run Slot:</span>
             <select
               value={slotFilter}
               onChange={(e) => setSlotFilter(e.target.value)}
-              style={{ padding: '3px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '12px', fontWeight: 700 }}
+              style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '11.5px', fontWeight: 700 }}
             >
-              <option value="ALL">All Run Slots</option>
-              <option value="Morning">🌅 Morning Run (06:30 AM)</option>
-              <option value="Evening">🌇 Evening Run (05:00 PM)</option>
+              <option value="ALL">All Time Slots</option>
+              {driverTimeSlots.map(s => (
+                <option key={s.id} value={s.label}>{s.label} {s.window ? `(${s.window})` : ''}</option>
+              ))}
             </select>
-          </div>
 
-          {/* Day-to-Day Date Filter */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#64748B' }}>
-            <Calendar size={13} color="#059669" />
-            <span>Date:</span>
             <select
               value={dateFilter}
               onChange={(e) => setDateFilter(e.target.value)}
-              style={{ padding: '3px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '12px', fontWeight: 700 }}
+              style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '11.5px', fontWeight: 700 }}
             >
               <option value="ALL">All Dates</option>
               <option value="TODAY">Today Only</option>
               <option value="YESTERDAY">Yesterday</option>
               <option value="WEEK">Past 7 Days</option>
-              <option value="CUSTOM">Custom Single Day...</option>
+              <option value="CUSTOM">Custom Day...</option>
             </select>
             {dateFilter === 'CUSTOM' && (
               <input
@@ -1280,7 +1271,7 @@ export default function OrdersFulfillmentPage() {
             )}
           </div>
         </div>
-      </div>
+      )}
 
       {/* ================= PRIMARY CONTENT AREA ================= */}
       {isDeliveryExecutive ? (

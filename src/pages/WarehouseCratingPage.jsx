@@ -1066,50 +1066,39 @@ export default function WarehouseCratingPage() {
   return (
     <div className="admin-page-container">
       {/* Page Header */}
-      <div className="page-title-header" style={{ marginBottom: '12px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-          <div>
-            <h1 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+      <div className="page-title-header" style={{ marginBottom: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <h1 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
               {activeTab === 'RETURN_AUDIT'
                 ? '3. Quality & Returns Audit'
                 : activeTab === 'SOCIETY_LOTS'
                   ? '2. Crates & Dispatch'
                   : '1. Packing Station'}
             </h1>
+            <span style={{
+              fontSize: '10.5px',
+              background: '#ECFDF5',
+              border: '1px solid #A7F3D0',
+              color: '#065F46',
+              fontWeight: 800,
+              padding: '2px 7px',
+              borderRadius: '5px'
+            }}>
+              🏢 {assignedWhName || assignedWhCode || 'Hub'}
+            </span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            {/* Logistics Hub Badge */}
-            <div style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '5px 12px',
-              borderRadius: '6px',
-              border: isWarehouseScoped ? '1.5px solid #A7F3D0' : '1.5px solid #E2E8F0',
-              background: isWarehouseScoped ? '#ECFDF5' : '#F8FAFC',
-              fontSize: '12px',
-              fontWeight: 800,
-              color: isWarehouseScoped ? '#065F46' : '#1E293B'
-            }}>
-              <Warehouse size={15} color={isWarehouseScoped ? "#059669" : "#0284C7"} />
-              <span>🏢 {assignedWhCode ? `${assignedWhCode} — ${assignedWhName}` : (assignedWhName || currentUser?.assignedLocationName || (currentUser?.assignedWarehouseId !== 'ALL' ? currentUser?.assignedWarehouseId : 'All Hubs & Warehouses'))}</span>
-              {isWarehouseScoped && (
-                <span style={{ fontSize: '10px', background: '#059669', color: '#FFF', padding: '1px 5px', borderRadius: '4px' }}>🔒 Assigned Hub</span>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '11.5px', background: '#FEF3C7', color: '#B45309', padding: '3px 10px', borderRadius: '6px', fontWeight: 800, border: '1px solid #FDE68A' }}>
-                ⏳ Pending: {readyToPackCount}
-              </span>
-              <span style={{ fontSize: '11.5px', background: '#DCFCE7', color: '#166534', padding: '3px 10px', borderRadius: '6px', fontWeight: 800, border: '1px solid #86EFAC' }}>
-                ✓ Packed: {packedCount}
-              </span>
-              <span style={{ fontSize: '11.5px', background: '#F1F5F9', color: '#475569', padding: '3px 10px', borderRadius: '6px', fontWeight: 700 }}>
-                🚚 Handed Over: {outCount}
-              </span>
-            </div>
+          <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '11px', background: '#FEF3C7', color: '#B45309', padding: '2px 8px', borderRadius: '5px', fontWeight: 800, border: '1px solid #FDE68A' }}>
+              ⏳ Pending: {readyToPackCount}
+            </span>
+            <span style={{ fontSize: '11px', background: '#DCFCE7', color: '#166534', padding: '2px 8px', borderRadius: '5px', fontWeight: 800, border: '1px solid #86EFAC' }}>
+              ✓ Packed: {packedCount}
+            </span>
+            <span style={{ fontSize: '11px', background: '#F1F5F9', color: '#475569', padding: '2px 8px', borderRadius: '5px', fontWeight: 700 }}>
+              🚚 Out: {outCount}
+            </span>
           </div>
         </div>
       </div>
@@ -1123,23 +1112,21 @@ export default function WarehouseCratingPage() {
           background: '#FFFFFF',
           border: '1.5px solid #CBD5E1',
           borderRadius: '10px',
-          padding: '8px 12px',
-          marginBottom: '12px',
+          padding: '8px 10px',
+          marginBottom: '10px',
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '10px',
+          flexDirection: 'column',
+          gap: '6px',
           boxShadow: '0 2px 6px rgba(15, 23, 42, 0.04)'
         }}>
-          {/* Delivery Date Selector Pills */}
+          {/* Row 1: Delivery Date Selector Pills */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', marginRight: '2px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-              <Calendar size={12} /> Date:
+            <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+              <Calendar size={11} /> Date:
             </span>
             {[
-              { id: 'TODAY', label: `Today (${todayStr})` },
-              { id: 'TOMORROW', label: `Tomorrow (${tomorrowStr})` },
+              { id: 'TODAY', label: 'Today' },
+              { id: 'TOMORROW', label: 'Tomorrow' },
               { id: 'ALL', label: 'All Dates' }
             ].map(d => {
               const isSelected = dateFilter === d.id;
@@ -1149,9 +1136,9 @@ export default function WarehouseCratingPage() {
                   type="button"
                   onClick={() => { setDateFilter(d.id); setCurrentPage(1); }}
                   style={{
-                    padding: '4px 10px',
-                    borderRadius: '6px',
-                    fontSize: '11.5px',
+                    padding: '3px 9px',
+                    borderRadius: '5px',
+                    fontSize: '11px',
                     fontWeight: 800,
                     border: isSelected ? '1.5px solid #234B3C' : '1px solid #CBD5E1',
                     background: isSelected ? '#234B3C' : '#F8FAFC',
@@ -1165,27 +1152,28 @@ export default function WarehouseCratingPage() {
             })}
           </div>
 
-          {/* Dynamic Warehouse Time-Batch Tabs */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', flex: 1, justifyContent: 'flex-end' }}>
+          {/* Row 2: Dynamic Warehouse Time-Batch Tabs (Horizontal Scroll on Mobile) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflowX: 'auto', paddingBottom: '2px' }}>
             <button
               type="button"
               onClick={() => { setSlotFilter('ALL'); setCurrentPage(1); }}
               style={{
-                padding: '5px 10px',
-                borderRadius: '7px',
-                border: slotFilter === 'ALL' ? '2px solid #234B3C' : '1px solid #CBD5E1',
+                padding: '4px 9px',
+                borderRadius: '6px',
+                border: slotFilter === 'ALL' ? '1.5px solid #234B3C' : '1px solid #CBD5E1',
                 background: slotFilter === 'ALL' ? '#EBF2EE' : '#FFFFFF',
                 color: slotFilter === 'ALL' ? '#234B3C' : '#334155',
-                fontSize: '11.5px',
+                fontSize: '11px',
                 fontWeight: 800,
                 cursor: 'pointer',
+                whiteSpace: 'nowrap',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '6px'
+                gap: '5px'
               }}
             >
-              <span>All Time Batches</span>
-              <span style={{ background: slotFilter === 'ALL' ? '#234B3C' : '#E2E8F0', color: slotFilter === 'ALL' ? '#FFF' : '#334155', padding: '1px 6px', borderRadius: '4px', fontSize: '10.5px' }}>
+              <span>All Batches</span>
+              <span style={{ background: slotFilter === 'ALL' ? '#234B3C' : '#E2E8F0', color: slotFilter === 'ALL' ? '#FFF' : '#334155', padding: '0 5px', borderRadius: '4px', fontSize: '10px' }}>
                 {dateFilteredOrders.filter(o => o.status !== 'DELIVERED').length}
               </span>
             </button>
@@ -1198,25 +1186,26 @@ export default function WarehouseCratingPage() {
                   type="button"
                   onClick={() => { setSlotFilter(b.slotId); setCurrentPage(1); }}
                   style={{
-                    padding: '4px 10px',
-                    borderRadius: '7px',
-                    border: isSelected ? '2px solid #234B3C' : '1px solid #CBD5E1',
+                    padding: '4px 9px',
+                    borderRadius: '6px',
+                    border: isSelected ? '1.5px solid #234B3C' : '1px solid #CBD5E1',
                     background: isSelected ? '#F0FDF4' : '#FFFFFF',
                     cursor: 'pointer',
                     textAlign: 'left',
+                    whiteSpace: 'nowrap',
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: '8px'
+                    gap: '6px'
                   }}
                 >
                   <div>
-                    <div style={{ fontSize: '11.5px', fontWeight: 800, color: isSelected ? '#234B3C' : '#0F172A', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 800, color: isSelected ? '#234B3C' : '#0F172A', display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <span>{b.label}</span>
-                      <span style={{ fontSize: '10.5px', color: '#059669', fontWeight: 700 }}>
+                      <span style={{ fontSize: '10px', color: '#059669', fontWeight: 700 }}>
                         ({b.timeWindow})
                       </span>
                     </div>
-                    <div style={{ fontSize: '10px', color: '#64748B', fontWeight: 700 }}>
+                    <div style={{ fontSize: '9.5px', color: '#64748B', fontWeight: 700 }}>
                       {b.totalFlats} Flats · <span style={{ color: '#B45309' }}>{b.pendingCount} Pending</span> · <span style={{ color: '#15803D' }}>{b.packedCount} Packed</span>
                     </div>
                   </div>

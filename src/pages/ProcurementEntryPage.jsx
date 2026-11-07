@@ -484,24 +484,19 @@ export default function ProcurementEntryPage() {
   return (
     <div className="admin-page-container" style={{ maxWidth: '920px' }}>
       {/* Top Header */}
-      <div className="page-title-header" style={{ marginBottom: '16px' }}>
+      <div className="page-title-header" style={{ marginBottom: '10px' }}>
         <div>
-          <Link to="/procurement-demand" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#64748B', fontWeight: 600, textDecoration: 'none', marginBottom: '6px' }}>
-            <ArrowLeft size={14} /> Back to Mandi Demand Checklist
+          <Link to="/procurement-demand" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11.5px', color: '#64748B', fontWeight: 700, textDecoration: 'none', marginBottom: '4px' }}>
+            <ArrowLeft size={13} /> Back to Demand
           </Link>
-          <h1 style={{ fontSize: '19px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-            Log Consolidated APMC Mandi Purchase Bill & Transport
+          <h1 style={{ fontSize: '16.5px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+            Log Mandi Purchase Bill
           </h1>
-          <p style={{ fontSize: '12px', color: '#64748B', margin: '2px 0 0' }}>
-            Record farmer/agent auction invoice, bank settlement details, transport freight & weighing slip photo
-          </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '12px', background: '#EBF2EE', color: '#234B3C', padding: '4px 12px', borderRadius: '6px', fontWeight: 700 }}>
-            Procurement Officer: <strong>{currentUser?.name || 'Mohan Gowda'}</strong>
-          </span>
-        </div>
+        <span style={{ fontSize: '11px', background: '#EBF2EE', color: '#234B3C', padding: '3px 9px', borderRadius: '6px', fontWeight: 700 }}>
+          👤 {currentUser?.name || 'Manager'}
+        </span>
       </div>
 
       {isInventoryError && (
@@ -669,27 +664,22 @@ export default function ProcurementEntryPage() {
       ) : (
         /* PROCUREMENT BILL ENTRY FORM */
         <form onSubmit={handleSubmit} className="admin-form-card">
-          {/* ZERO PENDING DEMAND NOTICE BANNER */}
+          {/* COMPACT DEMAND STATUS PILL */}
           {unprocuredItemsList.filter(i => i.qty > 0).length === 0 ? (
             <div style={{
               background: '#EFF6FF',
-              border: '1.5px solid #BFDBFE',
-              borderRadius: '10px',
-              padding: '14px 16px',
-              marginBottom: '18px',
+              border: '1px solid #BFDBFE',
+              borderRadius: '8px',
+              padding: '7px 12px',
+              marginBottom: '12px',
               display: 'flex',
-              alignItems: 'flex-start',
-              gap: '12px'
+              alignItems: 'center',
+              gap: '8px'
             }}>
-              <CheckCircle2 size={20} color="#2563EB" style={{ flexShrink: 0, marginTop: '2px' }} />
-              <div>
-                <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#1E40AF' }}>
-                  All Customer Produce Demand is Already Procured!
-                </div>
-                <div style={{ fontSize: '12.5px', color: '#3B82F6', marginTop: '2px', lineHeight: 1.4 }}>
-                  There are no pending customer order requirements. You are currently in <strong>Buffer / Extra Lot</strong> procurement mode.
-                </div>
-              </div>
+              <CheckCircle2 size={15} color="#2563EB" style={{ flexShrink: 0 }} />
+              <span style={{ fontSize: '12px', fontWeight: 800, color: '#1E40AF' }}>
+                All Order Demand Procured · Buffer / Extra Lot Mode
+              </span>
             </div>
           ) : (
             /* COMPACT COLLAPSIBLE DEMAND REFERENCE */
@@ -698,7 +688,7 @@ export default function ProcurementEntryPage() {
               border: '1.5px solid #BBF7D0',
               borderRadius: '8px',
               padding: '8px 12px',
-              marginBottom: '16px'
+              marginBottom: '12px'
             }}>
               <div 
                 onClick={() => setShowDemandReference(prev => !prev)}
@@ -709,84 +699,71 @@ export default function ProcurementEntryPage() {
                   cursor: 'pointer',
                   userSelect: 'none',
                   flexWrap: 'wrap',
-                  gap: '8px'
+                  gap: '6px'
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Users size={16} color="#166534" />
-                  <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#166534' }}>
-                    Remaining Produce Demand for {unprocuredOrders.length} Active Customer Orders
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  <Users size={14} color="#166534" />
+                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#166534' }}>
+                    Pending Demand ({unprocuredOrders.length} Orders)
                   </span>
-                  <span style={{ fontSize: '11px', background: '#DCFCE7', color: '#15803D', fontWeight: 700, padding: '1px 6px', borderRadius: '4px' }}>
-                    {unprocuredItemsList.filter(i => i.qty > 0).length} Crops Needed
-                  </span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '11px', color: '#15803D', fontWeight: 700, background: '#FFFFFF', padding: '2px 8px', borderRadius: '4px', border: '1px solid #BBF7D0' }}>
-                    {showDemandReference ? '▲ Hide Demand Checklist' : '▼ View Demand Checklist'}
+                  <span style={{ fontSize: '10.5px', background: '#DCFCE7', color: '#15803D', fontWeight: 700, padding: '1px 6px', borderRadius: '4px' }}>
+                    {unprocuredItemsList.filter(i => i.qty > 0).length} Crops
                   </span>
                 </div>
+                <span style={{ fontSize: '10.5px', color: '#15803D', fontWeight: 700, background: '#FFFFFF', padding: '2px 7px', borderRadius: '4px', border: '1px solid #BBF7D0' }}>
+                  {showDemandReference ? '▲ Hide' : '▼ Checklist'}
+                </span>
               </div>
 
               {showDemandReference && (
-                <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #DCFCE7' }}>
-                  <div style={{ fontSize: '11.5px', color: '#374151', lineHeight: 1.4, marginBottom: '8px' }}>
-                    Net produce demand aggregated across confirmed customer orders (less opening inventory & previous purchases):
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                    {unprocuredItemsList.filter(i => i.qty > 0).map((crop, idx) => (
-                      <span key={idx} style={{
-                        fontSize: '11.5px',
-                        background: '#FFFFFF',
-                        border: '1px solid #86EFAC',
-                        padding: '3px 8px',
-                        borderRadius: '6px',
-                        color: '#14532D',
-                        fontWeight: 700,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '5px',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
-                      }}>
-                        <span>{crop.name}:</span>
-                        <strong style={{ color: '#15803D' }}>{crop.qty} kg</strong>
-                        {crop.openingStock > 0 && (
-                          <span style={{ fontSize: '10px', color: '#64748B', fontWeight: 500 }}>
-                            ({crop.openingStock}kg stock)
-                          </span>
-                        )}
-                      </span>
-                    ))}
-                  </div>
+                <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #DCFCE7', display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                  {unprocuredItemsList.filter(i => i.qty > 0).map((crop, idx) => (
+                    <span key={idx} style={{
+                      fontSize: '11px',
+                      background: '#FFFFFF',
+                      border: '1px solid #86EFAC',
+                      padding: '2px 7px',
+                      borderRadius: '5px',
+                      color: '#14532D',
+                      fontWeight: 700,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}>
+                      <span>{crop.name}:</span>
+                      <strong style={{ color: '#15803D' }}>{crop.qty} kg</strong>
+                    </span>
+                  ))}
                 </div>
               )}
             </div>
           )}
 
           {/* Section 1: Vendor Selection & Bank Settlement */}
-          <div style={{ borderBottom: '1px solid #E2E8F0', paddingBottom: '18px', marginBottom: '18px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <h3 style={{ fontSize: '15px', color: '#234B3C', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-                <Store size={18} />
-                <span>1. Mandi Commission Agent & Vendor Bank Details</span>
+          <div style={{ borderBottom: '1px solid #E2E8F0', paddingBottom: '14px', marginBottom: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
+              <h3 style={{ fontSize: '14px', color: '#234B3C', display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
+                <Store size={16} />
+                <span>1. Mandi Vendor & Bank</span>
               </h3>
               <Link
                 to="/vendors"
-                style={{ fontSize: '12px', color: '#0284C7', textDecoration: 'none', fontWeight: 700 }}
+                style={{ fontSize: '11.5px', color: '#0284C7', textDecoration: 'none', fontWeight: 800, whiteSpace: 'nowrap', background: '#F0F9FF', padding: '3px 8px', borderRadius: '5px', border: '1px solid #BAE6FD' }}
               >
-                Manage Vendors Master ➔
+                Manage Vendors ➔
               </Link>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px', marginBottom: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '10px', marginBottom: '10px' }}>
               <div>
-                <label style={{ fontSize: '12.5px', fontWeight: 700, display: 'block', marginBottom: '4px', color: '#334155' }}>
-                  Select Registered Vendor / Agent *
+                <label style={{ fontSize: '11.5px', fontWeight: 700, display: 'block', marginBottom: '3px', color: '#334155' }}>
+                  Registered Vendor / Agent *
                 </label>
                 <select
                   value={selectedVendorId}
                   onChange={(e) => handleVendorSelectChange(e.target.value)}
-                  style={{ width: '100%', height: '40px', padding: '0 10px', borderRadius: '8px', border: '1.5px solid #CBD5E1', fontSize: '13px', fontWeight: 700, color: '#0F172A', background: '#FFFFFF' }}
+                  style={{ width: '100%', height: '38px', padding: '0 10px', borderRadius: '8px', border: '1.5px solid #CBD5E1', fontSize: '12.5px', fontWeight: 700, color: '#0F172A', background: '#FFFFFF' }}
                 >
                   {vendors.map(v => (
                     <option key={v.id} value={v.id}>
@@ -798,29 +775,29 @@ export default function ProcurementEntryPage() {
               </div>
 
               <div>
-                <label style={{ fontSize: '12.5px', fontWeight: 700, display: 'block', marginBottom: '4px', color: '#334155' }}>
-                  Commission Agent / Vendor Name *
+                <label style={{ fontSize: '11.5px', fontWeight: 700, display: 'block', marginBottom: '3px', color: '#334155' }}>
+                  Vendor Name *
                 </label>
                 <input
                   type="text"
                   placeholder="e.g. M.K. APMC Mandi Traders"
                   value={vendorName}
                   onChange={(e) => setVendorName(e.target.value)}
-                  style={{ width: '100%', height: '40px', padding: '0 12px', borderRadius: '8px', border: '1.5px solid #CBD5E1', fontSize: '13.5px' }}
+                  style={{ width: '100%', height: '38px', padding: '0 10px', borderRadius: '8px', border: '1.5px solid #CBD5E1', fontSize: '12.5px' }}
                   required
                 />
               </div>
 
               <div>
-                <label style={{ fontSize: '12.5px', fontWeight: 700, display: 'block', marginBottom: '4px', color: '#334155' }}>
-                  APMC Market Yard & Location *
+                <label style={{ fontSize: '11.5px', fontWeight: 700, display: 'block', marginBottom: '3px', color: '#334155' }}>
+                  APMC Market Location *
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. APMC Yard Kolar, Gate No. 4"
+                  placeholder="e.g. APMC Yard Kolar"
                   value={mandiLocation}
                   onChange={(e) => setMandiLocation(e.target.value)}
-                  style={{ width: '100%', height: '40px', padding: '0 12px', borderRadius: '8px', border: '1.5px solid #CBD5E1', fontSize: '13.5px' }}
+                  style={{ width: '100%', height: '38px', padding: '0 10px', borderRadius: '8px', border: '1.5px solid #CBD5E1', fontSize: '12.5px' }}
                   required
                 />
               </div>
@@ -830,25 +807,21 @@ export default function ProcurementEntryPage() {
             {activeVendor?.bankDetails?.accountNumber && (
               <div style={{
                 background: '#F0F9FF',
-                border: '1.5px solid #BAE6FD',
+                border: '1px solid #BAE6FD',
                 borderRadius: '8px',
-                padding: '10px 14px',
+                padding: '8px 12px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 flexWrap: 'wrap',
-                gap: '10px'
+                gap: '8px'
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <CreditCard size={18} color="#0284C7" />
-                  <div style={{ fontSize: '12.5px' }}>
-                    <span style={{ color: '#0369A1', fontWeight: 700 }}>Settlement Bank:</span>{' '}
-                    <strong>{activeVendor.bankDetails.bankName}</strong> | A/C:{' '}
-                    <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{activeVendor.bankDetails.accountNumber}</span> | IFSC:{' '}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11.5px' }}>
+                  <CreditCard size={15} color="#0284C7" />
+                  <div>
+                    <strong style={{ color: '#0369A1' }}>{activeVendor.bankDetails.bankName}</strong> · A/C:{' '}
+                    <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{activeVendor.bankDetails.accountNumber}</span> · IFSC:{' '}
                     <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{activeVendor.bankDetails.ifscCode}</span>
-                    {activeVendor.bankDetails.upiId && (
-                      <span style={{ color: '#059669', marginLeft: '8px', fontWeight: 600 }}>UPI: {activeVendor.bankDetails.upiId}</span>
-                    )}
                   </div>
                 </div>
 
@@ -859,9 +832,9 @@ export default function ProcurementEntryPage() {
                     background: '#FFFFFF',
                     border: '1px solid #7DD3FC',
                     color: '#0369A1',
-                    fontSize: '11px',
+                    fontSize: '10.5px',
                     fontWeight: 700,
-                    padding: '3px 8px',
+                    padding: '2px 7px',
                     borderRadius: '4px',
                     cursor: 'pointer',
                     display: 'inline-flex',
@@ -869,25 +842,20 @@ export default function ProcurementEntryPage() {
                     gap: '4px'
                   }}
                 >
-                  <Copy size={11} />
-                  <span>Copy Bank Info</span>
+                  <Copy size={10} />
+                  <span>Copy</span>
                 </button>
               </div>
             )}
           </div>
 
-          {/* Section 2: Consolidated Multi-Item Invoice Table */}
-          <div style={{ borderBottom: '1px solid #E2E8F0', paddingBottom: '18px', marginBottom: '18px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <div>
-                <h3 style={{ fontSize: '15px', color: '#234B3C', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-                  <FileText size={18} />
-                  <span>2. Procured Produce Line Items</span>
-                </h3>
-                <span style={{ fontSize: '11.5px', color: '#64748B' }}>
-                  Actual Mandi cost rates (COGS) paid per kg to the commission agent
-                </span>
-              </div>
+          {/* Section 2: Consolidated Multi-Item Invoice List (Responsive Mobile/Tablet Cards) */}
+          <div style={{ borderBottom: '1px solid #E2E8F0', paddingBottom: '14px', marginBottom: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
+              <h3 style={{ fontSize: '14px', color: '#234B3C', display: 'flex', alignItems: 'center', gap: '6px', margin: 0 }}>
+                <FileText size={16} />
+                <span>2. Procured Produce Items</span>
+              </h3>
               <button
                 type="button"
                 onClick={handleAddItem}
@@ -895,177 +863,180 @@ export default function ProcurementEntryPage() {
                   background: '#EBF2EE',
                   color: '#234B3C',
                   border: '1px solid #C8DBD0',
-                  padding: '5px 12px',
+                  padding: '4px 10px',
                   borderRadius: '6px',
-                  fontSize: '12px',
-                  fontWeight: 700,
+                  fontSize: '11.5px',
+                  fontWeight: 800,
                   cursor: 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '4px'
                 }}
               >
-                <Plus size={14} />
-                <span>Add Crop / Extra Buffer</span>
+                <Plus size={13} />
+                <span>+ Add Crop</span>
               </button>
             </div>
 
-            <div style={{ overflowX: 'auto', background: '#F8FAFC', borderRadius: '10px', border: '1.5px solid #E2E8F0', padding: '12px' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                <thead>
-                  <tr style={{ borderBottom: '1.5px solid #CBD5E1', textAlign: 'left', color: '#64748B', fontSize: '12px' }}>
-                    <th style={{ padding: '8px' }}>Crop / Produce Item</th>
-                    <th style={{ padding: '8px', width: '120px' }}>Quantity (kg)</th>
-                    <th style={{ padding: '8px', width: '160px' }}>Mandi Purchase Rate (₹/kg)</th>
-                    <th style={{ padding: '8px', width: '130px' }}>Line Total (₹)</th>
-                    <th style={{ padding: '8px', width: '50px' }}></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} style={{ padding: '32px 16px', textAlign: 'center', color: '#64748B' }}>
-                        <div style={{ fontSize: '14px', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>
-                          No pending demand items to procure
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '14px' }}>
-                          All customer order quantities are satisfied. You can manually add extra buffer stock or custom lots below.
-                        </div>
-                        <button
-                          type="button"
-                          onClick={handleAddItem}
+            <div style={{ background: '#F8FAFC', borderRadius: '10px', border: '1.5px solid #E2E8F0', padding: '10px' }}>
+              {items.length === 0 ? (
+                <div style={{ padding: '16px 12px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#475569', marginBottom: '8px' }}>
+                    No pending demand items — add buffer stock row below
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddItem}
+                    style={{
+                      background: '#234B3C',
+                      color: '#FFFFFF',
+                      border: 'none',
+                      padding: '6px 14px',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}
+                  >
+                    <Plus size={14} />
+                    <span>+ Add Produce Row</span>
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {items.map((item, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        background: '#FFFFFF',
+                        border: '1px solid #E2E8F0',
+                        borderRadius: '8px',
+                        padding: '8px 10px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        flexWrap: 'wrap',
+                        gap: '8px'
+                      }}
+                    >
+                      {/* Crop Selector */}
+                      <div style={{ flex: '1 1 180px', minWidth: '150px' }}>
+                        <label style={{ fontSize: '10px', fontWeight: 700, color: '#64748B', display: 'block', marginBottom: '2px' }}>Crop</label>
+                        <select
+                          value={item.name}
+                          onChange={(e) => handleItemChange(idx, 'name', e.target.value)}
                           style={{
-                            background: '#234B3C',
-                            color: '#FFFFFF',
-                            border: 'none',
-                            padding: '8px 16px',
+                            width: '100%',
+                            height: '34px',
+                            padding: '0 8px',
                             borderRadius: '6px',
+                            border: '1px solid #CBD5E1',
                             fontSize: '12.5px',
                             fontWeight: 700,
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px'
+                            color: '#0F172A',
+                            background: '#FFFFFF'
                           }}
                         >
-                          <Plus size={15} />
-                          <span>+ Add Buffer Produce Row</span>
+                          {products.map(p => (
+                            <option key={p.id} value={p.name}>{p.name}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Qty (kg) */}
+                      <div style={{ width: '85px' }}>
+                        <label style={{ fontSize: '10px', fontWeight: 700, color: '#64748B', display: 'block', marginBottom: '2px' }}>Qty (kg)</label>
+                        <input
+                          type="number"
+                          min="1"
+                          step="0.5"
+                          value={item.qty}
+                          onChange={(e) => handleItemChange(idx, 'qty', e.target.value)}
+                          style={{
+                            width: '100%',
+                            height: '34px',
+                            padding: '0 6px',
+                            borderRadius: '6px',
+                            border: '1px solid #CBD5E1',
+                            fontSize: '12.5px',
+                            fontWeight: 700,
+                            textAlign: 'center'
+                          }}
+                          required
+                        />
+                      </div>
+
+                      {/* Rate (₹/kg) */}
+                      <div style={{ width: '95px' }}>
+                        <label style={{ fontSize: '10px', fontWeight: 700, color: '#64748B', display: 'block', marginBottom: '2px' }}>Rate (₹/kg)</label>
+                        <input
+                          type="number"
+                          min="1"
+                          step="0.5"
+                          value={item.rate}
+                          onChange={(e) => handleItemChange(idx, 'rate', e.target.value)}
+                          style={{
+                            width: '100%',
+                            height: '34px',
+                            padding: '0 6px',
+                            borderRadius: '6px',
+                            border: '1px solid #CBD5E1',
+                            fontSize: '12.5px',
+                            fontWeight: 700,
+                            textAlign: 'center'
+                          }}
+                          required
+                        />
+                      </div>
+
+                      {/* Line Total + Delete */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto', paddingTop: '12px' }}>
+                        <strong style={{ color: '#234B3C', fontSize: '13.5px', minWidth: '65px', textAlign: 'right' }}>
+                          ₹{(Number(item.qty) * Number(item.rate)).toLocaleString()}
+                        </strong>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveItem(idx)}
+                          style={{
+                            background: '#FEF2F2',
+                            border: '1px solid #FECACA',
+                            borderRadius: '6px',
+                            color: '#EF4444',
+                            cursor: 'pointer',
+                            padding: '5px'
+                          }}
+                          title="Remove item"
+                        >
+                          <Trash2 size={14} />
                         </button>
-                      </td>
-                    </tr>
-                  ) : (
-                    items.map((item, idx) => (
-                      <tr key={idx} style={{ borderBottom: '1px solid #E2E8F0' }}>
-                        <td style={{ padding: '8px' }}>
-                          <select
-                            value={item.name}
-                            onChange={(e) => handleItemChange(idx, 'name', e.target.value)}
-                            style={{
-                              width: '100%',
-                              height: '36px',
-                              padding: '0 8px',
-                              borderRadius: '6px',
-                              border: '1px solid #CBD5E1',
-                              fontSize: '13px',
-                              fontWeight: 700,
-                              color: '#0F172A',
-                              background: '#FFFFFF'
-                            }}
-                          >
-                            {products.map(p => (
-                              <option key={p.id} value={p.name}>{p.name} ({p.origin || 'Kolar Mandi'})</option>
-                            ))}
-                          </select>
-                        </td>
-                        <td style={{ padding: '8px' }}>
-                          <input
-                            type="number"
-                            min="1"
-                            step="0.5"
-                            value={item.qty}
-                            onChange={(e) => handleItemChange(idx, 'qty', e.target.value)}
-                            style={{
-                              width: '100%',
-                              height: '36px',
-                              padding: '0 8px',
-                              borderRadius: '6px',
-                              border: '1px solid #CBD5E1',
-                              fontSize: '13px',
-                              fontWeight: 700,
-                              textAlign: 'center'
-                            }}
-                            required
-                          />
-                        </td>
-                        <td style={{ padding: '8px' }}>
-                          <div style={{ position: 'relative' }}>
-                            <span style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', color: '#64748B', fontWeight: 700 }}>₹</span>
-                            <input
-                              type="number"
-                              min="1"
-                              step="0.5"
-                              value={item.rate}
-                              onChange={(e) => handleItemChange(idx, 'rate', e.target.value)}
-                              style={{
-                                width: '100%',
-                                height: '36px',
-                                paddingLeft: '22px',
-                                paddingRight: '8px',
-                                borderRadius: '6px',
-                                border: '1px solid #CBD5E1',
-                                fontSize: '13px',
-                                fontWeight: 700
-                              }}
-                              required
-                            />
-                          </div>
-                        </td>
-                        <td style={{ padding: '8px' }}>
-                          <strong style={{ color: '#234B3C', fontSize: '14px' }}>
-                            ₹{(Number(item.qty) * Number(item.rate)).toLocaleString()}
-                          </strong>
-                        </td>
-                        <td style={{ padding: '8px', textAlign: 'center' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveItem(idx)}
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              color: '#EF4444',
-                              cursor: 'pointer',
-                              padding: '4px'
-                            }}
-                            title="Remove item"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* Subtotal & Transport Breakdown Footer */}
               <div style={{
-                paddingTop: '12px',
-                marginTop: '8px',
+                paddingTop: '10px',
+                marginTop: '10px',
                 borderTop: '1.5px solid #CBD5E1'
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', fontSize: '13.5px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '8px', fontSize: '12px' }}>
                   <span style={{ color: '#475569' }}>
-                    Total Farm Produce Weight: <strong style={{ color: '#234B3C', fontSize: '14.5px' }}>{totalWeight} kg</strong>
+                    Weight: <strong style={{ color: '#234B3C', fontSize: '13px' }}>{totalWeight} kg</strong>
                   </span>
-                  <span>
-                    Produce Subtotal: <strong style={{ color: '#0F172A', fontSize: '15px' }}>₹{produceAmount.toLocaleString()}</strong>
+                  <span style={{ color: '#475569' }}>
+                    Subtotal: <strong style={{ color: '#0F172A', fontSize: '13px' }}>₹{produceAmount.toLocaleString()}</strong>
                   </span>
                 </div>
 
                 {/* Transport Freight Input Row */}
                 <div style={{
                   background: '#F1F5F9',
-                  padding: '8px 12px',
+                  padding: '6px 10px',
                   borderRadius: '8px',
                   display: 'flex',
                   alignItems: 'center',
@@ -1073,30 +1044,27 @@ export default function ProcurementEntryPage() {
                   flexWrap: 'wrap',
                   gap: '8px'
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Truck size={16} color="#0284C7" />
-                    <label style={{ fontSize: '12.5px', fontWeight: 700, color: '#334155' }}>
-                      Transport / Truck Freight Charge:
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Truck size={14} color="#0284C7" />
+                    <label style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>
+                      Transport Freight (₹):
                     </label>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 700, color: '#64748B' }}>₹</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      value={transportCharge}
-                      onChange={(e) => setTransportCharge(Math.max(0, parseFloat(e.target.value) || 0))}
-                      style={{ width: '100px', height: '34px', padding: '0 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '13px', fontWeight: 800, textAlign: 'right' }}
-                    />
-                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={transportCharge}
+                    onChange={(e) => setTransportCharge(Math.max(0, parseFloat(e.target.value) || 0))}
+                    style={{ width: '90px', height: '32px', padding: '0 8px', borderRadius: '6px', border: '1px solid #CBD5E1', fontSize: '12.5px', fontWeight: 800, textAlign: 'right', background: '#FFF' }}
+                  />
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px', paddingTop: '6px' }}>
-                  <span style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>
-                    Total Mandi Settlement (Produce + Transport):
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px', marginTop: '8px', paddingTop: '4px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>
+                    Total Mandi Settlement:
                   </span>
-                  <span style={{ fontSize: '18px', fontWeight: 800, color: '#059669' }}>
+                  <span style={{ fontSize: '16px', fontWeight: 900, color: '#059669' }}>
                     ₹{totalAmount.toLocaleString()}
                   </span>
                 </div>
