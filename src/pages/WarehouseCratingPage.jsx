@@ -600,14 +600,18 @@ export default function WarehouseCratingPage() {
       }
       return true;
     }).sort((a, b) => {
-      const dateCompare = (a.deliveryDate || '').localeCompare(b.deliveryDate || '');
-      if (dateCompare !== 0) return dateCompare;
-      const socCompare = (a.societyName || '').localeCompare(b.societyName || '');
-      if (socCompare !== 0) return socCompare;
+      // 1. Unpacked (Pending) orders always at the TOP inside each crate
+      const aPacked = a.status === 'PACKED' || a.status === 'OUT_FOR_DELIVERY' || a.status === 'DELIVERED' ? 1 : 0;
+      const bPacked = b.status === 'PACKED' || b.status === 'OUT_FOR_DELIVERY' || b.status === 'DELIVERED' ? 1 : 0;
+      if (aPacked !== bPacked) return aPacked - bPacked;
+
+      // 2. Within same status, newest orders first (by createdAt if present, else flat number)
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      if (timeA !== timeB) return timeB - timeA;
+
       const bA = extractBlockAndFlat(a.flatNo);
       const bB = extractBlockAndFlat(b.flatNo);
-      const blockCompare = bA.block.localeCompare(bB.block);
-      if (blockCompare !== 0) return blockCompare;
       return (bA.flat || '').localeCompare(bB.flat || '', undefined, { numeric: true });
     });
   }, [visibleOrders, societyFilter, blockFilter, packingStageFilter, searchQuery]);
@@ -674,7 +678,17 @@ export default function WarehouseCratingPage() {
       }
     });
 
-    return Object.values(map);
+    return Object.values(map).sort((a, b) => {
+      // 1. Crates with Pending (unpacked) orders always at the TOP
+      const aRank = a.pendingCount > 0 ? 0 : (a.isHandedOver ? 2 : 1);
+      const bRank = b.pendingCount > 0 ? 0 : (b.isHandedOver ? 2 : 1);
+      if (aRank !== bRank) return aRank - bRank;
+
+      // 2. Then by Society & Block name
+      const socCompare = (a.societyName || '').localeCompare(b.societyName || '');
+      if (socCompare !== 0) return socCompare;
+      return (a.blockName || '').localeCompare(b.blockName || '', undefined, { numeric: true });
+    });
   }, [filteredPackingOrders, assignedWhId, todayStr, activeWarehouseSlots]);
 
   const paginatedOrders = filteredPackingOrders.slice(
@@ -784,6 +798,9 @@ export default function WarehouseCratingPage() {
       vehicleNumber: firstAssigned?.vehicleNumber || null,
       dispatchedAt: firstAssigned?.dispatchedAt || null
     };
+  }).sort((a, b) => {
+    const rank = { READY_FOR_HANDOVER: 0, PARTIALLY_PACKED: 1, PENDING_PACKING: 2, OUT_FOR_DELIVERY: 3, DELIVERED: 4 };
+    return (rank[a.status] ?? 5) - (rank[b.status] ?? 5);
   });
 
   // Open Handover Modal & Auto-Populate Warehouse Assigned Driver
