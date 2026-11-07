@@ -358,10 +358,26 @@ export default function WarehouseCratingPage() {
     });
   }, [procurementBills, isWarehouseScoped, warehouses.length, assignedWhId, assignedWhCode, resolvedWh]);
 
-  // Filter returned / cancelled orders for this warehouse
+  // Filter returned / cancelled orders for this warehouse (ONLY physical returns from delivery runs)
   const returnedOrders = useMemo(() => {
     return orders.filter(order => {
       if (order.status !== 'CANCELLED') return false;
+
+      // Only orders that were physically dispatched / assigned to a delivery partner require warehouse quality audit
+      const isPhysicalDoorstepReturn = Boolean(
+        order.deliveryLotId || 
+        order.deliveryPartnerId || 
+        order.deliveryPartnerName ||
+        (order.cancelledReason && (
+          order.cancelledReason.includes('[PROOF_PHOTO]') || 
+          order.cancelledReason.includes('Reported by Rider') ||
+          order.cancelledReason.includes('Doorstep') ||
+          order.cancelledReason.includes('Refused') ||
+          order.cancelledReason.includes('Quality Rejected')
+        ))
+      );
+      if (!isPhysicalDoorstepReturn) return false;
+
       if (isWarehouseScoped && warehouses.length > 1) {
         const orderWhId = order.warehouseId || order.warehouse?.id || societies.find(s => s.id === order.societyId)?.warehouseId;
         const orderWhCode = order.warehouseCode || order.warehouse?.code || warehouses.find(w => w.id === orderWhId)?.code;
