@@ -357,17 +357,44 @@ export default function ProcurementDemandPage() {
   }, [matchingProcurementLogs, cropDemandMap, products]);
 
   // Combine into complete Demand Sheet with Rigorous Inventory Reconciliation:
-  // Gross Customer Demand minus Total Available Supply (Warehouse Buffer Stock + Mandi Procured Today) = Net Mandi Remaining
+  // Includes both active demand crops and any procured crops whose orders were cancelled pre-dispatch
   const allDemandItems = useMemo(() => {
-    const items = Object.values(cropDemandMap).map(d => {
+    const combinedMap = { ...cropDemandMap };
+
+    // Ensure crops that were procured today (even if all their orders were cancelled pre-dispatch) are included
+    Object.keys(alreadyProcuredMap).forEach(cropName => {
+      if (!combinedMap[cropName]) {
+        const prod = products.find(p => p.name.toLowerCase() === cropName.toLowerCase()) || {};
+        combinedMap[cropName] = {
+          name: prod.name || cropName,
+          productId: prod.id || '',
+          category: prod.category || 'VEGETABLES',
+          origin: prod.origin || 'APMC Mandi Auction Yard',
+          grossDemandKg: 0,
+          packages: {},
+          benchmarkRate: prod.wholesalePrice
+            ? Math.round(prod.wholesalePrice / 20)
+            : Math.round((prod.retailPrice || 40) * 0.65),
+          retailPrice: prod.retailPrice || 40,
+          ordersCount: 0,
+          orderIds: new Set(),
+          societies: new Set(),
+          slotBreakdown: { 'Morning Fresh Slot': 0, 'Evening Fresh Slot': 0 }
+        };
+      }
+    });
+
+    const items = Object.values(combinedMap).map(d => {
       const rawStockKg = getCropStockInWarehouse(d.name, d.productId);
       const alreadyProcuredKg = Number(alreadyProcuredMap[d.name] || 0);
 
-      // Opening / Reserve stock in warehouse prior to today's Mandi purchase
-      const openingStockKg = Math.max(0, Number((rawStockKg - alreadyProcuredKg).toFixed(2)));
+      // Prior reserve stock + any procured stock freed up by pre-dispatch order cancellations
+      const priorStockKg = Math.max(0, Number((rawStockKg - alreadyProcuredKg).toFixed(2)));
+      const freedFromCancelledKg = Math.max(0, Number((alreadyProcuredKg - d.grossDemandKg).toFixed(2)));
+      const openingStockKg = Number((priorStockKg + freedFromCancelledKg).toFixed(2));
 
       // Total available supply to cover customer demand
-      const totalSupplyCoveredKg = Number((openingStockKg + alreadyProcuredKg).toFixed(2));
+      const totalSupplyCoveredKg = Number((priorStockKg + alreadyProcuredKg).toFixed(2));
 
       // Net Mandi Requirement: What is still missing and must be purchased at APMC Mandi
       const netRequiredKg = Math.max(0, Number((d.grossDemandKg - totalSupplyCoveredKg).toFixed(2)));

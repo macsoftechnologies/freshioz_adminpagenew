@@ -135,7 +135,8 @@ export default function FinancialTransactionsPage() {
   const customerPayments = useMemo(() => {
     return scopedOrders.map(order => {
       const isCod = (order.paymentMethod || '').includes('PAY_ON_DELIVERY') || order.paymentMethod === 'COD';
-      const isPaid = order.paymentStatus === 'PAID' || order.codPaymentReceived || order.status === 'DELIVERED';
+      const isCancelled = order.status === 'CANCELLED';
+      const isPaid = !isCancelled && (order.paymentStatus === 'PAID' || order.codPaymentReceived || order.status === 'DELIVERED');
       const receivedMode = order.codReceivedMode || (isCod ? 'CASH' : 'ONLINE_GATEWAY');
       
       return {
@@ -152,11 +153,12 @@ export default function FinancialTransactionsPage() {
         societyName: order.societyName || 'Greenfield Heights',
         flatNo: order.flatNo || order.flatNumber || 'Drop Desk',
         paymentMethod: order.paymentMethod || 'UPI / Prepaid',
+        paymentStatus: order.paymentStatus,
         isCod,
         isPaid,
         receivedMode,
         collectedBy: isCod 
-          ? (order.codCollectedBy || 'Assigned Delivery Partner') 
+          ? (order.codCollectedBy || order.deliveryPartnerName || 'Assigned Delivery Partner') 
           : 'Razorpay Auto-Settlement Gateway',
         collectedAt: order.codCollectedAt || order.deliveredAt || order.createdAt,
         isSettledToHub: !!order.codSettledToHub,
@@ -353,11 +355,11 @@ export default function FinancialTransactionsPage() {
     return 'All Time';
   }, [datePreset, customDate]);
 
-  // RIDER CASH IN HAND BREAKDOWN
+  // RIDER CASH IN HAND BREAKDOWN (Strictly delivered COD orders; UPI QR goes directly to bank and never adds to Cash in Hand)
   const riderCashSettlementSummary = useMemo(() => {
     const riderMap = {};
     
-    customerPayments.filter(p => p.isCod).forEach(p => {
+    customerPayments.filter(p => p.isCod && p.status === 'DELIVERED').forEach(p => {
       const riderKey = p.collectedBy || 'Unassigned Delivery Partner';
       if (!riderMap[riderKey]) {
         riderMap[riderKey] = {
@@ -377,10 +379,10 @@ export default function FinancialTransactionsPage() {
       riderMap[riderKey].orderIds.push(p.id);
 
       if (p.receivedMode === 'CASH') {
-        riderMap[riderKey].cashInHand += p.amount;
         if (p.isSettledToHub) {
           riderMap[riderKey].settledToHubAmount += p.amount;
         } else {
+          riderMap[riderKey].cashInHand += p.amount;
           riderMap[riderKey].pendingHandoverAmount += p.amount;
         }
       } else {

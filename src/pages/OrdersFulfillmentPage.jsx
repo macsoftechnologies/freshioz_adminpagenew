@@ -481,10 +481,16 @@ export default function OrdersFulfillmentPage() {
   const countRiderDelivered = riderBaseOrders.filter(o => o.status === 'DELIVERED').length;
   const countRiderCancelled = riderBaseOrders.filter(o => o.status === 'CANCELLED').length;
   const riderTotalCodToCollect = riderBaseOrders
-    .filter(o => o.status !== 'DELIVERED' && o.status !== 'CANCELLED' && (o.paymentMethod || '').includes('PAY_ON_DELIVERY'))
+    .filter(o => o.status !== 'DELIVERED' && o.status !== 'CANCELLED' && ((o.paymentMethod || '').includes('PAY_ON_DELIVERY') || o.paymentMethod === 'COD'))
     .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+  // Strictly accumulate ONLY physical CASH received at doorstep (UPI QR goes directly to bank and never accumulates in rider's hands)
   const riderCashCollectedInHand = riderBaseOrders
-    .filter(o => o.status === 'DELIVERED' && o.codSettledToHub === false && ((o.paymentMethod || '').includes('PAY_ON_DELIVERY') || o.codReceivedMode === 'CASH'))
+    .filter(o =>
+      o.status === 'DELIVERED' &&
+      !o.codSettledToHub &&
+      ((o.paymentMethod || '').includes('PAY_ON_DELIVERY') || o.paymentMethod === 'COD') &&
+      (o.codReceivedMode === 'CASH' || !o.codReceivedMode)
+    )
     .reduce((sum, o) => sum + (o.codCollectedAmount || o.totalAmount || 0), 0);
 
   // Rider Cancellation / Exception Modal State
