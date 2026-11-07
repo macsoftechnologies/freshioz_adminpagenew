@@ -115,6 +115,19 @@ export default function FinancialTransactionsPage() {
   const [pageSize, setPageSize] = useState(15);
   const [selectedReceiptLog, setSelectedReceiptLog] = useState(null);
 
+  // Driver Payout (Daily / Weekly completed deliveries settlement) state
+  const [driverPayoutLogs, setDriverPayoutLogs] = useState(() => {
+    try {
+      const saved = localStorage.getItem('freshioz_driver_payout_logs');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [selectedPayoutDriverKey, setSelectedPayoutDriverKey] = useState('');
+  const [driverPayoutAmount, setDriverPayoutAmount] = useState('');
+  const [driverPayoutMode, setDriverPayoutMode] = useState('CASH');
+
   // Sync state with URL hash
   useEffect(() => {
     const handleHashChange = () => {
@@ -212,6 +225,30 @@ export default function FinancialTransactionsPage() {
     }));
   }, [scopedWithdrawals]);
 
+  // 4. OUTFLOWS: Delivery Driver Payouts (Daily / Weekly Completed Deliveries Settlement)
+  const driverPayoutOutflows = useMemo(() => {
+    return (driverPayoutLogs || [])
+      .filter(p => {
+        if (!isWarehouseScoped || !resolvedWh) return true;
+        return !p.warehouseId || p.warehouseId === resolvedWh.id || p.warehouseId === resolvedWh.code || p.warehouseId === resolvedWh.uuid;
+      })
+      .map(p => ({
+        id: p.id,
+        refType: 'DRIVER_PAYOUT',
+        transactionType: 'OUTFLOW',
+        date: p.date || new Date().toISOString(),
+        amount: Number(p.amount || 0),
+        driverName: p.driverName,
+        completedStopsCount: p.completedStopsCount || 0,
+        coveredOrderIds: p.coveredOrderIds || [],
+        paymentMode: p.paymentMode || 'CASH',
+        officerName: p.paidBy || 'Warehouse Manager',
+        destinationWarehouse: p.warehouseName || resolvedWh?.name || 'Warehouse Hub',
+        destinationWarehouseId: p.warehouseId,
+        status: 'PAID'
+      }));
+  }, [driverPayoutLogs, isWarehouseScoped, resolvedWh]);
+
   // Unified Chronological Ledger
   const allLedgerTransactions = useMemo(() => {
     const combined = [
@@ -227,6 +264,12 @@ export default function FinancialTransactionsPage() {
         party: `${e.vendorName} • ${e.mandiLocation}`,
         flowType: 'OUTWARD'
       })),
+      ...driverPayoutOutflows.map(d => ({
+        ...d,
+        displayCategory: `Driver Payout (${d.completedStopsCount} Completed Deliveries)`,
+        party: `${d.driverName} (Delivery Partner)`,
+        flowType: 'OUTWARD'
+      })),
       ...societyPayoutOutflows.map(s => ({
         ...s,
         displayCategory: 'Society Community Wallet Disbursal',
@@ -236,7 +279,7 @@ export default function FinancialTransactionsPage() {
     ];
 
     return combined.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
-  }, [customerPayments, procurementExpenses, societyPayoutOutflows]);
+  }, [customerPayments, procurementExpenses, driverPayoutOutflows, societyPayoutOutflows]);
 
   // Filtered Ledger
   // (isSuper and isWarehouseScoped defined above)
@@ -393,6 +436,115 @@ export default function FinancialTransactionsPage() {
     return Object.values(riderMap);
   }, [customerPayments]);
 
+  // All order IDs already covered by past driver payouts
+  const paidDriverOrderIdsSet = useMemo(() => {
+    const set = new Set();
+    (driverPayoutLogs || []).forEach(p => {
+      (p.coveredOrderIds || []).forEach(id => set.add(id));
+    });
+    return set;
+  }, [driverPayoutLogs]);
+
+  // Build list of Delivery Drivers for this hub + their unpaid completed deliveries count
+  const driverPayoutCandidates = useMemo(() => {
+    const map = {};
+
+    // 1. From registered Delivery Executive employees
+    employees.forEach(emp => {
+      const roles = Array.isArray(emp.roles) ? emp.roles : (emp.role ? [emp.role] : []);
+      const isDriver = roles.some(r => String(r).toUpperCase().includes('DELIVERY')) || /driver|delivery|rider/i.test(emp.name || '');
+      if (!isDriver) return;
+      if (isWarehouseScoped && resolvedWh && emp.assignedWarehouseId && emp.assignedWarehouseId !== 'ALL') {
+        if (emp.assignedWarehouseId !== resolvedWh.id && emp.assignedWarehouseId !== resolvedWh.code && emp.assignedWarehouseId !== resolvedWh.uuid) {
+          return;
+        }
+      }
+      map[emp.name] = {
+        key: emp.name,
+        id: emp.id,
+        name: emp.name,
+        phone: emp.phone || '',
+        unpaidOrders: [],
+        paidOrdersCount: 0,
+        totalPaidAmount: 0
+      };
+    });
+
+    // 2. From delivered orders in scopedOrders
+    scopedOrders
+      .filter(o => o.status === 'DELIVERED')
+      .forEach(o => {
+        const dName = o.deliveryPartnerName || o.codCollectedBy || 'Assigned Delivery Partner';
+        if (!map[dName]) {
+          map[dName] = {
+            key: dName,
+            id: o.deliveryPartnerId || dName,
+            name: dName,
+            phone: o.deliveryPartnerPhone || '',
+            unpaidOrders: [],
+            paidOrdersCount: 0,
+            totalPaidAmount: 0
+          };
+        }
+        if (paidDriverOrderIdsSet.has(o.id)) {
+          map[dName].paidOrdersCount += 1;
+        } else {
+          map[dName].unpaidOrders.push(o);
+        }
+      });
+
+    // 3. Attach past payout totals
+    (driverPayoutLogs || []).forEach(p => {
+      if (p.driverName && map[p.driverName]) {
+        map[p.driverName].totalPaidAmount += Number(p.amount) || 0;
+      }
+    });
+
+    return Object.values(map);
+  }, [employees, scopedOrders, paidDriverOrderIdsSet, driverPayoutLogs, isWarehouseScoped, resolvedWh]);
+
+  const activeSelectedDriver = useMemo(() => {
+    if (selectedPayoutDriverKey) {
+      const found = driverPayoutCandidates.find(d => d.key === selectedPayoutDriverKey);
+      if (found) return found;
+    }
+    return driverPayoutCandidates[0] || null;
+  }, [driverPayoutCandidates, selectedPayoutDriverKey]);
+
+  const handlePayDriverSubmit = (e) => {
+    e.preventDefault();
+    if (!activeSelectedDriver) {
+      showToast('Please select a delivery driver first.', 'error');
+      return;
+    }
+    const amt = Number(driverPayoutAmount);
+    if (!amt || amt <= 0) {
+      showToast('Please enter a valid payout amount (₹).', 'error');
+      return;
+    }
+    const coveredIds = activeSelectedDriver.unpaidOrders.map(o => o.id);
+    const newLog = {
+      id: `DRV-PAY-${Date.now().toString().slice(-6)}`,
+      driverId: activeSelectedDriver.id,
+      driverName: activeSelectedDriver.name,
+      warehouseId: resolvedWh?.id || currentUser?.assignedWarehouseId || 'ALL',
+      warehouseName: resolvedWh?.name || 'Central Warehouse Hub',
+      amount: amt,
+      paymentMode: driverPayoutMode,
+      completedStopsCount: coveredIds.length,
+      coveredOrderIds: coveredIds,
+      paidBy: currentUser?.name || 'Hub Manager',
+      date: new Date().toISOString()
+    };
+    const updated = [newLog, ...(driverPayoutLogs || [])];
+    setDriverPayoutLogs(updated);
+    try {
+      localStorage.setItem('freshioz_driver_payout_logs', JSON.stringify(updated));
+    } catch (err) {}
+    setDriverPayoutAmount('');
+    showToast(`✓ Paid ₹${amt.toLocaleString()} to ${activeSelectedDriver.name} (${coveredIds.length} completed deliveries settled)!`, 'success');
+  };
+
   // Top KPIs
   const totalInflows = customerPayments.filter(p => p.isPaid).reduce((sum, p) => sum + p.amount, 0);
   const totalOnlineInflow = customerPayments.filter(p => p.isPaid && !p.isCod).reduce((sum, p) => sum + p.amount, 0);
@@ -400,8 +552,9 @@ export default function FinancialTransactionsPage() {
   const totalPendingCodToCollect = customerPayments.filter(p => !p.isPaid && p.isCod).reduce((sum, p) => sum + p.amount, 0);
 
   const totalMandiSpent = procurementExpenses.reduce((sum, e) => sum + e.amount, 0);
+  const totalDriverPayoutsSpent = driverPayoutOutflows.reduce((sum, d) => sum + d.amount, 0);
   const totalSocietyPayoutsSpent = societyPayoutOutflows.filter(s => s.status === 'APPROVED' || s.status === 'PAID').reduce((sum, s) => sum + s.amount, 0);
-  const totalOutflows = totalMandiSpent + totalSocietyPayoutsSpent;
+  const totalOutflows = totalMandiSpent + totalDriverPayoutsSpent + totalSocietyPayoutsSpent;
   const netPlatformCashflow = totalInflows - totalOutflows;
 
   const totalRiderCashPendingDeposit = riderCashSettlementSummary.reduce((sum, r) => sum + r.pendingHandoverAmount, 0);
@@ -1035,20 +1188,157 @@ export default function FinancialTransactionsPage() {
 
       {/* TAB 4: RIDER CASH SETTLEMENT DESK */}
       {activeTab === 'RIDER_SETTLEMENT' ? (
-        <div className="admin-table-card">
-          <div className="admin-table-header">
-            <div>
-              <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                Delivery Executive COD Cash Reconciliation & Deposit Desk
-              </h3>
-              <p style={{ fontSize: '12px', color: '#64748B', margin: '2px 0 0' }}>
-                Track cash in hand collected by delivery partners at society drop desks and reconcile deposits with Central Hub Cashier.
-              </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {/* 1. PAY DRIVER (Daily / Weekly Unpaid Completed Deliveries Settlement) */}
+          <div className="admin-table-card" style={{ padding: '12px 14px', border: '1.5px solid #A7F3D0', background: '#F8FAFC' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Wallet size={16} color="#059669" />
+                <strong style={{ fontSize: '13.5px', color: '#0F172A' }}>
+                  Pay Delivery Driver (Daily / Weekly Completed Deliveries)
+                </strong>
+              </div>
+              <span style={{ fontSize: '11px', background: '#ECFDF5', color: '#065F46', padding: '2px 8px', borderRadius: '6px', fontWeight: 800 }}>
+                Total Driver Payouts: ₹{totalDriverPayoutsSpent.toLocaleString()}
+              </span>
             </div>
-            <span style={{ fontSize: '12px', fontWeight: 800, background: '#FEF3C7', color: '#B45309', padding: '3px 10px', borderRadius: '6px' }}>
-              Pending Handover: ₹{totalRiderCashPendingDeposit.toLocaleString()}
-            </span>
+
+            {driverPayoutCandidates.length === 0 ? (
+              <div style={{ fontSize: '12px', color: '#64748B', padding: '6px 0' }}>
+                No delivery drivers or completed deliveries found yet.
+              </div>
+            ) : (
+              <form onSubmit={handlePayDriverSubmit} style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                {/* Select Driver */}
+                <div style={{ flex: '1 1 200px' }}>
+                  <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#64748B', marginBottom: '3px' }}>Select Driver</div>
+                  <select
+                    value={activeSelectedDriver?.key || ''}
+                    onChange={(e) => setSelectedPayoutDriverKey(e.target.value)}
+                    style={{
+                      width: '100%',
+                      height: '34px',
+                      padding: '0 10px',
+                      borderRadius: '7px',
+                      border: '1px solid #CBD5E1',
+                      fontSize: '12.5px',
+                      fontWeight: 800,
+                      color: '#0F172A',
+                      background: '#FFFFFF'
+                    }}
+                  >
+                    {driverPayoutCandidates.map(d => (
+                      <option key={d.key} value={d.key}>
+                        {d.name} ({d.unpaidOrders.length} Unpaid Completed)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Unpaid Completed Deliveries Counter Badge */}
+                {activeSelectedDriver && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    flexWrap: 'wrap',
+                    background: '#FFFFFF',
+                    border: '1px solid #E2E8F0',
+                    borderRadius: '8px',
+                    padding: '6px 10px',
+                    marginTop: '14px'
+                  }}>
+                    <span style={{
+                      fontSize: '12px',
+                      fontWeight: 800,
+                      color: activeSelectedDriver.unpaidOrders.length > 0 ? '#D97706' : '#059669'
+                    }}>
+                      🛵 Unpaid Completed: {activeSelectedDriver.unpaidOrders.length} Deliveries
+                    </span>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700 }}>
+                      • Settled: {activeSelectedDriver.paidOrdersCount} (₹{activeSelectedDriver.totalPaidAmount.toLocaleString()})
+                    </span>
+                  </div>
+                )}
+
+                {/* Payout Amount Input */}
+                <div style={{ flex: '0 1 150px' }}>
+                  <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#64748B', marginBottom: '3px' }}>Payout Amount (₹)</div>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="Enter ₹ amount..."
+                    value={driverPayoutAmount}
+                    onChange={(e) => setDriverPayoutAmount(e.target.value)}
+                    style={{
+                      width: '100%',
+                      height: '34px',
+                      padding: '0 10px',
+                      borderRadius: '7px',
+                      border: '1.5px solid #059669',
+                      fontSize: '13px',
+                      fontWeight: 800,
+                      color: '#0F172A',
+                      background: '#FFFFFF',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                {/* Payment Mode */}
+                <div style={{ flex: '0 1 110px' }}>
+                  <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#64748B', marginBottom: '3px' }}>Mode</div>
+                  <select
+                    value={driverPayoutMode}
+                    onChange={(e) => setDriverPayoutMode(e.target.value)}
+                    style={{
+                      width: '100%',
+                      height: '34px',
+                      padding: '0 8px',
+                      borderRadius: '7px',
+                      border: '1px solid #CBD5E1',
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      background: '#FFFFFF'
+                    }}
+                  >
+                    <option value="CASH">Cash</option>
+                    <option value="UPI">UPI</option>
+                  </select>
+                </div>
+
+                {/* Pay Button */}
+                <button
+                  type="submit"
+                  className="admin-btn-accent"
+                  style={{
+                    marginTop: '14px',
+                    height: '34px',
+                    padding: '0 14px',
+                    borderRadius: '7px',
+                    fontSize: '12px',
+                    fontWeight: 800,
+                    cursor: 'pointer'
+                  }}
+                >
+                  ✓ Pay Driver
+                </button>
+              </form>
+            )}
           </div>
+
+          {/* 2. COD CASH HANDOVER FROM DRIVER TO HUB */}
+          <div className="admin-table-card">
+            <div className="admin-table-header">
+              <div>
+                <h3 style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                  Driver COD Cash Handover to Hub
+                </h3>
+              </div>
+              <span style={{ fontSize: '12px', fontWeight: 800, background: '#FEF3C7', color: '#B45309', padding: '3px 10px', borderRadius: '6px' }}>
+                Pending Handover: ₹{totalRiderCashPendingDeposit.toLocaleString()}
+              </span>
+            </div>
 
           <div style={{ overflowX: 'auto' }}>
             <table className="admin-data-table">
@@ -1143,6 +1433,7 @@ export default function FinancialTransactionsPage() {
                 )}
               </tbody>
             </table>
+          </div>
           </div>
         </div>
       ) : (

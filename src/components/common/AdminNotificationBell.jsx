@@ -318,6 +318,25 @@ export default function AdminNotificationBell() {
           badgeColor: '#059669'
         });
       }
+
+      try {
+        const savedPayouts = JSON.parse(localStorage.getItem('freshioz_driver_payout_logs') || '[]');
+        savedPayouts
+          .filter(p => !currentUser?.name || !p.driverName || p.driverName.toLowerCase() === currentUser.name.toLowerCase())
+          .slice(0, 3)
+          .forEach(p => {
+            list.push({
+              id: `driver-paid-${p.id}`,
+              icon: '💰',
+              title: `Payout Received: ₹${p.amount}`,
+              desc: `Settled for ${p.completedStopsCount || 0} completed deliveries (${p.paymentMode || 'CASH'})`,
+              route: '/orders-fulfillment#delivered',
+              badge: 'PAID',
+              badgeBg: '#ECFDF5',
+              badgeColor: '#059669'
+            });
+          });
+      } catch (e) {}
     }
 
     return list;
@@ -494,3 +513,4 @@ export default function AdminNotificationBell() {
     </div>
   );
 }
+
