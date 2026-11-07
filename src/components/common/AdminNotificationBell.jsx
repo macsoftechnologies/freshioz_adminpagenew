@@ -218,6 +218,34 @@ export default function AdminNotificationBell() {
           badgeColor: '#DC2626'
         });
       }
+
+      const outForDelivery = hubOrders.filter(o => o.status === 'OUT_FOR_DELIVERY');
+      if (outForDelivery.length > 0) {
+        list.push({
+          id: `mgr-ofd-${outForDelivery.length}-${outForDelivery[0]?.id}`,
+          icon: '🛵',
+          title: `${outForDelivery.length} Order(s) Out for Delivery`,
+          desc: `Driver ${outForDelivery[0]?.deliveryPartnerName || ''} en route to ${outForDelivery[0]?.societyName || 'Society'}`,
+          route: '/orders-fulfillment#dispatch',
+          badge: 'LIVE ROUTE',
+          badgeBg: '#EFF6FF',
+          badgeColor: '#1D4ED8'
+        });
+      }
+
+      const deliveredOrders = hubOrders.filter(o => o.status === 'DELIVERED');
+      if (deliveredOrders.length > 0) {
+        list.push({
+          id: `mgr-deliv-${deliveredOrders.length}-${deliveredOrders[0]?.id}`,
+          icon: '✅',
+          title: `${deliveredOrders.length} Order(s) Completed & Delivered`,
+          desc: `Latest: #${deliveredOrders[0]?.id} · ${deliveredOrders[0]?.societyName || 'Society'} (${deliveredOrders[0]?.flatNo || 'Flat'})`,
+          route: '/orders-fulfillment#delivered',
+          badge: 'DELIVERED',
+          badgeBg: '#ECFDF5',
+          badgeColor: '#059669'
+        });
+      }
     }
 
     // 4. WAREHOUSE STAFF (PACKER) NOTIFICATIONS
@@ -377,40 +405,37 @@ export default function AdminNotificationBell() {
         title="Operational Notifications"
         style={{
           position: 'relative',
-          width: '34px',
           height: '34px',
+          padding: '0 10px',
           borderRadius: '8px',
-          background: isOpen ? '#EBF2EE' : '#F8FAFC',
-          border: '1px solid #CBD5E1',
-          display: 'flex',
+          background: unreadCount > 0 ? '#FEF3C7' : (isOpen ? '#EBF2EE' : '#F8FAFC'),
+          border: unreadCount > 0 ? '1.5px solid #F59E0B' : '1px solid #CBD5E1',
+          display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: '#234B3C',
+          gap: '5px',
+          color: unreadCount > 0 ? '#B45309' : '#234B3C',
+          fontWeight: 800,
+          fontSize: '11.5px',
           cursor: 'pointer'
         }}
       >
-        <Bell size={16} />
-        {unreadCount > 0 && (
-          <span style={{
-            position: 'absolute',
-            top: '-4px',
-            right: '-4px',
-            background: '#DC2626',
-            color: '#FFFFFF',
-            fontSize: '9.5px',
-            fontWeight: 800,
-            minWidth: '16px',
-            height: '16px',
-            padding: '0 4px',
-            borderRadius: '9999px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            border: '1.5px solid #FFFFFF'
-          }}>
-            {unreadCount}
-          </span>
-        )}
+        <Bell size={15} />
+        <span style={{
+          background: unreadCount > 0 ? '#DC2626' : '#E2E8F0',
+          color: unreadCount > 0 ? '#FFFFFF' : '#475569',
+          fontSize: '10px',
+          fontWeight: 800,
+          minWidth: '17px',
+          height: '17px',
+          padding: '0 5px',
+          borderRadius: '9999px',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          {unreadCount}
+        </span>
       </button>
 
       {isOpen && (
