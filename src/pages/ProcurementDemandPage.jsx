@@ -433,21 +433,14 @@ export default function ProcurementDemandPage() {
     ];
   }, [activeWarehouse]);
 
-  // Packing timing helper (1 hour prior to dispatch start)
+  // Exact configured slot time window from warehouse settings
   const getSlotPackingTime = (slot) => {
-    if (slot.startTime) {
-      const [hStr, mStr] = slot.startTime.split(':');
-      let packH = parseInt(hStr, 10) - 1;
-      if (packH < 0) packH += 24;
-      const ampm = packH >= 12 ? 'PM' : 'AM';
-      const displayH = packH % 12 === 0 ? 12 : packH % 12;
-      return `Pack by ${displayH.toString().padStart(2, '0')}:${mStr || '00'} ${ampm}`;
-    }
+    if (slot.timeWindow) return slot.timeWindow;
     const label = (slot.label || '').toLowerCase();
-    if (label.includes('dawn')) return 'Pack by 04:30 AM';
-    if (label.includes('morning')) return 'Pack by 06:00 AM';
-    if (label.includes('evening')) return 'Pack by 04:30 PM';
-    return 'Pack before Dispatch';
+    if (label.includes('dawn')) return '05:30 AM – 07:00 AM';
+    if (label.includes('morning')) return '07:00 AM – 08:30 AM';
+    if (label.includes('evening')) return '05:30 PM – 07:30 PM';
+    return slot.startTime || 'Scheduled Slot';
   };
 
   const getSlotGrossKg = (slot) => {
