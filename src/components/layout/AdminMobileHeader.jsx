@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate, NavLink } from 'react-router-dom';
 import { LogOut, Menu, TrendingUp } from 'lucide-react';
 import FreshiozLogo from '../common/FreshiozLogo';
+import AdminNotificationBell from '../common/AdminNotificationBell';
 import { useAdminRole, ROLES } from '../../context/AdminRoleContext';
 import { useToast } from '../../context/ToastContext';
 
@@ -99,6 +100,8 @@ export default function AdminMobileHeader() {
             {ROLES[currentRoleId]?.label}
           </span>
         )}
+
+        <AdminNotificationBell />
 
         <button
           type="button"

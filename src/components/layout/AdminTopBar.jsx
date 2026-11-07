@@ -11,6 +11,7 @@ import {
   ChevronDown
 } from 'lucide-react';
 import FreshiozLogo from '../common/FreshiozLogo';
+import AdminNotificationBell from '../common/AdminNotificationBell';
 import PaymentGatewaySettingsModal from '../common/PaymentGatewaySettingsModal';
 import { useAdminRole, ROLES } from '../../context/AdminRoleContext';
 
@@ -110,6 +111,9 @@ export default function AdminTopBar({ onMobileMenuClick }) {
             <span>{ROLES[currentRoleId]?.label || 'Assigned Desk'}</span>
           </div>
         )}
+
+        {/* Scoped Operational Notification Bell */}
+        <AdminNotificationBell />
 
         {/* Interactive User Profile Chip & Dropdown Menu */}
         <div ref={dropdownRef} style={{ position: 'relative' }}>

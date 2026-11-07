@@ -20,31 +20,41 @@ const AdminRoleContext = createContext(null);
 export const ROLES = {
   SUPER_ADMIN: {
     id: 'SUPER_ADMIN',
-    label: 'Super Admin',
+    label: 'Admin',
+    shortLabel: 'Admin',
+    fullTitle: 'Super Admin',
     desc: 'Master Operations, Graphs, Approvals & Pricing',
     defaultRoute: '/dashboard'
   },
   WAREHOUSE_MANAGER: {
     id: 'WAREHOUSE_MANAGER',
-    label: 'Warehouse & Procurement Manager',
+    label: 'Hub Manager',
+    shortLabel: 'Hub Manager',
+    fullTitle: 'Warehouse & Procurement Manager',
     desc: 'Mandi Procurement, Inwarding, Inventory & Crating Lines',
     defaultRoute: '/procurement-demand'
   },
   WAREHOUSE_STAFF: {
     id: 'WAREHOUSE_STAFF',
-    label: 'Warehouse Staff / Packer',
+    label: 'Packer',
+    shortLabel: 'Packer',
+    fullTitle: 'Warehouse Staff / Packer',
     desc: 'Crate Sorting, Produce Bagging, Order Tagging & Packing Queue',
     defaultRoute: '/warehouse-crating'
   },
   DELIVERY_EXECUTIVE: {
     id: 'DELIVERY_EXECUTIVE',
-    label: 'Delivery Executive (Rider)',
+    label: 'Driver',
+    shortLabel: 'Driver',
+    fullTitle: 'Delivery Executive (Rider)',
     desc: 'Morning Society Drop Desk Route Manifest & Dispatch',
     defaultRoute: '/orders-fulfillment'
   },
   SALES_OFFICER: {
     id: 'SALES_OFFICER',
-    label: 'Field Sales Officer',
+    label: 'Sales',
+    shortLabel: 'Sales',
+    fullTitle: 'Field Sales Officer',
     desc: 'Society Onboarding, GPS Tagging & Hub Assignment',
     defaultRoute: '/sales-onboarding'
   }

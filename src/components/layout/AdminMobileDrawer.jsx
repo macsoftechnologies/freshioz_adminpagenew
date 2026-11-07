@@ -531,14 +531,14 @@ export function AdminMobileDrawer() {
           {/* ================= WAREHOUSE STAFF / PACKER ================= */}
           {currentRoleId === 'WAREHOUSE_STAFF' && (
             <>
-              <div className="drawer-nav-section-title">Produce Sorting & Packing Desk</div>
+              <div className="drawer-nav-section-title">Packing Desk</div>
               <NavLink 
                 to="/warehouse-crating#packing" 
                 onClick={handleClose} 
                 className={() => `sidebar-nav-item ${location.pathname === '/warehouse-crating' && (!location.hash || location.hash === '#packing') ? 'active' : ''}`}
               >
                 <PackageCheck size={17} />
-                <span>1. Packing Station</span>
+                <span>1. Packing</span>
               </NavLink>
               <NavLink 
                 to="/warehouse-crating#dispatch" 
@@ -546,7 +546,7 @@ export function AdminMobileDrawer() {
                 className={() => `sidebar-nav-item ${location.pathname === '/warehouse-crating' && ['#dispatch', '#lots', '#ready', '#out-for-delivery', '#delivered'].includes(location.hash) ? 'active' : ''}`}
               >
                 <Boxes size={17} />
-                <span>2. Crates & Dispatch</span>
+                <span>2. Dispatch</span>
               </NavLink>
               <NavLink 
                 to="/warehouse-crating#returns" 
@@ -554,12 +554,12 @@ export function AdminMobileDrawer() {
                 className={() => `sidebar-nav-item ${location.pathname === '/warehouse-crating' && (location.hash === '#returns' || location.hash === '#return-audit') ? 'active' : ''}`}
               >
                 <RotateCcw size={17} />
-                <span>3. Quality & Returns Audit</span>
+                <span>3. Returns</span>
               </NavLink>
 
               <NavLink to="/orders-fulfillment" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
                 <Truck size={17} />
-                <span>Live Orders Packing Queue</span>
+                <span>Orders Queue</span>
               </NavLink>
             </>
           )}
@@ -567,7 +567,7 @@ export function AdminMobileDrawer() {
           {/* ================= WAREHOUSE & PROCUREMENT MANAGER ================= */}
           {(currentRoleId === 'WAREHOUSE_MANAGER' || currentRoleId === 'PROCUREMENT_OFFICER') && (
             <>
-              <div className="drawer-nav-section-title">Warehouse & Procurement Operations</div>
+              <div className="drawer-nav-section-title">Procurement</div>
 
               {/* Collapsible: Mandi Procurement */}
               <button 
@@ -576,7 +576,7 @@ export function AdminMobileDrawer() {
                 className={`sidebar-nav-group-btn ${isProcurementActive ? 'active-group' : ''}`}
               >
                 <ClipboardList size={17} />
-                <span style={{ flex: 1 }}>Mandi Procurement</span>
+                <span style={{ flex: 1 }}>Mandi Sourcing</span>
                 <ChevronDown 
                   size={14} 
                   style={{ 
@@ -594,7 +594,7 @@ export function AdminMobileDrawer() {
                     className={({ isActive }) => `sidebar-sub-item ${isActive ? 'active' : ''}`}
                   >
                     <ClipboardList size={14} />
-                    <span>Mandi Demand & Sourcing</span>
+                    <span>1. Demand & Stock</span>
                   </NavLink>
 
                   <NavLink 
@@ -603,7 +603,7 @@ export function AdminMobileDrawer() {
                     className={({ isActive }) => `sidebar-sub-item ${isActive ? 'active' : ''}`}
                   >
                     <FilePlus size={14} />
-                    <span>Log Mandi Bill & Slip</span>
+                    <span>2. Log Bill</span>
                   </NavLink>
 
                   <NavLink 
@@ -612,7 +612,7 @@ export function AdminMobileDrawer() {
                     className={({ isActive }) => `sidebar-sub-item ${isActive ? 'active' : ''}`}
                   >
                     <Receipt size={14} />
-                    <span>Purchases Audit Ledger</span>
+                    <span>3. Bills History</span>
                   </NavLink>
 
                   <NavLink 
@@ -621,7 +621,7 @@ export function AdminMobileDrawer() {
                     className={({ isActive }) => `sidebar-sub-item ${location.pathname === '/vendors' ? 'active' : ''}`}
                   >
                     <Store size={14} />
-                    <span>Vendors & Farmers</span>
+                    <span>4. Vendors</span>
                   </NavLink>
                 </div>
               )}
@@ -633,7 +633,7 @@ export function AdminMobileDrawer() {
                 className={() => `sidebar-nav-item ${location.pathname === '/warehouse-crating' && (!location.hash || location.hash === '#packing') ? 'active' : ''}`}
               >
                 <PackageCheck size={17} />
-                <span>1. Packing Station</span>
+                <span>1. Packing</span>
               </NavLink>
               <NavLink 
                 to="/warehouse-crating#dispatch" 
@@ -641,7 +641,7 @@ export function AdminMobileDrawer() {
                 className={() => `sidebar-nav-item ${location.pathname === '/warehouse-crating' && ['#dispatch', '#lots', '#ready', '#out-for-delivery', '#delivered'].includes(location.hash) ? 'active' : ''}`}
               >
                 <Boxes size={17} />
-                <span>2. Crates & Dispatch</span>
+                <span>2. Dispatch</span>
               </NavLink>
               <NavLink 
                 to="/warehouse-crating#returns" 
@@ -649,23 +649,23 @@ export function AdminMobileDrawer() {
                 className={() => `sidebar-nav-item ${location.pathname === '/warehouse-crating' && (location.hash === '#returns' || location.hash === '#return-audit') ? 'active' : ''}`}
               >
                 <RotateCcw size={17} />
-                <span>3. Quality & Returns Audit</span>
+                <span>3. Returns</span>
               </NavLink>
               <NavLink to="/orders-fulfillment" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
                 <Truck size={17} />
-                <span>Live Order Tracking</span>
+                <span>Orders</span>
               </NavLink>
               <NavLink to="/transactions" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
                 <Receipt size={17} />
-                <span>Payment & Spent Ledger</span>
+                <span>Cash & Ledger</span>
               </NavLink>
               <NavLink to="/warehouse-settings" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive || isWarehouseRoute ? 'active' : ''}`}>
                 <Warehouse size={17} />
-                <span>Cut-Off Time & Slots</span>
+                <span>Time Slots</span>
               </NavLink>
               <NavLink to="/employees" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
                 <Users size={17} />
-                <span>Hub Staff & Team</span>
+                <span>Staff</span>
               </NavLink>
             </>
           )}
