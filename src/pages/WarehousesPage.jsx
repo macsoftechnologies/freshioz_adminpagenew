@@ -63,12 +63,73 @@ export default function WarehousesPage() {
   const [hubStatusFilter, setHubStatusFilter] = useState('ALL');
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
-  // Default Customer Delivery Slots
+  // Utility: Convert 24-hour "HH:mm" to 12-hour "hh:mm AM/PM"
+  const format24to12 = (time24) => {
+    if (!time24 || !time24.includes(':')) return time24 || '';
+    const [hStr, mStr] = time24.split(':');
+    let h = parseInt(hStr, 10);
+    const m = parseInt(mStr, 10);
+    if (isNaN(h) || isNaN(m)) return time24;
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12;
+    if (h === 0) h = 12;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')} ${ampm}`;
+  };
+
+  // Utility: Convert 12-hour string (e.g. "05:30 AM" or "5:30 PM") to 24-hour "HH:mm"
+  const parse12to24 = (time12) => {
+    if (!time12) return '06:00';
+    const match = String(time12).trim().match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+    if (!match) return '06:00';
+    let h = parseInt(match[1], 10);
+    const m = parseInt(match[2], 10);
+    const ampm = (match[3] || '').toUpperCase();
+    if (ampm === 'PM' && h < 12) h += 12;
+    if (ampm === 'AM' && h === 12) h = 0;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+  };
+
+  // Utility: Parse a range like "05:30 AM – 07:00 AM" into { start: "05:30", end: "07:00" }
+  const parseRangeTo24 = (timeWindow) => {
+    if (!timeWindow) return { start: '06:00', end: '08:00' };
+    const parts = String(timeWindow).split(/[-–—to]/i).map(s => s.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      return {
+        start: parse12to24(parts[0]),
+        end: parse12to24(parts[1])
+      };
+    }
+    return { start: '06:00', end: '08:00' };
+  };
+
+  // Standard Customer Delivery Slots with Clean Labels & Timer Values
   const DEFAULT_SLOTS = [
-    { id: 'SLOT_DAWN', label: 'Early Dawn Drop (05:30 AM - 07:00 AM)', timeWindow: '05:30 AM - 07:00 AM', desc: 'Security desk / gate drop before morning commute', enabled: true },
-    { id: 'SLOT_MORNING', label: 'Morning Fresh Slot (07:00 AM - 08:30 AM)', timeWindow: '07:00 AM - 08:30 AM', desc: 'Doorstep direct delivery for breakfast preparation', enabled: true },
-    { id: 'SLOT_EVENING', label: 'Evening Fresh Run (05:30 PM - 07:30 PM)', timeWindow: '05:30 PM - 07:30 PM', desc: 'Evening harvest drop for dinner cooking', enabled: true }
+    { id: 'SLOT_DAWN', label: 'Early Dawn Drop', startTime: '05:30', endTime: '07:00', timeWindow: '05:30 AM – 07:00 AM', desc: 'Security desk / gate drop before morning commute', enabled: true },
+    { id: 'SLOT_MORNING', label: 'Morning Fresh Slot', startTime: '07:00', endTime: '08:30', timeWindow: '07:00 AM – 08:30 AM', desc: 'Doorstep direct delivery for breakfast preparation', enabled: true },
+    { id: 'SLOT_EVENING', label: 'Evening Fresh Run', startTime: '17:30', endTime: '19:30', timeWindow: '05:30 PM – 07:30 PM', desc: 'Evening harvest drop for dinner cooking', enabled: true }
   ];
+
+  // Sanitize slots to ensure clean labels without redundant parenthesized times and populated start/end timer values
+  const sanitizeWarehouseSlots = (slots) => {
+    const list = Array.isArray(slots) && slots.length > 0 ? slots : DEFAULT_SLOTS;
+    return list.map(s => {
+      const range = parseRangeTo24(s.timeWindow);
+      const startTime = s.startTime || range.start || '06:00';
+      const endTime = s.endTime || range.end || '08:00';
+      const formattedWindow = s.timeWindow || `${format24to12(startTime)} – ${format24to12(endTime)}`;
+      const cleanLabel = (s.label || '')
+        .replace(/\s*\(\s*\d{1,2}:\d{2}\s*(?:AM|PM)?\s*[-–—to]+\s*\d{1,2}:\d{2}\s*(?:AM|PM)?\s*\)/i, '')
+        .trim();
+
+      return {
+        ...s,
+        label: cleanLabel || s.label || 'Delivery Slot',
+        startTime,
+        endTime,
+        timeWindow: formattedWindow
+      };
+    });
+  };
 
   // Warehouse Form State with Lat / Lng Coordinates
   const [warehouseForm, setWarehouseForm] = useState({
@@ -78,7 +139,7 @@ export default function WarehousesPage() {
     lat: 17.7231,
     lng: 83.3013,
     openTime: '05:00',
-    cutoffTime: '21:00',
+    cutoffTime: '23:30',
     capacityTons: 40,
     managerName: '',
     managerPhone: '',
@@ -104,12 +165,51 @@ export default function WarehousesPage() {
     }));
   };
 
+  // Timer change handler: updates startTime or endTime and recalculates timeWindow string
+  const handleSlotTimeChange = (slotId, type, newTime) => {
+    setWarehouseForm(prev => {
+      const updatedSlots = (prev.slots || DEFAULT_SLOTS).map(slot => {
+        if (slot.id !== slotId) return slot;
+        const currentRange = parseRangeTo24(slot.timeWindow);
+        const startTime = type === 'start' ? newTime : (slot.startTime || currentRange.start || '06:00');
+        const endTime = type === 'end' ? newTime : (slot.endTime || currentRange.end || '08:00');
+        const timeWindow = `${format24to12(startTime)} – ${format24to12(endTime)}`;
+        return {
+          ...slot,
+          startTime,
+          endTime,
+          timeWindow
+        };
+      });
+      return { ...prev, slots: updatedSlots };
+    });
+  };
+
+  // 1-Click quick timer preset applier
+  const handleApplySlotPreset = (slotId, startTime, endTime) => {
+    setWarehouseForm(prev => {
+      const updatedSlots = (prev.slots || DEFAULT_SLOTS).map(slot => {
+        if (slot.id !== slotId) return slot;
+        const timeWindow = `${format24to12(startTime)} – ${format24to12(endTime)}`;
+        return {
+          ...slot,
+          startTime,
+          endTime,
+          timeWindow
+        };
+      });
+      return { ...prev, slots: updatedSlots };
+    });
+  };
+
   const handleAddCustomSlot = () => {
     const newId = `SLOT_CUSTOM_${Date.now()}`;
     const newSlot = {
       id: newId,
       label: 'Afternoon Express',
-      timeWindow: '12:30 PM - 02:00 PM',
+      startTime: '12:30',
+      endTime: '14:00',
+      timeWindow: '12:30 PM – 02:00 PM',
       desc: 'Midday fresh harvest drop for lunch & evening preparation',
       enabled: true
     };
@@ -228,7 +328,7 @@ export default function WarehousesPage() {
       lat: 13.0358,
       lng: 77.5970,
       openTime: '05:00',
-      cutoffTime: '21:00',
+      cutoffTime: '23:30',
       capacityTons: 40,
       managerName: '',
       managerPhone: '',
@@ -252,12 +352,12 @@ export default function WarehousesPage() {
       lat: wh.lat || 13.0358,
       lng: wh.lng || 77.5970,
       openTime: wh.openTime || '05:00',
-      cutoffTime: wh.cutoffTime || '21:00',
+      cutoffTime: wh.cutoffTime || '23:30',
       capacityTons: wh.capacityTons || 40,
       managerName: wh.managerName || '',
       managerPhone: cleanPhone,
       status: wh.status || 'ACTIVE',
-      slots: Array.isArray(wh.slots) && wh.slots.length > 0 ? wh.slots : DEFAULT_SLOTS
+      slots: sanitizeWarehouseSlots(wh.slots)
     });
     setIsWarehouseModalOpen(true);
   };
@@ -845,97 +945,187 @@ export default function WarehousesPage() {
                   </div>
                 </div>
                 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {(warehouseForm.slots || DEFAULT_SLOTS).map((slot, index) => (
-                    <div
-                      key={slot.id || index}
-                      style={{
-                        padding: '10px 12px',
-                        borderRadius: '8px',
-                        background: slot.enabled ? '#FFFFFF' : '#F1F5F9',
-                        border: slot.enabled ? '1.5px solid #86EFAC' : '1px solid #CBD5E1',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '8px'
-                      }}
-                    >
-                      {/* Row 1: Active Checkbox, Editable Slot Name, Editable Time Window, Status Badge, Remove */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <input
-                          type="checkbox"
-                          checked={!!slot.enabled}
-                          onChange={() => toggleSlot(slot.id)}
-                          style={{ cursor: 'pointer', accentColor: '#059669', width: '16px', height: '16px', flexShrink: 0 }}
-                          title="Toggle active slot for checkout"
-                        />
-                        
-                        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '8px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {(warehouseForm.slots || DEFAULT_SLOTS).map((slot, index) => {
+                    const range = parseRangeTo24(slot.timeWindow);
+                    const currentStartTime = slot.startTime || range.start;
+                    const currentEndTime = slot.endTime || range.end;
+
+                    return (
+                      <div
+                        key={slot.id || index}
+                        style={{
+                          padding: '12px 14px',
+                          borderRadius: '10px',
+                          background: slot.enabled ? '#FFFFFF' : '#F8FAFC',
+                          border: slot.enabled ? '1.5px solid #86EFAC' : '1px solid #CBD5E1',
+                          boxShadow: slot.enabled ? '0 1px 3px rgba(0,0,0,0.04)' : 'none',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '10px'
+                        }}
+                      >
+                        {/* Row 1: Active Checkbox, Clean Slot Name, Time Pickers (From/To Timer), Active Badge, Delete */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                           <input
-                            type="text"
-                            className="form-input-control"
-                            style={{ fontSize: '12px', padding: '5px 8px', fontWeight: 700, color: slot.enabled ? '#064E3B' : '#64748B' }}
-                            value={slot.label}
-                            onChange={(e) => handleUpdateSlotField(slot.id, 'label', e.target.value)}
-                            placeholder="Slot Label (e.g. Early Dawn Drop)"
-                            title="Slot Name"
+                            type="checkbox"
+                            checked={!!slot.enabled}
+                            onChange={() => toggleSlot(slot.id)}
+                            style={{ cursor: 'pointer', accentColor: '#059669', width: '18px', height: '18px', flexShrink: 0 }}
+                            title="Toggle whether customers can select this slot"
                           />
-                          <input
-                            type="text"
-                            className="form-input-control"
-                            style={{ fontSize: '12px', padding: '5px 8px', fontWeight: 600, color: '#334155' }}
-                            value={slot.timeWindow}
-                            onChange={(e) => handleUpdateSlotField(slot.id, 'timeWindow', e.target.value)}
-                            placeholder="Time Window (e.g. 05:30 AM - 07:00 AM)"
-                            title="Time Window"
-                          />
+                          
+                          {/* Slot Name Input */}
+                          <div style={{ flex: '1 1 200px', minWidth: '180px' }}>
+                            <input
+                              type="text"
+                              className="form-input-control"
+                              style={{ fontSize: '13px', padding: '6px 10px', fontWeight: 800, color: slot.enabled ? '#064E3B' : '#64748B' }}
+                              value={slot.label}
+                              onChange={(e) => handleUpdateSlotField(slot.id, 'label', e.target.value)}
+                              placeholder="Slot Title (e.g. Early Dawn Drop)"
+                              title="Delivery Slot Title"
+                            />
+                          </div>
+
+                          {/* Time Pickers (Clock Timers) */}
+                          <div style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            background: '#F1F5F9',
+                            padding: '4px 8px',
+                            borderRadius: '8px',
+                            border: '1px solid #CBD5E1'
+                          }}>
+                            <Clock size={14} color="#059669" />
+                            <span style={{ fontSize: '11px', color: '#475569', fontWeight: 700 }}>From:</span>
+                            <input
+                              type="time"
+                              value={currentStartTime}
+                              onChange={(e) => handleSlotTimeChange(slot.id, 'start', e.target.value)}
+                              style={{
+                                fontSize: '12px',
+                                fontWeight: 700,
+                                color: '#0F172A',
+                                padding: '3px 6px',
+                                borderRadius: '5px',
+                                border: '1px solid #CBD5E1',
+                                background: '#FFFFFF',
+                                cursor: 'pointer'
+                              }}
+                              title="Delivery Window Start Time"
+                            />
+                            <span style={{ fontSize: '11px', color: '#475569', fontWeight: 700 }}>To:</span>
+                            <input
+                              type="time"
+                              value={currentEndTime}
+                              onChange={(e) => handleSlotTimeChange(slot.id, 'end', e.target.value)}
+                              style={{
+                                fontSize: '12px',
+                                fontWeight: 700,
+                                color: '#0F172A',
+                                padding: '3px 6px',
+                                borderRadius: '5px',
+                                border: '1px solid #CBD5E1',
+                                background: '#FFFFFF',
+                                cursor: 'pointer'
+                              }}
+                              title="Delivery Window End Time"
+                            />
+                            <span style={{
+                              fontSize: '11.5px',
+                              fontWeight: 800,
+                              color: '#065F46',
+                              background: '#D1FAE5',
+                              padding: '3px 8px',
+                              borderRadius: '5px',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              {slot.timeWindow}
+                            </span>
+                          </div>
+
+                          {/* Active / Disabled Status Pill */}
+                          <span style={{
+                            fontSize: '11px',
+                            fontWeight: 800,
+                            padding: '3px 8px',
+                            borderRadius: '5px',
+                            background: slot.enabled ? '#DCFCE7' : '#E2E8F0',
+                            color: slot.enabled ? '#166534' : '#64748B',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {slot.enabled ? 'Active Window' : 'Disabled'}
+                          </span>
+
+                          {/* Delete Slot Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSlot(slot.id)}
+                            title="Delete Delivery Slot"
+                            style={{
+                              padding: '6px',
+                              borderRadius: '6px',
+                              border: '1px solid #FECACA',
+                              background: '#FEF2F2',
+                              color: '#DC2626',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </div>
 
-                        <span style={{
-                          fontSize: '10.5px',
-                          fontWeight: 800,
-                          padding: '2px 8px',
-                          borderRadius: '4px',
-                          background: slot.enabled ? '#DCFCE7' : '#E2E8F0',
-                          color: slot.enabled ? '#166534' : '#64748B',
-                          whiteSpace: 'nowrap'
-                        }}>
-                          {slot.enabled ? 'Active' : 'Disabled'}
-                        </span>
+                        {/* Row 2: Customer Description Note & Quick Timer Presets */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingLeft: '28px', flexWrap: 'wrap' }}>
+                          <div style={{ flex: '1 1 280px' }}>
+                            <input
+                              type="text"
+                              className="form-input-control"
+                              style={{ fontSize: '11.5px', padding: '4px 10px', color: '#64748B', background: '#F8FAFC' }}
+                              value={slot.desc}
+                              onChange={(e) => handleUpdateSlotField(slot.id, 'desc', e.target.value)}
+                              placeholder="Instructions shown to customer (e.g. Doorstep drop / Security desk drop)"
+                              title="Instructions shown to customer at checkout"
+                            />
+                          </div>
 
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveSlot(slot.id)}
-                          title="Delete Delivery Slot"
-                          style={{
-                            padding: '5px',
-                            borderRadius: '5px',
-                            border: '1px solid #FECACA',
-                            background: '#FEF2F2',
-                            color: '#DC2626',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                          }}
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                          {/* Quick Timer Preset Buttons */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '10.5px', color: '#94A3B8', fontWeight: 600 }}>Quick Presets:</span>
+                            {[
+                              { label: '🌅 05:30 - 07:00', start: '05:30', end: '07:00' },
+                              { label: '☀️ 07:00 - 08:30', start: '07:00', end: '08:30' },
+                              { label: '🥗 12:30 - 02:00', start: '12:30', end: '14:00' },
+                              { label: '🌆 05:30 - 07:30', start: '17:30', end: '19:30' }
+                            ].map(preset => (
+                              <button
+                                key={preset.label}
+                                type="button"
+                                onClick={() => handleApplySlotPreset(slot.id, preset.start, preset.end)}
+                                style={{
+                                  padding: '2px 6px',
+                                  fontSize: '10.5px',
+                                  fontWeight: 700,
+                                  borderRadius: '4px',
+                                  border: '1px solid #CBD5E1',
+                                  background: '#FFFFFF',
+                                  color: '#475569',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                {preset.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       </div>
-
-                      {/* Row 2: Customer Description Note */}
-                      <div style={{ paddingLeft: '24px' }}>
-                        <input
-                          type="text"
-                          className="form-input-control"
-                          style={{ fontSize: '11px', padding: '3px 8px', color: '#64748B', background: '#F8FAFC' }}
-                          value={slot.desc}
-                          onChange={(e) => handleUpdateSlotField(slot.id, 'desc', e.target.value)}
-                          placeholder="Short instructions shown to customer (e.g. Doorstep drop / Security desk drop)"
-                          title="Slot Description / Instructions"
-                        />
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
