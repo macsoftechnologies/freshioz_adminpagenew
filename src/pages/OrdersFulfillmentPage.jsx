@@ -2583,127 +2583,118 @@ export default function OrdersFulfillmentPage() {
         </div>
       )}
 
-      {/* ================= COD PAYMENT COLLECTION CONFIRMATION MODAL ================= */}
+      {/* ================= COMPACT COD / UPI PAYMENT MODAL ================= */}
       {codModalOrder && (
         <div style={{
           position: 'fixed',
           inset: 0,
           background: 'rgba(15, 23, 42, 0.65)',
-          backdropFilter: 'blur(4px)',
+          backdropFilter: 'blur(3px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           zIndex: 11000,
-          padding: '20px'
+          padding: '16px'
         }}>
           <div style={{
             background: '#FFFFFF',
-            borderRadius: '16px',
-            maxWidth: '420px',
+            borderRadius: '14px',
+            maxWidth: '360px',
             width: '100%',
-            padding: '22px 24px',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-            border: '2px solid #F59E0B'
+            padding: '16px',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)',
+            border: '1.5px solid #E2E8F0',
+            maxHeight: '94vh',
+            overflowY: 'auto'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', borderBottom: '1.5px solid #F1F5F9', paddingBottom: '12px' }}>
-              <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#FEF3C7', border: '1px solid #FDE68A', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#D97706' }}>
-                <IndianRupee size={22} />
-              </div>
-              <div>
-                <h3 style={{ fontSize: '16px', fontWeight: 900, color: '#0F172A', margin: 0 }}>
-                  Confirm COD Payment Received
-                </h3>
-                <div style={{ fontSize: '12px', color: '#64748B' }}>
-                  Order #{codModalOrder.id} • {codModalOrder.userName || codModalOrder.customerName || 'Resident'}
+            {/* Compact Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#FEF3C7', color: '#D97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <IndianRupee size={17} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '15px', fontWeight: 900, color: '#0F172A' }}>
+                    Collect ₹{(codModalOrder.totalAmount || 0).toLocaleString()}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#64748B' }}>
+                    #{codModalOrder.id} • Flat {codModalOrder.flatNumber || codModalOrder.flatNo || 'Drop Desk'}
+                  </div>
                 </div>
               </div>
+              <button
+                type="button"
+                onClick={() => setCodModalOrder(null)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', padding: '4px' }}
+              >
+                <X size={18} />
+              </button>
             </div>
 
-            {/* Payment Amount Box */}
-            <div style={{ background: '#FFFBEB', border: '1.5px solid #FCD34D', borderRadius: '10px', padding: '14px', textAlign: 'center', marginBottom: '16px' }}>
-              <div style={{ fontSize: '11px', fontWeight: 800, color: '#B45309', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-                Total Cash / UPI to Collect:
-              </div>
-              <div style={{ fontSize: '30px', fontWeight: 900, color: '#92400E', marginTop: '2px' }}>
-                ₹{(codModalOrder.totalAmount || 0).toLocaleString()}
-              </div>
-              <div style={{ fontSize: '11.5px', color: '#78350F', marginTop: '4px' }}>
-                📍 {codModalOrder.societyName} • Flat {codModalOrder.flatNumber || codModalOrder.flatNo || 'Drop Desk'}
-              </div>
+            {/* Mode of Payment Pill Selector */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', background: '#F1F5F9', padding: '3px', borderRadius: '8px', marginBottom: '12px' }}>
+              <button
+                type="button"
+                onClick={() => setCodPaymentMode('UPI_QR')}
+                style={{
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: codPaymentMode === 'UPI_QR' ? '#FFFFFF' : 'transparent',
+                  color: codPaymentMode === 'UPI_QR' ? '#0369A1' : '#64748B',
+                  fontWeight: 800,
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  boxShadow: codPaymentMode === 'UPI_QR' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                <QrCode size={13} />
+                <span>UPI QR</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCodPaymentMode('CASH')}
+                style={{
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: codPaymentMode === 'CASH' ? '#FFFFFF' : 'transparent',
+                  color: codPaymentMode === 'CASH' ? '#15803D' : '#64748B',
+                  fontWeight: 800,
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  boxShadow: codPaymentMode === 'CASH' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                <span>💵</span>
+                <span>Cash</span>
+              </button>
             </div>
 
-            {/* Mode of Payment Selector */}
-            <div style={{ marginBottom: '18px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 800, color: '#334155', display: 'block', marginBottom: '8px' }}>
-                Select How Payment Was Received:
-              </label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                <button
-                  type="button"
-                  onClick={() => setCodPaymentMode('CASH')}
-                  style={{
-                    padding: '10px 12px',
-                    borderRadius: '8px',
-                    border: codPaymentMode === 'CASH' ? '2px solid #059669' : '1px solid #CBD5E1',
-                    background: codPaymentMode === 'CASH' ? '#ECFDF5' : '#FFFFFF',
-                    color: codPaymentMode === 'CASH' ? '#065F46' : '#475569',
-                    fontWeight: 800,
-                    fontSize: '12.5px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}
-                >
-                  <span style={{ fontSize: '16px' }}>💵</span>
-                  <span>Cash Handover</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setCodPaymentMode('UPI_QR')}
-                  style={{
-                    padding: '10px 12px',
-                    borderRadius: '8px',
-                    border: codPaymentMode === 'UPI_QR' ? '2px solid #0284C7' : '1px solid #CBD5E1',
-                    background: codPaymentMode === 'UPI_QR' ? '#F0F9FF' : '#FFFFFF',
-                    color: codPaymentMode === 'UPI_QR' ? '#0369A1' : '#475569',
-                    fontWeight: 800,
-                    fontSize: '12.5px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}
-                >
-                  <span style={{ fontSize: '16px' }}>📱</span>
-                  <span>UPI QR Scanned</span>
-                </button>
-              </div>
-            </div>
-
-            {/* DYNAMIC SCANNABLE UPI QR CODE DISPLAY (PRE-FILLED AMOUNT) */}
+            {/* UPI QR Display */}
             {codPaymentMode === 'UPI_QR' && (
               <div style={{
-                background: '#F0F9FF',
-                border: '1.5px solid #BAE6FD',
-                borderRadius: '12px',
-                padding: '16px',
-                marginBottom: '18px',
+                background: '#F8FAFC',
+                border: '1px solid #E2E8F0',
+                borderRadius: '10px',
+                padding: '12px',
+                marginBottom: '12px',
                 textAlign: 'center'
               }}>
-                <div style={{ fontSize: '11px', fontWeight: 800, color: '#0369A1', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                  <QrCode size={14} color="#0284C7" />
-                  <span>Doorstep Dynamic UPI QR • Scan to Pay</span>
-                </div>
-
                 {isLoadingQr ? (
-                  <div style={{ padding: '24px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-                    <RefreshCw size={24} color="#0284C7" style={{ animation: 'spin 1s linear infinite' }} />
-                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#0369A1' }}>
-                      Generating scannable QR for ₹{(codModalOrder.totalAmount || 0).toLocaleString()}...
+                  <div style={{ padding: '24px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                    <RefreshCw size={20} color="#0284C7" style={{ animation: 'spin 1s linear infinite' }} />
+                    <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#0369A1' }}>
+                      Generating QR for ₹{(codModalOrder.totalAmount || 0).toLocaleString()}...
                     </span>
                   </div>
                 ) : dynamicQrData?.imageUrl ? (
@@ -2711,67 +2702,80 @@ export default function OrdersFulfillmentPage() {
                     <div style={{
                       display: 'inline-block',
                       background: '#FFFFFF',
-                      padding: '12px',
-                      borderRadius: '12px',
-                      boxShadow: '0 4px 12px rgba(2, 132, 199, 0.12)',
-                      border: '1px solid #E0F2FE'
+                      padding: '8px',
+                      borderRadius: '8px',
+                      border: '1px solid #CBD5E1',
+                      boxShadow: '0 2px 6px rgba(0,0,0,0.06)'
                     }}>
                       <img 
                         src={dynamicQrData.imageUrl} 
-                        alt="Dynamic UPI QR" 
-                        style={{ width: '180px', height: '180px', display: 'block', borderRadius: '6px' }} 
+                        alt="UPI QR" 
+                        style={{ width: '140px', height: '140px', display: 'block', borderRadius: '4px' }} 
                       />
                     </div>
 
-                    <div style={{ marginTop: '10px', fontSize: '15px', fontWeight: 900, color: '#0369A1' }}>
+                    <div style={{ marginTop: '8px', fontSize: '13px', fontWeight: 800, color: '#0F172A' }}>
                       Scan to Pay ₹{(codModalOrder.totalAmount || 0).toLocaleString()}
                     </div>
-
-                    <div style={{ fontSize: '11px', color: '#475569', marginTop: '3px' }}>
-                      Supported Apps: <strong>PhonePe • GPay • Paytm • BHIM • Cred</strong>
+                    <div style={{ fontSize: '10.5px', color: '#64748B', marginTop: '2px' }}>
+                      freshioz@icici • Any UPI App
                     </div>
 
-                    <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '11px', color: '#0369A1', background: '#E0F2FE', padding: '4px 10px', borderRadius: '6px', width: 'fit-content', margin: '8px auto 0' }}>
-                      <span>VPA:</span>
-                      <strong style={{ fontFamily: 'monospace' }}>freshioz@icici</strong>
-                      <span style={{ fontSize: '10px', background: '#0284C7', color: '#FFF', padding: '1px 5px', borderRadius: '3px' }}>
-                        {dynamicQrData.gatewaySource === 'RAZORPAY_DYNAMIC_QR' ? 'Razorpay QR' : 'NPCI UPI'}
-                      </span>
-                    </div>
-
-                    {/* Optional Reference / UTR Input */}
-                    <div style={{ marginTop: '12px', textAlign: 'left', background: '#FFFFFF', padding: '10px 12px', borderRadius: '8px', border: '1px solid #CBD5E1' }}>
-                      <label style={{ fontSize: '11px', fontWeight: 800, color: '#334155', display: 'block', marginBottom: '4px' }}>
-                        Customer UPI Ref / UTR / Razorpay ID (Optional):
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. 431092839201 or pay_..."
-                        value={customRefId}
-                        onChange={(e) => setCustomRefId(e.target.value)}
-                        style={{ width: '100%', padding: '6px 8px', borderRadius: '5px', border: '1px solid #CBD5E1', fontSize: '12px' }}
-                      />
-                    </div>
+                    <input
+                      type="text"
+                      placeholder="UTR / Ref # (Optional)"
+                      value={customRefId}
+                      onChange={(e) => setCustomRefId(e.target.value)}
+                      style={{
+                        width: '100%',
+                        height: '30px',
+                        padding: '0 8px',
+                        borderRadius: '5px',
+                        border: '1px solid #CBD5E1',
+                        fontSize: '11px',
+                        marginTop: '8px',
+                        background: '#FFFFFF'
+                      }}
+                    />
                   </div>
                 ) : (
-                  <div style={{ color: '#DC2626', fontSize: '12px', padding: '12px' }}>
-                    Failed to load dynamic QR. Driver can collect cash or customer can pay to freshioz@icici.
+                  <div style={{ color: '#DC2626', fontSize: '11.5px', padding: '10px' }}>
+                    UPI QR unavailable. Collect cash or pay to freshioz@icici.
                   </div>
                 )}
               </div>
             )}
 
-            {/* Confirmation Buttons */}
-            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+            {/* Cash Display */}
+            {codPaymentMode === 'CASH' && (
+              <div style={{
+                background: '#F0FDF4',
+                border: '1px solid #BBF7D0',
+                borderRadius: '10px',
+                padding: '14px',
+                marginBottom: '12px',
+                textAlign: 'center'
+              }}>
+                <div style={{ fontSize: '13px', fontWeight: 800, color: '#166534' }}>
+                  💵 Collect ₹{(codModalOrder.totalAmount || 0).toLocaleString()} in Cash
+                </div>
+                <div style={{ fontSize: '11.5px', color: '#15803D', marginTop: '3px' }}>
+                  Customer: {codModalOrder.userName || codModalOrder.customerName || 'Resident'}
+                </div>
+              </div>
+            )}
+
+            {/* Compact Footer Actions */}
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
               <button
                 type="button"
                 onClick={() => setCodModalOrder(null)}
                 style={{
-                  padding: '9px 14px',
-                  borderRadius: '8px',
+                  padding: '7px 12px',
+                  borderRadius: '6px',
                   border: '1px solid #CBD5E1',
                   background: '#FFF',
-                  color: '#475569',
+                  color: '#64748B',
                   fontWeight: 700,
                   fontSize: '12px',
                   cursor: 'pointer'
@@ -2779,29 +2783,6 @@ export default function OrdersFulfillmentPage() {
               >
                 Cancel
               </button>
-
-              {codModalOrder.status !== 'DELIVERED' && (
-                <button
-                  type="button"
-                  onClick={() => handleRecordCodPayment(codModalOrder.id, codPaymentMode, false, customRefId || dynamicQrData?.qrId || null)}
-                  style={{
-                    padding: '9px 14px',
-                    borderRadius: '8px',
-                    border: '1.5px solid #0284C7',
-                    background: '#F0F9FF',
-                    color: '#0369A1',
-                    fontWeight: 800,
-                    fontSize: '12px',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}
-                  title="Record that payment was collected without changing order status"
-                >
-                  <span>💵 Record Payment Only</span>
-                </button>
-              )}
 
               <button
                 type="button"
@@ -2814,8 +2795,8 @@ export default function OrdersFulfillmentPage() {
                   }
                 }}
                 style={{
-                  padding: '9px 16px',
-                  borderRadius: '8px',
+                  padding: '7px 14px',
+                  borderRadius: '6px',
                   border: 'none',
                   background: '#059669',
                   color: '#FFF',
@@ -2824,12 +2805,11 @@ export default function OrdersFulfillmentPage() {
                   cursor: 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  boxShadow: '0 2px 4px rgba(5, 150, 105, 0.25)'
+                  gap: '5px'
                 }}
               >
-                <CheckCircle2 size={15} />
-                <span>{codModalOrder.status === 'DELIVERED' ? 'Confirm Payment Received' : 'Record Payment & Mark Delivered ➔'}</span>
+                <CheckCircle2 size={14} />
+                <span>{codModalOrder.status === 'DELIVERED' ? 'Confirm Received' : 'Mark Delivered ➔'}</span>
               </button>
             </div>
           </div>
