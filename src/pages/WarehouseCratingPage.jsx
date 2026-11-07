@@ -90,10 +90,11 @@ export default function WarehouseCratingPage() {
 
   const updateOrderStatusMutation = useUpdateOrderStatus();
   const deliveryRiders = useMemo(() => {
-    return employees.filter(e => 
-      e.role === 'DELIVERY_EXECUTIVE' || 
-      (e.roles || []).includes('DELIVERY_EXECUTIVE')
-    );
+    return employees.filter(e => {
+      const roles = Array.isArray(e.roles) ? e.roles : (e.role ? [e.role] : []);
+      return roles.some(r => String(r).toUpperCase().includes('DELIVERY')) ||
+             (e.name && /delivery|driver|rider/i.test(e.name));
+    });
   }, [employees]);
 
   // URL Hash synchronization (#packing, #dispatch, #delivered, #returns)
@@ -695,7 +696,9 @@ export default function WarehouseCratingPage() {
     const assignedWhDriver = deliveryRiders.find(r => 
       (lotWhId && (r.assignedWarehouseId === lotWhId || r.assignedWarehouseId === lotWhCode)) ||
       (lotWhCode && (r.assignedWarehouseId === lotWhCode || r.assignedWarehouseId === lotWhId)) ||
-      (resolvedWh && (r.assignedWarehouseId === resolvedWh.id || r.assignedWarehouseId === resolvedWh.code || r.assignedWarehouseId === resolvedWh.uuid))
+      (resolvedWh && (r.assignedWarehouseId === resolvedWh.id || r.assignedWarehouseId === resolvedWh.code || r.assignedWarehouseId === resolvedWh.uuid)) ||
+      r.assignedWarehouseId === 'ALL' ||
+      !r.assignedWarehouseId
     );
 
     const selectedDriver = 
@@ -2334,15 +2337,14 @@ export default function WarehouseCratingPage() {
                     onChange={(e) => {
                       const selectedVal = e.target.value;
                       setDriverId(selectedVal);
-                      if (selectedVal === 'CUSTOM') {
+                      const rider = deliveryRiders.find(r => r.id === selectedVal);
+                      if (rider) {
+                        setDriverName(rider.name);
+                        setDriverPhone(rider.phone);
+                        if (rider.vehicleNumber) setVehicleNumber(rider.vehicleNumber);
+                      } else {
                         setDriverName('');
                         setDriverPhone('');
-                      } else {
-                        const rider = deliveryRiders.find(r => r.id === selectedVal);
-                        if (rider) {
-                          setDriverName(rider.name);
-                          setDriverPhone(rider.phone);
-                        }
                       }
                     }}
                     style={{
@@ -2355,49 +2357,45 @@ export default function WarehouseCratingPage() {
                       fontSize: '13px',
                       fontWeight: 800,
                       color: '#0F172A',
-                      cursor: 'pointer',
-                      marginBottom: (driverId === 'CUSTOM' || deliveryRiders.length === 0) ? '8px' : '0'
+                      cursor: 'pointer'
                     }}
                     required
                   >
-                    {deliveryRiders.length === 0 && (
-                      <option value="">No registered delivery executives found</option>
+                    {deliveryRiders.length === 0 ? (
+                      <option value="">No registered delivery partners found</option>
+                    ) : (
+                      <>
+                        <option value="">-- Select Registered Delivery Partner --</option>
+                        {deliveryRiders.map(r => {
+                          const isWarehouseMatch = 
+                            (assignedWhId && (r.assignedWarehouseId === assignedWhId || r.assignedWarehouseId === assignedWhCode)) ||
+                            (resolvedWh && (r.assignedWarehouseId === resolvedWh.id || r.assignedWarehouseId === resolvedWh.code || r.assignedWarehouseId === resolvedWh.uuid));
+                          return (
+                            <option key={r.id} value={r.id}>
+                              {r.name} • +91 {r.phone} {isWarehouseMatch ? '⭐ (Assigned to this Hub)' : ''}
+                            </option>
+                          );
+                        })}
+                      </>
                     )}
-                    {deliveryRiders.map(r => {
-                      const isWarehouseMatch = 
-                        (assignedWhId && (r.assignedWarehouseId === assignedWhId || r.assignedWarehouseId === assignedWhCode)) ||
-                        (resolvedWh && (r.assignedWarehouseId === resolvedWh.id || r.assignedWarehouseId === resolvedWh.code || r.assignedWarehouseId === resolvedWh.uuid));
-                      return (
-                        <option key={r.id} value={r.id}>
-                          {r.name} • +91 {r.phone} {isWarehouseMatch ? '⭐ (Assigned to this Hub)' : ''}
-                        </option>
-                      );
-                    })}
-                    <option value="CUSTOM">✏️ Other / Freelance Temp Driver</option>
                   </select>
 
-                  {/* Manual input only if Other is selected or no drivers registered */}
-                  {(driverId === 'CUSTOM' || deliveryRiders.length === 0) && (
-                    <input
-                      type="text"
-                      placeholder="Enter driver full name..."
-                      value={driverName}
-                      onChange={(e) => setDriverName(e.target.value)}
-                      style={{ width: '100%', height: '38px', padding: '0 10px', borderRadius: '6px', border: '1.5px solid #CBD5E1', fontSize: '13px', fontWeight: 700, marginTop: '8px' }}
-                      required
-                    />
+                  {deliveryRiders.length === 0 && (
+                    <div style={{ marginTop: '8px', padding: '8px 12px', background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: '6px', fontSize: '11.5px', color: '#92400E' }}>
+                      ⚠️ No delivery partners registered for this hub. Delivery partners must be registered in Staff Management before dispatch.
+                    </div>
                   )}
                 </div>
 
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: 700, display: 'block', marginBottom: '4px', color: '#334155' }}>
-                    Driver Contact Phone *
+                    Driver Contact Phone
                   </label>
                   <input
                     type="tel"
-                    placeholder="e.g. 9845077112"
-                    value={driverPhone}
-                    onChange={(e) => setDriverPhone(e.target.value)}
+                    placeholder="Auto-populated from partner profile"
+                    value={driverPhone ? `+91 ${driverPhone}` : ''}
+                    readOnly
                     style={{
                       width: '100%',
                       height: '38px',
@@ -2406,9 +2404,9 @@ export default function WarehouseCratingPage() {
                       border: '1.5px solid #CBD5E1',
                       fontSize: '13px',
                       fontWeight: 700,
-                      background: driverId !== 'CUSTOM' && deliveryRiders.length > 0 ? '#F8FAFC' : '#FFF'
+                      background: '#F8FAFC',
+                      color: '#1E293B'
                     }}
-                    required
                   />
                 </div>
 
@@ -2473,7 +2471,15 @@ export default function WarehouseCratingPage() {
                 <button
                   type="submit"
                   className="admin-btn-accent"
-                  style={{ padding: '8px 18px', borderRadius: '6px', fontSize: '13px', fontWeight: 800 }}
+                  disabled={!driverId || deliveryRiders.length === 0}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: '6px',
+                    fontSize: '13px',
+                    fontWeight: 800,
+                    opacity: (!driverId || deliveryRiders.length === 0) ? 0.5 : 1,
+                    cursor: (!driverId || deliveryRiders.length === 0) ? 'not-allowed' : 'pointer'
+                  }}
                 >
                   Confirm Handover & Dispatch ➔
                 </button>
