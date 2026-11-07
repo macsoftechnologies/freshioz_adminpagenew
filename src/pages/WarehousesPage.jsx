@@ -16,7 +16,9 @@ import {
   ArrowRight,
   AlertCircle,
   MapPin,
-  HelpCircle
+  HelpCircle,
+  Trash2,
+  RotateCcw
 } from 'lucide-react';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { warehouses as warehouseResource, societies as societyResource, employees as employeeResource } from '../hooks/resources';
@@ -90,6 +92,44 @@ export default function WarehousesPage() {
       slots: (prev.slots || DEFAULT_SLOTS).map(s => 
         s.id === slotId ? { ...s, enabled: !s.enabled } : s
       )
+    }));
+  };
+
+  const handleUpdateSlotField = (slotId, field, value) => {
+    setWarehouseForm(prev => ({
+      ...prev,
+      slots: (prev.slots || DEFAULT_SLOTS).map(s =>
+        s.id === slotId ? { ...s, [field]: value } : s
+      )
+    }));
+  };
+
+  const handleAddCustomSlot = () => {
+    const newId = `SLOT_CUSTOM_${Date.now()}`;
+    const newSlot = {
+      id: newId,
+      label: 'Afternoon Express',
+      timeWindow: '12:30 PM - 02:00 PM',
+      desc: 'Midday fresh harvest drop for lunch & evening preparation',
+      enabled: true
+    };
+    setWarehouseForm(prev => ({
+      ...prev,
+      slots: [...(prev.slots || DEFAULT_SLOTS), newSlot]
+    }));
+  };
+
+  const handleRemoveSlot = (slotId) => {
+    setWarehouseForm(prev => ({
+      ...prev,
+      slots: (prev.slots || DEFAULT_SLOTS).filter(s => s.id !== slotId)
+    }));
+  };
+
+  const handleResetSlots = () => {
+    setWarehouseForm(prev => ({
+      ...prev,
+      slots: DEFAULT_SLOTS
     }));
   };
 
@@ -707,7 +747,10 @@ export default function WarehousesPage() {
                   />
                 </div>
                 <div>
-                  <label className="form-label-title">Daily Order Cut-off Time *</label>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <label className="form-label-title" style={{ margin: 0 }}>Daily Order Cut-off Time *</label>
+                    <span style={{ fontSize: '10.5px', color: '#059669', fontWeight: 700 }}>Next morning batch close</span>
+                  </div>
                   <input
                     type="time"
                     className="form-input-control"
@@ -715,63 +758,182 @@ export default function WarehousesPage() {
                     onChange={(e) => setWarehouseForm({ ...warehouseForm, cutoffTime: e.target.value })}
                     required
                   />
+                  {/* Quick Cutoff Preset Buttons */}
+                  <div style={{ display: 'flex', gap: '5px', marginTop: '6px', flexWrap: 'wrap' }}>
+                    {[
+                      { time: '20:00', label: '08:00 PM' },
+                      { time: '22:00', label: '10:00 PM' },
+                      { time: '23:30', label: '11:30 PM (Late Night)' },
+                      { time: '02:00', label: '02:00 AM (Dawn Cutoff)' }
+                    ].map(preset => (
+                      <button
+                        key={preset.time}
+                        type="button"
+                        onClick={() => setWarehouseForm({ ...warehouseForm, cutoffTime: preset.time })}
+                        style={{
+                          padding: '3px 7px',
+                          borderRadius: '5px',
+                          fontSize: '10.5px',
+                          fontWeight: 700,
+                          border: warehouseForm.cutoffTime === preset.time ? '1.5px solid #059669' : '1px solid #CBD5E1',
+                          background: warehouseForm.cutoffTime === preset.time ? '#DCFCE7' : '#FFFFFF',
+                          color: warehouseForm.cutoffTime === preset.time ? '#166534' : '#475569',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
-              {/* Delivery Slots Configuration */}
-              <div style={{ marginBottom: '16px', background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: '10px', padding: '12px 14px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <label className="form-label-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Clock size={14} color="#059669" />
-                    <span>Customer Delivery Slots Allowed at Checkout</span>
-                  </label>
-                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>Toggle active delivery windows</span>
-                </div>
-                
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {(warehouseForm.slots || DEFAULT_SLOTS).map(slot => (
-                    <div
-                      key={slot.id}
-                      onClick={() => toggleSlot(slot.id)}
+              {/* Delivery Slots Configuration & Customization Desk */}
+              <div style={{ marginBottom: '16px', background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: '10px', padding: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                  <div>
+                    <label className="form-label-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Clock size={15} color="#059669" />
+                      <span style={{ fontSize: '13px', fontWeight: 800 }}>Customer Delivery Slots & Custom Time Windows</span>
+                    </label>
+                    <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
+                      Customize slot names, time windows, and toggle which slots are active for customers at checkout
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      type="button"
+                      onClick={handleResetSlots}
+                      title="Reset to 3 Standard Slots"
                       style={{
-                        display: 'flex',
+                        display: 'inline-flex',
                         alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '8px 12px',
-                        borderRadius: '8px',
-                        background: slot.enabled ? '#F0FDF4' : '#FFFFFF',
-                        border: slot.enabled ? '1.5px solid #86EFAC' : '1px solid #CBD5E1',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease'
+                        gap: '4px',
+                        padding: '4px 8px',
+                        borderRadius: '6px',
+                        border: '1px solid #CBD5E1',
+                        background: '#FFFFFF',
+                        color: '#64748B',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        cursor: 'pointer'
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <RotateCcw size={12} />
+                      Reset
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAddCustomSlot}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '4px 10px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        background: '#059669',
+                        color: '#FFFFFF',
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <Plus size={13} />
+                      + Add Slot
+                    </button>
+                  </div>
+                </div>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {(warehouseForm.slots || DEFAULT_SLOTS).map((slot, index) => (
+                    <div
+                      key={slot.id || index}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: '8px',
+                        background: slot.enabled ? '#FFFFFF' : '#F1F5F9',
+                        border: slot.enabled ? '1.5px solid #86EFAC' : '1px solid #CBD5E1',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px'
+                      }}
+                    >
+                      {/* Row 1: Active Checkbox, Editable Slot Name, Editable Time Window, Status Badge, Remove */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <input
                           type="checkbox"
                           checked={!!slot.enabled}
-                          onChange={() => {}} // Handled by container onClick
-                          style={{ cursor: 'pointer', accentColor: '#059669' }}
+                          onChange={() => toggleSlot(slot.id)}
+                          style={{ cursor: 'pointer', accentColor: '#059669', width: '16px', height: '16px', flexShrink: 0 }}
+                          title="Toggle active slot for checkout"
                         />
-                        <div>
-                          <div style={{ fontSize: '12.5px', fontWeight: 800, color: slot.enabled ? '#064E3B' : '#64748B' }}>
-                            {slot.label}
-                          </div>
-                          <div style={{ fontSize: '11px', color: '#64748B' }}>
-                            {slot.desc}
-                          </div>
+                        
+                        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '8px' }}>
+                          <input
+                            type="text"
+                            className="form-input-control"
+                            style={{ fontSize: '12px', padding: '5px 8px', fontWeight: 700, color: slot.enabled ? '#064E3B' : '#64748B' }}
+                            value={slot.label}
+                            onChange={(e) => handleUpdateSlotField(slot.id, 'label', e.target.value)}
+                            placeholder="Slot Label (e.g. Early Dawn Drop)"
+                            title="Slot Name"
+                          />
+                          <input
+                            type="text"
+                            className="form-input-control"
+                            style={{ fontSize: '12px', padding: '5px 8px', fontWeight: 600, color: '#334155' }}
+                            value={slot.timeWindow}
+                            onChange={(e) => handleUpdateSlotField(slot.id, 'timeWindow', e.target.value)}
+                            placeholder="Time Window (e.g. 05:30 AM - 07:00 AM)"
+                            title="Time Window"
+                          />
                         </div>
+
+                        <span style={{
+                          fontSize: '10.5px',
+                          fontWeight: 800,
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          background: slot.enabled ? '#DCFCE7' : '#E2E8F0',
+                          color: slot.enabled ? '#166534' : '#64748B',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {slot.enabled ? 'Active' : 'Disabled'}
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSlot(slot.id)}
+                          title="Delete Delivery Slot"
+                          style={{
+                            padding: '5px',
+                            borderRadius: '5px',
+                            border: '1px solid #FECACA',
+                            background: '#FEF2F2',
+                            color: '#DC2626',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          <Trash2 size={13} />
+                        </button>
                       </div>
 
-                      <span style={{
-                        fontSize: '11px',
-                        fontWeight: 800,
-                        padding: '2px 8px',
-                        borderRadius: '4px',
-                        background: slot.enabled ? '#DCFCE7' : '#F1F5F9',
-                        color: slot.enabled ? '#166534' : '#94A3B8'
-                      }}>
-                        {slot.enabled ? 'Active Window' : 'Disabled'}
-                      </span>
+                      {/* Row 2: Customer Description Note */}
+                      <div style={{ paddingLeft: '24px' }}>
+                        <input
+                          type="text"
+                          className="form-input-control"
+                          style={{ fontSize: '11px', padding: '3px 8px', color: '#64748B', background: '#F8FAFC' }}
+                          value={slot.desc}
+                          onChange={(e) => handleUpdateSlotField(slot.id, 'desc', e.target.value)}
+                          placeholder="Short instructions shown to customer (e.g. Doorstep drop / Security desk drop)"
+                          title="Slot Description / Instructions"
+                        />
+                      </div>
                     </div>
                   ))}
                 </div>
