@@ -27,7 +27,9 @@ import {
   Layers,
   MessageSquareQuote,
   TrendingUp,
-  Settings
+  Settings,
+  RotateCcw,
+  Boxes
 } from 'lucide-react';
 import FreshiozLogo from '../common/FreshiozLogo';
 import { useAdminRole, ROLES } from '../../context/AdminRoleContext';
@@ -342,12 +344,30 @@ export default function AdminMobileDrawer() {
               {openGroups.logistics && (
                 <div className="sidebar-sub-menu">
                   <NavLink 
-                    to="/warehouse-crating" 
+                    to="/warehouse-crating#packing" 
                     onClick={handleClose}
-                    className={`sidebar-sub-item ${location.pathname === '/warehouse-crating' ? 'active' : ''}`}
+                    className={() => `sidebar-sub-item ${location.pathname === '/warehouse-crating' && (!location.hash || location.hash === '#packing') ? 'active' : ''}`}
                   >
                     <PackageCheck size={14} />
-                    <span>Packing & Lot Dispatch</span>
+                    <span>1. Packing Station</span>
+                  </NavLink>
+
+                  <NavLink 
+                    to="/warehouse-crating#dispatch" 
+                    onClick={handleClose}
+                    className={() => `sidebar-sub-item ${location.pathname === '/warehouse-crating' && ['#dispatch', '#lots', '#ready', '#out-for-delivery', '#delivered'].includes(location.hash) ? 'active' : ''}`}
+                  >
+                    <Boxes size={14} />
+                    <span>2. Crates & Dispatch</span>
+                  </NavLink>
+
+                  <NavLink 
+                    to="/warehouse-crating#returns" 
+                    onClick={handleClose}
+                    className={() => `sidebar-sub-item ${location.pathname === '/warehouse-crating' && (location.hash === '#returns' || location.hash === '#return-audit') ? 'active' : ''}`}
+                  >
+                    <RotateCcw size={14} />
+                    <span>3. Quality & Returns Audit</span>
                   </NavLink>
 
                   <NavLink 
@@ -514,9 +534,29 @@ export default function AdminMobileDrawer() {
           {currentRoleId === 'WAREHOUSE_STAFF' && (
             <>
               <div className="drawer-nav-section-title">Produce Sorting & Packing Desk</div>
-              <NavLink to="/warehouse-crating" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
+              <NavLink 
+                to="/warehouse-crating#packing" 
+                onClick={handleClose} 
+                className={() => `sidebar-nav-item ${location.pathname === '/warehouse-crating' && (!location.hash || location.hash === '#packing') ? 'active' : ''}`}
+              >
                 <PackageCheck size={17} />
-                <span>Crating & Society Packing</span>
+                <span>1. Packing Station</span>
+              </NavLink>
+              <NavLink 
+                to="/warehouse-crating#dispatch" 
+                onClick={handleClose} 
+                className={() => `sidebar-nav-item ${location.pathname === '/warehouse-crating' && ['#dispatch', '#lots', '#ready', '#out-for-delivery', '#delivered'].includes(location.hash) ? 'active' : ''}`}
+              >
+                <Boxes size={17} />
+                <span>2. Crates & Dispatch</span>
+              </NavLink>
+              <NavLink 
+                to="/warehouse-crating#returns" 
+                onClick={handleClose} 
+                className={() => `sidebar-nav-item ${location.pathname === '/warehouse-crating' && (location.hash === '#returns' || location.hash === '#return-audit') ? 'active' : ''}`}
+              >
+                <RotateCcw size={17} />
+                <span>3. Quality & Returns Audit</span>
               </NavLink>
 
               <NavLink to="/orders-fulfillment" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
@@ -589,9 +629,29 @@ export default function AdminMobileDrawer() {
               )}
 
               <div className="drawer-nav-section-title">Hub Operations</div>
-              <NavLink to="/warehouse-crating" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
+              <NavLink 
+                to="/warehouse-crating#packing" 
+                onClick={handleClose} 
+                className={() => `sidebar-nav-item ${location.pathname === '/warehouse-crating' && (!location.hash || location.hash === '#packing') ? 'active' : ''}`}
+              >
                 <PackageCheck size={17} />
-                <span>Packing & Lot Dispatch</span>
+                <span>1. Packing Station</span>
+              </NavLink>
+              <NavLink 
+                to="/warehouse-crating#dispatch" 
+                onClick={handleClose} 
+                className={() => `sidebar-nav-item ${location.pathname === '/warehouse-crating' && ['#dispatch', '#lots', '#ready', '#out-for-delivery', '#delivered'].includes(location.hash) ? 'active' : ''}`}
+              >
+                <Boxes size={17} />
+                <span>2. Crates & Dispatch</span>
+              </NavLink>
+              <NavLink 
+                to="/warehouse-crating#returns" 
+                onClick={handleClose} 
+                className={() => `sidebar-nav-item ${location.pathname === '/warehouse-crating' && (location.hash === '#returns' || location.hash === '#return-audit') ? 'active' : ''}`}
+              >
+                <RotateCcw size={17} />
+                <span>3. Quality & Returns Audit</span>
               </NavLink>
               <NavLink to="/orders-fulfillment" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
                 <Truck size={17} />

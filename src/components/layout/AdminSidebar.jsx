@@ -25,7 +25,9 @@ import {
   Scale,
   CreditCard,
   Settings,
-  TrendingUp
+  TrendingUp,
+  RotateCcw,
+  Boxes
 } from 'lucide-react';
 import FreshiozLogo from '../common/FreshiozLogo';
 import { useAdminRole } from '../../context/AdminRoleContext';
@@ -242,11 +244,25 @@ export default function AdminSidebar() {
             {openGroups.logistics && (
               <div className="sidebar-sub-menu">
                 <NavLink 
-                  to="/warehouse-crating" 
-                  className={`sidebar-sub-item ${location.pathname === '/warehouse-crating' ? 'active' : ''}`}
+                  to="/warehouse-crating#packing" 
+                  className={() => `sidebar-sub-item ${location.pathname === '/warehouse-crating' && (!location.hash || location.hash === '#packing') ? 'active' : ''}`}
                 >
                   <PackageCheck size={14} />
-                  <span>Packing & Lot Dispatch</span>
+                  <span>1. Packing Station</span>
+                </NavLink>
+                <NavLink 
+                  to="/warehouse-crating#dispatch" 
+                  className={() => `sidebar-sub-item ${location.pathname === '/warehouse-crating' && ['#dispatch', '#lots', '#ready', '#out-for-delivery', '#delivered'].includes(location.hash) ? 'active' : ''}`}
+                >
+                  <Boxes size={14} />
+                  <span>2. Crates & Dispatch</span>
+                </NavLink>
+                <NavLink 
+                  to="/warehouse-crating#returns" 
+                  className={() => `sidebar-sub-item ${location.pathname === '/warehouse-crating' && (location.hash === '#returns' || location.hash === '#return-audit') ? 'active' : ''}`}
+                >
+                  <RotateCcw size={14} />
+                  <span>3. Quality & Returns Audit</span>
                 </NavLink>
                 <NavLink 
                   to="/orders-fulfillment" 
@@ -403,9 +419,26 @@ export default function AdminSidebar() {
             <div style={{ fontSize: '10.5px', textTransform: 'uppercase', color: '#94A3B8', fontWeight: 800, padding: '8px 14px', letterSpacing: '0.6px' }}>
               Produce Sorting & Packing Desk
             </div>
-            <NavLink to="/warehouse-crating" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
+            <NavLink 
+              to="/warehouse-crating#packing" 
+              className={() => `sidebar-nav-item ${location.pathname === '/warehouse-crating' && (!location.hash || location.hash === '#packing') ? 'active' : ''}`}
+            >
               <PackageCheck size={18} />
-              <span>Crating & Society Packing</span>
+              <span>1. Packing Station</span>
+            </NavLink>
+            <NavLink 
+              to="/warehouse-crating#dispatch" 
+              className={() => `sidebar-nav-item ${location.pathname === '/warehouse-crating' && ['#dispatch', '#lots', '#ready', '#out-for-delivery', '#delivered'].includes(location.hash) ? 'active' : ''}`}
+            >
+              <Boxes size={18} />
+              <span>2. Crates & Dispatch</span>
+            </NavLink>
+            <NavLink 
+              to="/warehouse-crating#returns" 
+              className={() => `sidebar-nav-item ${location.pathname === '/warehouse-crating' && (location.hash === '#returns' || location.hash === '#return-audit') ? 'active' : ''}`}
+            >
+              <RotateCcw size={18} />
+              <span>3. Quality & Returns Audit</span>
             </NavLink>
             <NavLink to="/orders-fulfillment" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
               <Truck size={18} />
@@ -470,9 +503,26 @@ export default function AdminSidebar() {
             <div style={{ fontSize: '10.5px', textTransform: 'uppercase', color: '#94A3B8', fontWeight: 800, padding: '12px 14px 4px', letterSpacing: '0.6px' }}>
               Hub Operations
             </div>
-            <NavLink to="/warehouse-crating" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
+            <NavLink 
+              to="/warehouse-crating#packing" 
+              className={() => `sidebar-nav-item ${location.pathname === '/warehouse-crating' && (!location.hash || location.hash === '#packing') ? 'active' : ''}`}
+            >
               <PackageCheck size={18} />
-              <span>Packing & Lot Dispatch</span>
+              <span>1. Packing Station</span>
+            </NavLink>
+            <NavLink 
+              to="/warehouse-crating#dispatch" 
+              className={() => `sidebar-nav-item ${location.pathname === '/warehouse-crating' && ['#dispatch', '#lots', '#ready', '#out-for-delivery', '#delivered'].includes(location.hash) ? 'active' : ''}`}
+            >
+              <Boxes size={18} />
+              <span>2. Crates & Dispatch</span>
+            </NavLink>
+            <NavLink 
+              to="/warehouse-crating#returns" 
+              className={() => `sidebar-nav-item ${location.pathname === '/warehouse-crating' && (location.hash === '#returns' || location.hash === '#return-audit') ? 'active' : ''}`}
+            >
+              <RotateCcw size={18} />
+              <span>3. Quality & Returns Audit</span>
             </NavLink>
             <NavLink to="/orders-fulfillment" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
               <Truck size={18} />

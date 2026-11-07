@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { 
   ClipboardList, 
   CheckCircle2, 
@@ -89,6 +89,7 @@ export default function WarehouseCratingPage() {
   const [isAdvancingOrders, setIsAdvancingOrders] = useState(false);
 
   const updateOrderStatusMutation = useUpdateOrderStatus();
+  const location = useLocation();
   const deliveryRiders = useMemo(() => {
     return employees.filter(e => {
       const roles = Array.isArray(e.roles) ? e.roles : (e.role ? [e.role] : []);
@@ -151,6 +152,11 @@ export default function WarehouseCratingPage() {
       photo: parts[1] || null
     };
   };
+
+  useEffect(() => {
+    setActiveTab(getTabFromHash());
+    setLotFilter(getLotFilterFromHash());
+  }, [location.hash]);
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -1043,11 +1049,15 @@ export default function WarehouseCratingPage() {
   return (
     <div className="admin-page-container">
       {/* Page Header */}
-      <div className="page-title-header" style={{ marginBottom: '14px' }}>
+      <div className="page-title-header" style={{ marginBottom: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
           <div>
             <h1 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-              Packing & Dispatch Desk
+              {activeTab === 'RETURN_AUDIT'
+                ? '3. Quality & Returns Audit'
+                : activeTab === 'SOCIETY_LOTS'
+                  ? '2. Crates & Dispatch'
+                  : '1. Packing Station'}
             </h1>
           </div>
 
@@ -1085,145 +1095,6 @@ export default function WarehouseCratingPage() {
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Streamlined Operations Workflow Tabs */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'stretch',
-        gap: '10px',
-        marginBottom: '12px',
-        flexWrap: 'wrap'
-      }}>
-        {/* Step 1: Pack & Crate */}
-        <button
-          type="button"
-          onClick={() => handleTabChange('PACKING_STATION')}
-          style={{
-            flex: '1 1 240px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            padding: '10px 14px',
-            borderRadius: '10px',
-            border: activeTab === 'PACKING_STATION' ? '2px solid #234B3C' : '1.5px solid #E2E8F0',
-            background: activeTab === 'PACKING_STATION' ? '#F0FDF4' : '#FFFFFF',
-            cursor: 'pointer',
-            textAlign: 'left'
-          }}
-        >
-          <div style={{
-            width: '30px',
-            height: '30px',
-            borderRadius: '7px',
-            background: activeTab === 'PACKING_STATION' ? '#234B3C' : '#F1F5F9',
-            color: activeTab === 'PACKING_STATION' ? '#FFFFFF' : '#64748B',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontWeight: 900,
-            fontSize: '13px',
-            flexShrink: 0
-          }}>
-            1
-          </div>
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-            <span style={{ fontSize: '13px', fontWeight: 900, color: activeTab === 'PACKING_STATION' ? '#234B3C' : '#1E293B' }}>
-              1. Packing Station
-            </span>
-            {toPackCount > 0 && (
-              <span style={{ background: '#FEF3C7', color: '#B45309', fontSize: '11px', padding: '1px 7px', borderRadius: '9999px', fontWeight: 800 }}>
-                {toPackCount} pending
-              </span>
-            )}
-          </div>
-        </button>
-
-        {/* Step 2: Driver Handover */}
-        <button
-          type="button"
-          onClick={() => handleTabChange('SOCIETY_LOTS')}
-          style={{
-            flex: '1 1 240px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            padding: '10px 14px',
-            borderRadius: '10px',
-            border: activeTab === 'SOCIETY_LOTS' ? '2px solid #234B3C' : '1.5px solid #E2E8F0',
-            background: activeTab === 'SOCIETY_LOTS' ? '#F0FDF4' : '#FFFFFF',
-            cursor: 'pointer',
-            textAlign: 'left'
-          }}
-        >
-          <div style={{
-            width: '30px',
-            height: '30px',
-            borderRadius: '7px',
-            background: activeTab === 'SOCIETY_LOTS' ? '#234B3C' : '#F1F5F9',
-            color: activeTab === 'SOCIETY_LOTS' ? '#FFFFFF' : '#64748B',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontWeight: 900,
-            fontSize: '13px',
-            flexShrink: 0
-          }}>
-            2
-          </div>
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-            <span style={{ fontSize: '13px', fontWeight: 900, color: activeTab === 'SOCIETY_LOTS' ? '#234B3C' : '#1E293B' }}>
-              2. Crates & Dispatch
-            </span>
-            <span style={{ background: '#E2E8F0', color: '#334155', fontSize: '11px', padding: '1px 7px', borderRadius: '9999px', fontWeight: 800 }}>
-              {societyLots.length} Batches
-            </span>
-          </div>
-        </button>
-
-        {/* Step 3: Return Produce & Wastage Audit */}
-        <button
-          type="button"
-          onClick={() => handleTabChange('RETURN_AUDIT')}
-          style={{
-            flex: '1 1 240px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            padding: '10px 14px',
-            borderRadius: '10px',
-            border: activeTab === 'RETURN_AUDIT' ? '2px solid #DC2626' : '1.5px solid #E2E8F0',
-            background: activeTab === 'RETURN_AUDIT' ? '#FEF2F2' : '#FFFFFF',
-            cursor: 'pointer',
-            textAlign: 'left'
-          }}
-        >
-          <div style={{
-            width: '30px',
-            height: '30px',
-            borderRadius: '7px',
-            background: activeTab === 'RETURN_AUDIT' ? '#DC2626' : '#F1F5F9',
-            color: activeTab === 'RETURN_AUDIT' ? '#FFFFFF' : '#64748B',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontWeight: 900,
-            fontSize: '13px',
-            flexShrink: 0
-          }}>
-            3
-          </div>
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-            <span style={{ fontSize: '13px', fontWeight: 900, color: activeTab === 'RETURN_AUDIT' ? '#991B1B' : '#1E293B' }}>
-              3. Quality & Returns Audit
-            </span>
-            {returnedOrders.length > 0 && (
-              <span style={{ background: '#FEE2E2', color: '#DC2626', fontSize: '11px', padding: '1px 7px', borderRadius: '9999px', fontWeight: 800 }}>
-                {returnedOrders.length} returned
-              </span>
-            )}
-          </div>
-        </button>
       </div>
 
       {/* STICKY DELIVERY DATE + EXACT WAREHOUSE TIME-BATCH BAR */}
