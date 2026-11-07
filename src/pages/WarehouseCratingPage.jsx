@@ -71,12 +71,22 @@ export default function WarehouseCratingPage() {
   const { showToast } = useToast();
 
   const isDeliveryExecutive = currentRoleId === 'DELIVERY_EXECUTIVE' || currentUser?.role === 'DELIVERY_EXECUTIVE';
+  const isProcurementAllowed =
+    currentRoleId === 'SUPER_ADMIN' ||
+    currentRoleId === 'WAREHOUSE_MANAGER' ||
+    currentRoleId === 'PROCUREMENT_OFFICER' ||
+    currentUser?.roles?.includes('SUPER_ADMIN') ||
+    currentUser?.roles?.includes('WAREHOUSE_MANAGER') ||
+    currentUser?.roles?.includes('PROCUREMENT_OFFICER') ||
+    currentUser?.role === 'SUPER_ADMIN' ||
+    currentUser?.role === 'WAREHOUSE_MANAGER' ||
+    currentUser?.role === 'PROCUREMENT_OFFICER';
 
   const { data: rawOrders = [], isLoading: isLoadingOrders } = orderResource.useList();
-  const { data: rawEmployees = [] } = employeeResource.useList();
+  const { data: rawEmployees = [] } = employeeResource.useList(null, { enabled: !isDeliveryExecutive });
   const { data: rawWarehouses = [] } = warehouseResource.useList();
   const { data: rawSocieties = [] } = societyResource.useList();
-  const { data: rawProcurement = [], isLoading: isLoadingProcurement } = procurementResource.useList();
+  const { data: rawProcurement = [], isLoading: isLoadingProcurement } = procurementResource.useList(null, { enabled: isProcurementAllowed });
 
   const orders = Array.isArray(rawOrders) ? rawOrders : [];
   const employees = Array.isArray(rawEmployees) ? rawEmployees : [];

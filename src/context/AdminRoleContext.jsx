@@ -96,7 +96,9 @@ export function AdminRoleProvider({ children }) {
     currentUser?.role === 'PROCUREMENT_OFFICER';
   const isWarehouseRole = isSuperAdmin || 
     currentUser?.roles?.includes('WAREHOUSE_MANAGER') || 
-    currentUser?.role === 'WAREHOUSE_MANAGER';
+    currentUser?.roles?.includes('WAREHOUSE_STAFF') || 
+    currentUser?.role === 'WAREHOUSE_MANAGER' || 
+    currentUser?.role === 'WAREHOUSE_STAFF';
   const isSalesRole = isSuperAdmin || 
     currentUser?.roles?.includes('SALES_OFFICER') || 
     currentUser?.role === 'SALES_OFFICER';
@@ -106,7 +108,7 @@ export function AdminRoleProvider({ children }) {
   const societiesQuery = societyResource.useList(null, queryOpts);
   const warehousesQuery = warehouseResource.useList(null, queryOpts);
   const employeesQuery = employeeResource.useList(null, { enabled: !!isAuthenticated && isWarehouseRole });
-  const vendorsQuery = vendorResource.useList(null, queryOpts);
+  const vendorsQuery = vendorResource.useList(null, { enabled: !!isAuthenticated && isProcurementRole });
   const leadsQuery = leadResource.useList(null, { enabled: !!isAuthenticated && isSalesRole });
   const ordersQuery = orderResource.useList(null, queryOpts);
   const procurementQuery = procurementResource.useList(null, { enabled: !!isAuthenticated && isProcurementRole });
@@ -161,10 +163,10 @@ export function AdminRoleProvider({ children }) {
     warehousesQuery.isLoading
   ));
 
-  // Proactively and immediately refetch all operational queries whenever authenticated session activates
+  // Proactively and immediately invalidate active operational queries whenever authenticated session activates
   useEffect(() => {
     if (isAuthenticated) {
-      queryClient.refetchQueries();
+      queryClient.invalidateQueries();
     }
   }, [isAuthenticated, queryClient]);
 
@@ -348,7 +350,7 @@ export function AdminRoleProvider({ children }) {
         hasApiError,
         apiErrorMessage,
         isInitialLoading,
-        refetchAll: () => queryClient.refetchQueries()
+        refetchAll: () => queryClient.invalidateQueries()
       }}
     >
       {children}

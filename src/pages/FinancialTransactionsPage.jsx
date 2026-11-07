@@ -52,10 +52,14 @@ export default function FinancialTransactionsPage() {
   const { currentUser } = useAdminRole();
   const { showToast } = useToast();
 
+  const isSuper = currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN' || currentUser?.email === 'superadmin@gmail.com';
+  const assignedWhId = currentUser?.assignedWarehouseId;
+  const isWarehouseScoped = !isSuper && assignedWhId && assignedWhId !== 'ALL';
+
   const { data: rawWarehouses = [] } = warehouseResource.useList();
   const { data: rawOrders = [] } = orderResource.useList();
   const { data: rawProcurementLogs = [] } = procurementResource.useList();
-  const { data: rawWithdrawals = [] } = usePayouts();
+  const { data: rawWithdrawals = [] } = usePayouts(null, { enabled: isSuper });
   const { data: rawSocieties = [] } = societyResource.useList();
   const { data: rawEmployees = [] } = employeeResource.useList();
   const updateOrderStatusMutation = useUpdateOrderStatus();
@@ -66,10 +70,6 @@ export default function FinancialTransactionsPage() {
   const withdrawals = Array.isArray(rawWithdrawals) ? rawWithdrawals : [];
   const societies = Array.isArray(rawSocieties) ? rawSocieties : [];
   const employees = Array.isArray(rawEmployees) ? rawEmployees : [];
-
-  const isSuper = currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN' || currentUser?.email === 'superadmin@gmail.com';
-  const assignedWhId = currentUser?.assignedWarehouseId;
-  const isWarehouseScoped = !isSuper && assignedWhId && assignedWhId !== 'ALL';
 
   const resolvedWh = useMemo(() => {
     if (!warehouses || warehouses.length === 0) return null;
