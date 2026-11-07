@@ -176,9 +176,9 @@ export default function AdminSidebar() {
                 </NavLink>
               </div>
             )}
-            {/* Collapsible: Mandi Procurement */}
+            {/* Collapsible: Produce Procurement */}
             <div style={{ fontSize: '10.5px', textTransform: 'uppercase', color: '#94A3B8', fontWeight: 800, padding: '12px 14px 4px', letterSpacing: '0.6px' }}>
-              Mandi Procurement & Sourcing
+              Produce Procurement
             </div>
             <button 
               type="button" 
@@ -186,7 +186,7 @@ export default function AdminSidebar() {
               className={`sidebar-nav-group-btn ${isProcurementActive ? 'active-group' : ''}`}
             >
               <ClipboardList size={18} />
-              <span style={{ flex: 1 }}>Mandi Procurement</span>
+              <span style={{ flex: 1 }}>Produce Procurement</span>
               <ChevronDown 
                 size={14} 
                 style={{ 
@@ -202,14 +202,14 @@ export default function AdminSidebar() {
                   className={({ isActive }) => `sidebar-sub-item ${isActive ? 'active' : ''}`}
                 >
                   <ClipboardList size={14} />
-                  <span>Mandi Demand & Indent</span>
+                  <span>Procurement Demand</span>
                 </NavLink>
                 <NavLink 
                   to="/procurement-entry" 
                   className={({ isActive }) => `sidebar-sub-item ${isActive ? 'active' : ''}`}
                 >
                   <FilePlus size={14} />
-                  <span>Log Mandi Bill & Slip</span>
+                  <span>Log Purchase Bill</span>
                 </NavLink>
                 <NavLink 
                   to="/procurement-logs" 
@@ -419,14 +419,14 @@ export default function AdminSidebar() {
             <div style={{ fontSize: '10.5px', textTransform: 'uppercase', color: '#94A3B8', fontWeight: 800, padding: '8px 14px', letterSpacing: '0.6px' }}>
               Warehouse & Procurement Operations
             </div>
-            {/* Collapsible: Mandi Procurement */}
+            {/* Collapsible: Produce Procurement */}
             <button 
               type="button" 
               onClick={() => toggleGroup('procurement')} 
               className={`sidebar-nav-group-btn ${isProcurementActive ? 'active-group' : ''}`}
             >
               <ClipboardList size={18} />
-              <span style={{ flex: 1 }}>Mandi Procurement</span>
+              <span style={{ flex: 1 }}>Produce Procurement</span>
               <ChevronDown 
                 size={14} 
                 style={{ 
@@ -442,14 +442,14 @@ export default function AdminSidebar() {
                   className={({ isActive }) => `sidebar-sub-item ${isActive ? 'active' : ''}`}
                 >
                   <ClipboardList size={14} />
-                  <span>Mandi Demand & Sourcing</span>
+                  <span>Procurement Demand</span>
                 </NavLink>
                 <NavLink 
                   to="/procurement-entry" 
                   className={({ isActive }) => `sidebar-sub-item ${isActive ? 'active' : ''}`}
                 >
                   <FilePlus size={14} />
-                  <span>Log Mandi Bill & Slip</span>
+                  <span>Log Purchase Bill</span>
                 </NavLink>
                 <NavLink 
                   to="/procurement-logs" 

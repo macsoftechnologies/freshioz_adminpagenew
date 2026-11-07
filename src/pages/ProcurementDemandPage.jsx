@@ -414,26 +414,53 @@ export default function ProcurementDemandPage() {
   const totalNetRequiredKg = useMemo(() => Number(allDemandItems.reduce((acc, d) => acc + d.netRequiredKg, 0).toFixed(2)), [allDemandItems]);
   const totalPendingEstimatedCost = useMemo(() => pendingDemandList.reduce((acc, d) => acc + d.estSpend, 0), [pendingDemandList]);
 
-  // Slot-specific gross demand totals for quick toggle pills
-  const morningGrossKg = useMemo(() => {
-    return Number(allOrders.filter(o => 
-      !['CANCELLED', 'DELIVERED'].includes(o.status) && 
-      matchesWarehouse(o) && 
-      (o.deliverySlot || 'Morning Fresh Slot').includes('Morning')
-    ).reduce((sum, o) => {
-      return sum + (o.items || []).reduce((iSum, it) => iSum + (parseUnitWeightInKg(it.unit) * (Number(it.qty) || 1)), 0);
-    }, 0).toFixed(2));
-  }, [allOrders, selectedWarehouseId, warehouses]);
+  // Resolve active warehouse slots dynamically with packing schedule
+  const activeWarehouse = useMemo(() => {
+    if (selectedWarehouseId && selectedWarehouseId !== 'ALL') {
+      return warehouses.find(w => w.id === selectedWarehouseId || w.code === selectedWarehouseId);
+    }
+    return warehouses[0];
+  }, [warehouses, selectedWarehouseId]);
 
-  const eveningGrossKg = useMemo(() => {
+  const activeWarehouseSlots = useMemo(() => {
+    if (Array.isArray(activeWarehouse?.slots) && activeWarehouse.slots.length > 0) {
+      return activeWarehouse.slots.filter(s => s.enabled !== false);
+    }
+    return [
+      { id: 'SLOT_DAWN', label: 'Early Dawn Drop', startTime: '05:30', timeWindow: '05:30 AM – 07:00 AM' },
+      { id: 'SLOT_MORNING', label: 'Morning Fresh Slot', startTime: '07:00', timeWindow: '07:00 AM – 08:30 AM' },
+      { id: 'SLOT_EVENING', label: 'Evening Fresh Run', startTime: '17:30', timeWindow: '05:30 PM – 07:30 PM' }
+    ];
+  }, [activeWarehouse]);
+
+  // Packing timing helper (1 hour prior to dispatch start)
+  const getSlotPackingTime = (slot) => {
+    if (slot.startTime) {
+      const [hStr, mStr] = slot.startTime.split(':');
+      let packH = parseInt(hStr, 10) - 1;
+      if (packH < 0) packH += 24;
+      const ampm = packH >= 12 ? 'PM' : 'AM';
+      const displayH = packH % 12 === 0 ? 12 : packH % 12;
+      return `Pack by ${displayH.toString().padStart(2, '0')}:${mStr || '00'} ${ampm}`;
+    }
+    const label = (slot.label || '').toLowerCase();
+    if (label.includes('dawn')) return 'Pack by 04:30 AM';
+    if (label.includes('morning')) return 'Pack by 06:00 AM';
+    if (label.includes('evening')) return 'Pack by 04:30 PM';
+    return 'Pack before Dispatch';
+  };
+
+  const getSlotGrossKg = (slot) => {
+    const slotLabel = (slot.label || '').toLowerCase();
     return Number(allOrders.filter(o => 
       !['CANCELLED', 'DELIVERED'].includes(o.status) && 
       matchesWarehouse(o) && 
-      (o.deliverySlot || '').includes('Evening')
+      ((o.deliverySlot && o.deliverySlot.toLowerCase().includes(slotLabel)) ||
+       (slot.id === 'SLOT_MORNING' && (!o.deliverySlot || o.deliverySlot.toLowerCase().includes('morning'))))
     ).reduce((sum, o) => {
       return sum + (o.items || []).reduce((iSum, it) => iSum + (parseUnitWeightInKg(it.unit) * (Number(it.qty) || 1)), 0);
     }, 0).toFixed(2));
-  }, [allOrders, selectedWarehouseId, warehouses]);
+  };
 
   // Procured produce breakdown for TAB 2 (Already Procured Today)
   const procuredLogs = matchingProcurementLogs;
@@ -514,11 +541,8 @@ export default function ProcurementDemandPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <div>
             <h1 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-              Dawn Mandi Aggregated Procurement Demand
+              Produce Sourcing Demand
             </h1>
-            <p style={{ fontSize: '12px', color: '#64748B', margin: '2px 0 0' }}>
-              Consolidated customer orders across delivery runs minus existing stock & APMC purchases = Net Mandi Remaining
-            </p>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -580,7 +604,7 @@ export default function ProcurementDemandPage() {
               style={{ fontSize: '13px', padding: '8px 16px', borderRadius: '8px', height: 'auto', display: 'inline-flex', alignItems: 'center', gap: '7px', textDecoration: 'none' }}
             >
               <Plus size={16} />
-              <span>Log Consolidated Mandi Bill (Net: {totalNetRequiredKg} kg)</span>
+              <span>Log Purchase Bill (Net: {totalNetRequiredKg} kg)</span>
             </Link>
           ) : (
             <Link
@@ -722,9 +746,9 @@ export default function ProcurementDemandPage() {
             )}
           </div>
 
-          {/* Slot Toggle Pills */}
+          {/* Packing & Dispatch Run Selector */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748B' }}>Dispatch Slot:</span>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748B' }}>Packing Run:</span>
             <button
               type="button"
               onClick={() => setSelectedSlot('ALL')}
@@ -734,52 +758,50 @@ export default function ProcurementDemandPage() {
                 fontWeight: 700,
                 borderRadius: '6px',
                 border: '1px solid',
-                borderColor: selectedSlot === 'ALL' ? '#234B3C' : '#E2E8F0',
+                borderColor: selectedSlot === 'ALL' ? '#234B3C' : '#CBD5E1',
                 background: selectedSlot === 'ALL' ? '#234B3C' : '#FFFFFF',
                 color: selectedSlot === 'ALL' ? '#FFFFFF' : '#475569',
                 cursor: 'pointer'
               }}
             >
-              All Slots ({totalGrossDemandKg} kg)
+              All Runs ({totalGrossDemandKg} kg)
             </button>
-            <button
-              type="button"
-              onClick={() => setSelectedSlot('Morning Fresh Slot')}
-              style={{
-                padding: '4px 10px',
-                fontSize: '11.5px',
-                fontWeight: 700,
-                borderRadius: '6px',
-                border: '1px solid',
-                borderColor: selectedSlot === 'Morning Fresh Slot' ? '#0284C7' : '#E2E8F0',
-                background: selectedSlot === 'Morning Fresh Slot' ? '#0284C7' : '#FFFFFF',
-                color: selectedSlot === 'Morning Fresh Slot' ? '#FFFFFF' : '#475569',
-                cursor: 'pointer'
-              }}
-            >
-              🌅 Morning Run (06:30 AM • {morningGrossKg} kg)
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedSlot('Evening Fresh Slot')}
-              style={{
-                padding: '4px 10px',
-                fontSize: '11.5px',
-                fontWeight: 700,
-                borderRadius: '6px',
-                border: '1px solid',
-                borderColor: selectedSlot === 'Evening Fresh Slot' ? '#F59E0B' : '#E2E8F0',
-                background: selectedSlot === 'Evening Fresh Slot' ? '#F59E0B' : '#FFFFFF',
-                color: selectedSlot === 'Evening Fresh Slot' ? '#FFFFFF' : '#475569',
-                cursor: 'pointer'
-              }}
-            >
-              🌇 Evening Run (05:00 PM • {eveningGrossKg} kg)
-            </button>
+
+            {activeWarehouseSlots.map(slot => {
+              const isSelected = selectedSlot === slot.label;
+              const slotGrossKg = getSlotGrossKg(slot);
+              const packTiming = getSlotPackingTime(slot);
+              const slotIcon = slot.id?.includes('DAWN') ? '🌅' : (slot.id?.includes('MORNING') ? '☀️' : (slot.id?.includes('EVENING') ? '🌆' : '📦'));
+
+              return (
+                <button
+                  key={slot.id}
+                  type="button"
+                  onClick={() => setSelectedSlot(slot.label)}
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: '11.5px',
+                    fontWeight: 700,
+                    borderRadius: '6px',
+                    border: '1px solid',
+                    borderColor: isSelected ? '#059669' : '#CBD5E1',
+                    background: isSelected ? '#059669' : '#FFFFFF',
+                    color: isSelected ? '#FFFFFF' : '#475569',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <span>{slotIcon} {slot.label}</span>
+                  <span style={{ opacity: 0.85, fontWeight: 600 }}>({packTiming} • {slotGrossKg} kg)</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* Row 2: Live Stock & Procurement KPIs */}
+        {/* Row 2: Live Stock & Sourcing KPIs */}
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
@@ -790,31 +812,31 @@ export default function ProcurementDemandPage() {
           border: '1px solid #E2E8F0'
         }}>
           <div>
-            <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>1. Gross Demand</div>
+            <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>Customer Demand</div>
             <div style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A' }}>{totalGrossDemandKg} kg</div>
           </div>
           <div>
-            <div style={{ fontSize: '11px', color: '#0284C7', fontWeight: 600 }}>2. Warehouse Stock</div>
+            <div style={{ fontSize: '11px', color: '#0284C7', fontWeight: 600 }}>Warehouse Stock</div>
             <div style={{ fontSize: '15px', fontWeight: 800, color: '#0284C7' }}>{totalOpeningStockKg} kg</div>
           </div>
           <div>
-            <div style={{ fontSize: '11px', color: '#15803D', fontWeight: 600 }}>3. Procured Today</div>
+            <div style={{ fontSize: '11px', color: '#15803D', fontWeight: 600 }}>Procured Today</div>
             <div style={{ fontSize: '15px', fontWeight: 800, color: '#15803D' }}>{totalAlreadyProcuredKg} kg</div>
           </div>
           <div>
-            <div style={{ fontSize: '11px', color: '#475569', fontWeight: 600 }}>Total Covered (2+3)</div>
+            <div style={{ fontSize: '11px', color: '#475569', fontWeight: 600 }}>Total Stock</div>
             <div style={{ fontSize: '15px', fontWeight: 800, color: '#334155' }}>{totalCoveredKg} kg</div>
           </div>
           <div>
             <div style={{ fontSize: '11px', color: totalNetRequiredKg > 0 ? '#B45309' : '#059669', fontWeight: 700 }}>
-              4. Net Mandi to Buy
+              Net Needed to Buy
             </div>
             <div style={{ fontSize: '16px', fontWeight: 900, color: totalNetRequiredKg > 0 ? '#B45309' : '#059669' }}>
               {totalNetRequiredKg} kg
             </div>
           </div>
           <div>
-            <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>Est. Remaining Spend</div>
+            <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>Est. Purchase Cost</div>
             <div style={{ fontSize: '15px', fontWeight: 800, color: '#234B3C' }}>₹{totalPendingEstimatedCost.toLocaleString()}</div>
           </div>
         </div>
@@ -840,7 +862,7 @@ export default function ProcurementDemandPage() {
           }}
         >
           <ClipboardList size={15} />
-          <span>Pending Mandi Auction Demand ({pendingDemandList.length} crops)</span>
+          <span>Pending Purchase ({pendingDemandList.length} items)</span>
           {totalNetRequiredKg > 0 && (
             <span style={{ background: '#FEF3C7', color: '#B45309', fontSize: '11px', padding: '1px 6px', borderRadius: '9999px', fontWeight: 800 }}>
               Net: {totalNetRequiredKg} kg
@@ -866,7 +888,7 @@ export default function ProcurementDemandPage() {
           }}
         >
           <CheckCircle2 size={15} />
-          <span>Mandi Bills & Lots Logged ({procuredLogs.length} bills)</span>
+          <span>Logged Purchase Bills ({procuredLogs.length})</span>
           <span style={{ background: '#DCFCE7', color: '#15803D', fontSize: '11px', padding: '1px 6px', borderRadius: '9999px', fontWeight: 800 }}>
             {totalProcuredKg} kg
           </span>
@@ -905,7 +927,7 @@ export default function ProcurementDemandPage() {
                 All Customer Orders Successfully Procured!
               </h2>
               <p style={{ fontSize: '13px', color: '#4B5563', maxWidth: '600px', margin: '0 auto 18px', lineHeight: 1.5 }}>
-                There is <strong>0 kg pending auction demand</strong>. All confirmed customer orders across morning and evening delivery runs have been covered by warehouse stock and Mandi purchases.
+                All confirmed customer orders have been covered by warehouse stock and purchases.
               </p>
 
               {/* Summary Stats Grid */}
@@ -922,15 +944,15 @@ export default function ProcurementDemandPage() {
                 margin: '0 auto 20px'
               }}>
                 <div>
-                  <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700 }}>Total Produce Procured</div>
+                  <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700 }}>Total Procured</div>
                   <div style={{ fontSize: '16px', fontWeight: 800, color: '#234B3C' }}>{totalProcuredKg} kg</div>
                 </div>
                 <div style={{ borderLeft: '1px solid #CBD5E1', paddingLeft: '20px' }}>
-                  <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700 }}>Mandi Bills Committed</div>
+                  <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700 }}>Purchase Bills</div>
                   <div style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>{procuredLogs.length} Bills</div>
                 </div>
                 <div style={{ borderLeft: '1px solid #CBD5E1', paddingLeft: '20px' }}>
-                  <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700 }}>Total Mandi Spend</div>
+                  <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700 }}>Total Purchase Cost</div>
                   <div style={{ fontSize: '16px', fontWeight: 800, color: '#0284C7' }}>₹{totalProcuredSpend.toLocaleString()}</div>
                 </div>
               </div>
@@ -943,7 +965,7 @@ export default function ProcurementDemandPage() {
                   style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 18px', fontSize: '13px' }}
                 >
                   <FileText size={15} />
-                  <span>View Mandi Bills Audit Ledger</span>
+                  <span>Purchases Audit Ledger</span>
                 </Link>
 
                 <Link
@@ -952,7 +974,7 @@ export default function ProcurementDemandPage() {
                   style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 18px', fontSize: '13px' }}
                 >
                   <Package size={15} />
-                  <span>Proceed to Warehouse Crating & Packing</span>
+                  <span>Packing & Crating Desk</span>
                   <ArrowRight size={14} />
                 </Link>
               </div>
@@ -962,9 +984,9 @@ export default function ProcurementDemandPage() {
               <div className="admin-empty-state-icon">
                 <ClipboardList size={28} />
               </div>
-              <div className="admin-empty-state-title">No Active Customer Orders for this Selection</div>
+              <div className="admin-empty-state-title">No Pending Orders for Selected Run</div>
               <div className="admin-empty-state-desc">
-                Change the hub or dispatch slot filter above, or wait for customers to place orders before the 9:00 PM cutoff.
+                Select another warehouse or packing run above.
               </div>
             </div>
           ) : (
@@ -973,14 +995,11 @@ export default function ProcurementDemandPage() {
               <div className="admin-table-header">
                 <div>
                   <h3 style={{ fontSize: '15px', color: '#0F172A', margin: 0 }}>
-                    Consolidated APMC Mandi Net Buying Sheet
+                    Produce Sourcing Sheet
                   </h3>
-                  <span style={{ fontSize: '12px', color: '#64748B' }}>
-                    Gross Demand minus Available Warehouse Stock minus Mandi Procured Today = Net Mandi Remaining
-                  </span>
                 </div>
                 <span style={{ fontSize: '12px', color: '#B45309', fontWeight: 700, background: '#FEF3C7', padding: '3px 10px', borderRadius: '6px' }}>
-                  {pendingDemandList.length} Crops Remaining • Net to Buy: {totalNetRequiredKg} kg
+                  {pendingDemandList.length} Items Pending • Net Needed: {totalNetRequiredKg} kg
                 </span>
               </div>
 
@@ -988,14 +1007,14 @@ export default function ProcurementDemandPage() {
                 <table className="admin-data-table">
                   <thead>
                     <tr>
-                      <th>Crop / Produce Item</th>
+                      <th>Produce Item</th>
                       <th>Gross Orders (kg)</th>
                       <th>Warehouse Stock (kg)</th>
                       <th>Procured Today (kg)</th>
                       <th>Total Covered (kg)</th>
-                      <th>Net Mandi Requirement</th>
-                      <th>Benchmark Rate</th>
-                      <th>Est. Spend</th>
+                      <th>Net Needed (kg)</th>
+                      <th>Purchase Rate</th>
+                      <th>Est. Cost</th>
                       <th>Action</th>
                     </tr>
                   </thead>
@@ -1147,14 +1166,14 @@ export default function ProcurementDemandPage() {
                 Procured Farm Lots (In-Transit to Warehouse)
               </h3>
               <span style={{ fontSize: '12px', color: '#64748B' }}>
-                Produce purchased at Mandi auctions and currently being transported to central sorting hub
+                Produce purchased and in-transit to warehouse
               </span>
             </div>
             <Link
               to="/procurement-logs"
               style={{ fontSize: '12px', color: '#234B3C', fontWeight: 700, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
             >
-              <span>View Mandi Invoices Ledger</span>
+              <span>View Purchases Ledger</span>
               <ArrowRight size={13} />
             </Link>
           </div>
@@ -1167,7 +1186,7 @@ export default function ProcurementDemandPage() {
                   <th>Category</th>
                   <th>Procured Weight</th>
                   <th>Serving Societies & Flats</th>
-                  <th>Associated APMC Bill</th>
+                  <th>Purchase Bill #</th>
                   <th>Logistics Status</th>
                 </tr>
               </thead>
@@ -1181,7 +1200,7 @@ export default function ProcurementDemandPage() {
                         </div>
                         <div className="admin-empty-state-title">No Farm Lots Procured Yet Today</div>
                         <div className="admin-empty-state-desc">
-                          Once the procurement officer logs the consolidated APMC Mandi bill, verified lots will appear here.
+                          Once the procurement bill is logged, inward lots will appear here.
                         </div>
                       </div>
                     </td>
@@ -1252,7 +1271,7 @@ export default function ProcurementDemandPage() {
                           gap: '4px'
                         }}>
                           <CheckCircle2 size={12} />
-                          <span>Procured @ Mandi • In-Transit</span>
+                          <span>Inward Stock • In-Transit</span>
                         </span>
                       </td>
                     </tr>

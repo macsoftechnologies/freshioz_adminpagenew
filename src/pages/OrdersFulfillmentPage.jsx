@@ -182,8 +182,8 @@ export default function OrdersFulfillmentPage() {
 
   // Status definitions & badges (Unified canonical lifecycle)
   const STATUS_CONFIG = {
-    CONFIRMED: { label: 'Confirmed', badgeClass: 'pending', desc: 'Order locked at 9 PM cutoff', color: '#6366F1' },
-    PROCURING: { label: 'Procuring at Mandi', badgeClass: 'in-progress', desc: 'Sourcing at APMC Yard 4:30 AM', color: '#D97706' },
+    CONFIRMED: { label: 'Confirmed', badgeClass: 'pending', desc: 'Order locked at cutoff', color: '#6366F1' },
+    PROCURING: { label: 'In Procurement', badgeClass: 'in-progress', desc: 'Sourcing inward stock', color: '#D97706' },
     AT_WAREHOUSE: { label: 'At Warehouse', badgeClass: 'approved', desc: 'Arrived at hub for sorting', color: '#0284C7' },
     PACKED: { label: 'Packed & Crated', badgeClass: 'approved', desc: 'Quality checked, flat-tagged & loaded in crate', color: '#10B981' },
     OUT_FOR_DELIVERY: { label: 'Out for Delivery', badgeClass: 'in-progress', desc: 'Dispatched to society drop desk', color: '#F28E14' },
@@ -954,7 +954,7 @@ export default function OrdersFulfillmentPage() {
                 whiteSpace: 'nowrap'
               }}
             >
-              2. Mandi Procurement ({countProcuring})
+              2. Produce Sourcing ({countProcuring})
             </button>
 
             <button
@@ -1088,7 +1088,7 @@ export default function OrdersFulfillmentPage() {
                 onChange={(e) => setBatchTargetStatus(e.target.value)}
                 style={{ padding: '3px 8px', borderRadius: '4px', border: '1px solid #86EFAC', background: '#FFF', fontSize: '11.5px', fontWeight: 700, color: '#0F172A' }}
               >
-                <option value="PROCURING">PROCURING (Mandi Yard)</option>
+                <option value="PROCURING">PROCURING (Inward Sourcing)</option>
                 <option value="AT_WAREHOUSE">AT WAREHOUSE (Sorting & Crating)</option>
                 <option value="PACKED">PACKED (Crated & Labeled)</option>
                 <option value="OUT_FOR_DELIVERY">OUT FOR DELIVERY (In Transit)</option>
@@ -1884,7 +1884,7 @@ export default function OrdersFulfillmentPage() {
                               }}
                             >
                               <option value="CONFIRMED">CONFIRMED (Cutoff)</option>
-                              <option value="PROCURING">PROCURING (Mandi)</option>
+                              <option value="PROCURING">PROCURING (Inward Sourcing)</option>
                               <option value="AT_WAREHOUSE">AT WAREHOUSE (Sorting)</option>
                               <option value="PACKED">PACKED & CRATED (Tags)</option>
                               <option value="OUT_FOR_DELIVERY">OUT FOR DELIVERY</option>

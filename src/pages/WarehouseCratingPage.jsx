@@ -285,6 +285,34 @@ export default function WarehouseCratingPage() {
   const assignedWhCode = resolvedWh?.code;
   const assignedWhName = resolvedWh?.name;
 
+  // Dynamically resolve warehouse slots and packing run timing
+  const activeWarehouseSlots = useMemo(() => {
+    if (Array.isArray(resolvedWh?.slots) && resolvedWh.slots.length > 0) {
+      return resolvedWh.slots.filter(s => s.enabled !== false);
+    }
+    return [
+      { id: 'SLOT_DAWN', label: 'Early Dawn Drop', startTime: '05:30', timeWindow: '05:30 AM – 07:00 AM' },
+      { id: 'SLOT_MORNING', label: 'Morning Fresh Slot', startTime: '07:00', timeWindow: '07:00 AM – 08:30 AM' },
+      { id: 'SLOT_EVENING', label: 'Evening Fresh Run', startTime: '17:30', timeWindow: '05:30 PM – 07:30 PM' }
+    ];
+  }, [resolvedWh]);
+
+  const getSlotPackingTime = (slot) => {
+    if (slot.startTime) {
+      const [hStr, mStr] = slot.startTime.split(':');
+      let packH = parseInt(hStr, 10) - 1;
+      if (packH < 0) packH += 24;
+      const ampm = packH >= 12 ? 'PM' : 'AM';
+      const displayH = packH % 12 === 0 ? 12 : packH % 12;
+      return `Pack by ${displayH.toString().padStart(2, '0')}:${mStr || '00'} ${ampm}`;
+    }
+    const label = (slot.label || '').toLowerCase();
+    if (label.includes('dawn')) return 'Pack by 04:30 AM';
+    if (label.includes('morning')) return 'Pack by 06:00 AM';
+    if (label.includes('evening')) return 'Pack by 04:30 PM';
+    return 'Pack before Dispatch';
+  };
+
   const visibleOrders = orders.filter(order => {
     // Exclude cancelled and delivered orders from packing desk
     if (order.status === 'CANCELLED' || order.status === 'DELIVERED') return false;
@@ -311,7 +339,8 @@ export default function WarehouseCratingPage() {
     }
     if (slotFilter !== 'ALL') {
       const s = (order.deliverySlot || 'Morning Fresh Slot').toLowerCase();
-      if (!s.includes(slotFilter.toLowerCase())) return false;
+      const filterStr = slotFilter.toLowerCase();
+      if (!s.includes(filterStr) && !filterStr.includes(s)) return false;
     }
     return true;
   });
@@ -827,11 +856,8 @@ export default function WarehouseCratingPage() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
           <div>
             <h1 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-              Warehouse Packing Desk & Society Lot Dispatch
+              Packing & Dispatch Desk
             </h1>
-            <p style={{ fontSize: '12px', color: '#64748B', margin: '2px 0 0' }}>
-              Weigh customer retail bags, apply flat address labels, group into One Society Lot, and assign to Delivery Partner
-            </p>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
@@ -860,7 +886,7 @@ export default function WarehouseCratingPage() {
                 ⚡ Ready to Pack: {readyToPackCount}
               </span>
               <span style={{ fontSize: '11.5px', background: '#FEF3C7', color: '#B45309', padding: '3px 10px', borderRadius: '6px', fontWeight: 700 }}>
-                ⏳ Mandi Sourcing: {mandiTransitCount}
+                ⏳ In Sourcing: {mandiTransitCount}
               </span>
               <span style={{ fontSize: '11.5px', background: '#E0F2FE', color: '#0369A1', padding: '3px 10px', borderRadius: '6px', fontWeight: 700 }}>
                 ✓ Packed & Labeled: {packedCount}
@@ -918,7 +944,7 @@ export default function WarehouseCratingPage() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '13.5px', fontWeight: 900, color: activeTab === 'PACKING_STATION' ? '#234B3C' : '#1E293B' }}>
-                Step 1: Pack & Crate Orders
+                1. Packing Station
               </span>
               {toPackCount > 0 && (
                 <span style={{ background: '#FEF3C7', color: '#B45309', fontSize: '11px', padding: '1px 7px', borderRadius: '9999px', fontWeight: 800 }}>
@@ -927,7 +953,7 @@ export default function WarehouseCratingPage() {
               )}
             </div>
             <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
-              Weigh produce bags, verify items & assign to Block Crates
+              Verify items & pack into crates
             </div>
           </div>
         </button>
@@ -969,14 +995,14 @@ export default function WarehouseCratingPage() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '13.5px', fontWeight: 900, color: activeTab === 'SOCIETY_LOTS' ? '#234B3C' : '#1E293B' }}>
-                Step 2: Driver Handover & Lots
+                2. Crates & Dispatch
               </span>
               <span style={{ background: '#E2E8F0', color: '#334155', fontSize: '11px', padding: '1px 7px', borderRadius: '9999px', fontWeight: 800 }}>
                 {societyLots.length} Society Lots
               </span>
             </div>
             <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
-              Dispatch sealed crates to delivery partners with vehicle check
+              Handover sealed crates to delivery driver
             </div>
           </div>
         </button>
@@ -1018,7 +1044,7 @@ export default function WarehouseCratingPage() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '13.5px', fontWeight: 900, color: activeTab === 'RETURN_AUDIT' ? '#991B1B' : '#1E293B' }}>
-                Step 3: Return Produce Audit
+                3. Quality & Returns Audit
               </span>
               {returnedOrders.length > 0 && (
                 <span style={{ background: '#FEE2E2', color: '#DC2626', fontSize: '11px', padding: '1px 7px', borderRadius: '9999px', fontWeight: 800 }}>
@@ -1027,7 +1053,7 @@ export default function WarehouseCratingPage() {
               )}
             </div>
             <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '2px' }}>
-              Review doorstep refusal photo, restock good produce & write off wastage
+              Restock good produce & record wastage
             </div>
           </div>
         </button>
@@ -1059,7 +1085,7 @@ export default function WarehouseCratingPage() {
                       </span>
                     </div>
                     <div style={{ fontSize: '11.5px', color: '#047857', marginTop: '2px' }}>
-                      Produce arrived from wholesale procurement ready for sorting into resident bags
+                      Produce arrived from wholesale procurement ready for packing
                     </div>
                   </div>
                 </div>
@@ -1183,9 +1209,12 @@ export default function WarehouseCratingPage() {
                     outline: 'none'
                   }}
                 >
-                  <option value="ALL">All Runs (Morning & Evening)</option>
-                  <option value="Morning">🌅 Morning Fresh Run</option>
-                  <option value="Evening">🌇 Evening Run</option>
+                  <option value="ALL">All Packing Runs ({activeWarehouseSlots.length} runs)</option>
+                  {activeWarehouseSlots.map(slot => (
+                    <option key={slot.id} value={slot.label}>
+                      {slot.label} ({getSlotPackingTime(slot)})
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -1266,8 +1295,8 @@ export default function WarehouseCratingPage() {
                   }}
                 >
                   <option value="ALL">All Packing Stages</option>
-                  <option value="READY_TO_PACK">⚡ Ready to Pack (Produce Received)</option>
-                  <option value="CONFIRMED">⏳ Awaiting Mandi Inflow (Pending Orders)</option>
+                  <option value="READY_TO_PACK">⚡ Ready to Pack</option>
+                  <option value="CONFIRMED">⏳ Awaiting Inward Stock</option>
                   <option value="PACKED">✓ Packed & Sealed</option>
                 </select>
               </div>
@@ -1302,7 +1331,7 @@ export default function WarehouseCratingPage() {
                   </div>
                   <div className="admin-empty-state-title" style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>
                     {warehouseProcurements.length > 0 
-                      ? 'Mandi Consignment Inwarded & Ready at Dock'
+                      ? 'Produce Consignment Inwarded & Ready at Dock'
                       : 'No Orders Matching Packing Criteria'}
                   </div>
                   <div className="admin-empty-state-desc" style={{ fontSize: '13px', color: '#64748B', maxWidth: '480px', margin: '6px auto 0', lineHeight: 1.5 }}>
@@ -1310,7 +1339,7 @@ export default function WarehouseCratingPage() {
                       <>
                         <span style={{ fontWeight: 700, color: '#065F46' }}>✓ Consignment produce safely inwarded at warehouse dock.</span>
                         <div style={{ marginTop: '4px' }}>
-                          Produce is stored in hub inventory. As soon as resident flat orders for this run are confirmed, they will appear here in Block Crates for weighing, bagging, and address labeling.
+                          Produce is stored in hub inventory. Incoming orders for this run will appear here for packing.
                         </div>
                       </>
                     ) : (
@@ -1403,7 +1432,7 @@ export default function WarehouseCratingPage() {
                                 </span>
                               ) : (
                                 <span style={{ fontSize: '11px', background: '#FEF3C7', color: '#B45309', fontWeight: 800, padding: '2px 8px', borderRadius: '4px', border: '1px solid #FDE68A' }}>
-                                  ⏳ Mandi Procurement ({crate.confirmedCount})
+                                  ⏳ In Sourcing ({crate.confirmedCount})
                                 </span>
                               )}
                             </div>
@@ -1565,7 +1594,7 @@ export default function WarehouseCratingPage() {
                                       </span>
                                     ) : (
                                       <span style={{ fontSize: '11px', fontWeight: 800, padding: '3px 8px', borderRadius: '4px', background: '#FEF3C7', color: '#B45309' }}>
-                                        ⏳ Mandi Sourcing
+                                        ⏳ In Sourcing
                                       </span>
                                     )}
                                   </td>
@@ -2778,7 +2807,7 @@ export default function WarehouseCratingPage() {
                   }}>
                     <AlertCircle size={16} color="#B45309" style={{ flexShrink: 0, marginTop: '2px' }} />
                     <div style={{ fontSize: '12px', color: '#92400E', lineHeight: 1.4 }}>
-                      <strong>Produce In Sourcing:</strong> This order is listed under Mandi Sourcing. Please ensure produce from today's mandi arrivals is physically weighed and present on the sorting table before packing.
+                      <strong>Awaiting Inward Stock:</strong> Verify produce is received and weighed before packing into crate.
                     </div>
                   </div>
                 )}
@@ -2875,7 +2904,7 @@ export default function WarehouseCratingPage() {
                 </div>
 
                 <div style={{ fontSize: '11.5px', color: '#64748B', fontStyle: 'italic', background: '#F8FAFC', padding: '8px 12px', borderRadius: '6px', border: '1px dashed #CBD5E1' }}>
-                  💡 Confirm all items are weighed into the retail bag, then place the bag into <strong>Crate: {block}</strong> for {packingModalOrder.societyName}.
+                  💡 Place verified bag into <strong>Crate: {block}</strong> for {packingModalOrder.societyName}.
                 </div>
               </div>
 
