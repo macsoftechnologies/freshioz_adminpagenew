@@ -245,14 +245,11 @@ export default function SalesOnboardingPage() {
 
   return (
     <div className="admin-page-container" style={{ maxWidth: '880px' }}>
-      <div className="page-title-header" style={{ marginBottom: '14px' }}>
+      <div className="page-title-header" style={{ marginBottom: '12px' }}>
         <div>
           <h1 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-            Field Sales: Onboard Society / Hostel
+            2. Onboard Society / Hostel
           </h1>
-          <p style={{ fontSize: '12px', color: '#64748B', margin: '2px 0 0' }}>
-            Building demographics, GPS pin, store mapping & settlement bank setup
-          </p>
         </div>
       </div>
 
@@ -335,7 +332,7 @@ export default function SalesOnboardingPage() {
               <span>1. Society & Community Identity</span>
             </h3>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '14px', marginBottom: '14px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', marginBottom: '14px' }}>
               <div>
                 <label style={{ fontSize: '12.5px', fontWeight: 700, display: 'block', marginBottom: '4px' }}>
                   Apartment or Hostel Name *
@@ -564,7 +561,7 @@ export default function SalesOnboardingPage() {
             </div>
 
             {/* GPS Pin */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px' }}>
               <div>
                 <label style={{ fontSize: '12px', fontWeight: 700, display: 'block', marginBottom: '4px' }}>
                   GPS Latitude (For Delivery Partner Navigation)
@@ -601,7 +598,7 @@ export default function SalesOnboardingPage() {
               <span>3. Management Contact & Building Scale</span>
             </h3>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '14px', marginBottom: '14px' }}>
               <div>
                 <label style={{ fontSize: '12.5px', fontWeight: 700, display: 'block', marginBottom: '4px' }}>
                   Head / President / Warden Name *
@@ -631,7 +628,7 @@ export default function SalesOnboardingPage() {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '14px' }}>
               <div>
                 <label style={{ fontSize: '12px', fontWeight: 700, display: 'block', marginBottom: '4px' }}>
                   Total Floors
@@ -688,7 +685,7 @@ export default function SalesOnboardingPage() {
               Bank details are not mandatory for onboarding. They can be added later by the admin or RWA before commission disbursals.
             </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '14px', marginBottom: '14px' }}>
               <div>
                 <label style={{ fontSize: '12.5px', fontWeight: 700, display: 'block', marginBottom: '4px', color: '#334155' }}>
                   Bank Name <span style={{ color: '#94A3B8', fontWeight: 400 }}>(Optional)</span>
@@ -716,7 +713,7 @@ export default function SalesOnboardingPage() {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '14px' }}>
               <div>
                 <label style={{ fontSize: '12.5px', fontWeight: 700, display: 'block', marginBottom: '4px', color: '#334155' }}>
                   Bank Account Number <span style={{ color: '#94A3B8', fontWeight: 400 }}>(Optional)</span>

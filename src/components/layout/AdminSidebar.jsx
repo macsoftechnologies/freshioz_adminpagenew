@@ -390,26 +390,26 @@ export default function AdminSidebar() {
             <div style={{ fontSize: '10.5px', textTransform: 'uppercase', color: '#94A3B8', fontWeight: 800, padding: '8px 14px', letterSpacing: '0.6px' }}>
               Field Sales Workdesk
             </div>
-            <NavLink to="/societies" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
-              <Building2 size={18} />
-              <span>Societies & Resident Directory</span>
-            </NavLink>
-            <NavLink to="/sales-onboarding" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
-              <FilePlus size={18} />
-              <span>Onboard Society / Hostel</span>
-            </NavLink>
-            <NavLink to="/sales-my-societies" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
-              <Building2 size={18} />
-              <span>My Submitted Societies</span>
-            </NavLink>
             <NavLink to="/inbound-leads" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
               <Users size={18} />
-              <span style={{ flex: 1 }}>Resident Inbound Requests</span>
+              <span style={{ flex: 1 }}>1. Inbound Requests</span>
               {inboundLeadsCount > 0 && (
                 <span style={{ background: '#F59E0B', color: '#FFF', fontSize: '11px', fontWeight: 800, padding: '1px 7px', borderRadius: '9999px', boxShadow: '0 1px 3px rgba(245,158,11,0.4)' }}>
                   {inboundLeadsCount}
                 </span>
               )}
+            </NavLink>
+            <NavLink to="/sales-onboarding" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
+              <FilePlus size={18} />
+              <span>2. Onboard Society / Hostel</span>
+            </NavLink>
+            <NavLink to="/sales-my-societies" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
+              <Building2 size={18} />
+              <span>3. My Submitted Societies</span>
+            </NavLink>
+            <NavLink to="/societies" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
+              <Building2 size={18} />
+              <span>4. Societies Directory</span>
             </NavLink>
           </>
         )}
@@ -548,9 +548,33 @@ export default function AdminSidebar() {
             <div style={{ fontSize: '10.5px', textTransform: 'uppercase', color: '#94A3B8', fontWeight: 800, padding: '8px 14px', letterSpacing: '0.6px' }}>
               Rider Delivery Desk
             </div>
-            <NavLink to="/orders-fulfillment" className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
+            <NavLink 
+              to="/orders-fulfillment#pending" 
+              className={() => `sidebar-nav-item ${location.pathname === '/orders-fulfillment' && (!location.hash || location.hash === '#pending') ? 'active' : ''}`}
+            >
               <Truck size={18} />
-              <span style={{ flex: 1 }}>My Delivery Manifest</span>
+              <span style={{ flex: 1 }}>1. To Deliver</span>
+            </NavLink>
+            <NavLink 
+              to="/orders-fulfillment#delivered" 
+              className={() => `sidebar-nav-item ${location.pathname === '/orders-fulfillment' && location.hash === '#delivered' ? 'active' : ''}`}
+            >
+              <CheckCircle size={18} />
+              <span style={{ flex: 1 }}>2. Delivered</span>
+            </NavLink>
+            <NavLink 
+              to="/orders-fulfillment#cancelled" 
+              className={() => `sidebar-nav-item ${location.pathname === '/orders-fulfillment' && location.hash === '#cancelled' ? 'active' : ''}`}
+            >
+              <RotateCcw size={18} />
+              <span style={{ flex: 1 }}>3. Undelivered / Returns</span>
+            </NavLink>
+            <NavLink 
+              to="/orders-fulfillment#all" 
+              className={() => `sidebar-nav-item ${location.pathname === '/orders-fulfillment' && location.hash === '#all' ? 'active' : ''}`}
+            >
+              <ClipboardList size={18} />
+              <span style={{ flex: 1 }}>4. All Route Stops</span>
             </NavLink>
           </>
         )}

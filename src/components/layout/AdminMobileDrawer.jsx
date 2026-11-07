@@ -506,26 +506,26 @@ export default function AdminMobileDrawer() {
           {currentRoleId === 'SALES_OFFICER' && (
             <>
               <div className="drawer-nav-section-title">Field Sales Workdesk</div>
-              <NavLink to="/societies" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
-                <Building2 size={17} />
-                <span>Societies & Resident Directory</span>
-              </NavLink>
-              <NavLink to="/sales-onboarding" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
-                <FilePlus size={17} />
-                <span>Onboard Society / Hostel</span>
-              </NavLink>
-              <NavLink to="/sales-my-societies" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
-                <Building2 size={17} />
-                <span>My Submitted Societies</span>
-              </NavLink>
               <NavLink to="/inbound-leads" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
                 <Users size={17} />
-                <span style={{ flex: 1 }}>Resident Inbound Requests</span>
+                <span style={{ flex: 1 }}>1. Inbound Requests</span>
                 {inboundLeadsCount > 0 && (
                   <span style={{ background: '#F59E0B', color: '#FFF', fontSize: '10.5px', fontWeight: 800, padding: '1px 6px', borderRadius: '9999px' }}>
                     {inboundLeadsCount}
                   </span>
                 )}
+              </NavLink>
+              <NavLink to="/sales-onboarding" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
+                <FilePlus size={17} />
+                <span>2. Onboard Society / Hostel</span>
+              </NavLink>
+              <NavLink to="/sales-my-societies" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
+                <Building2 size={17} />
+                <span>3. My Submitted Societies</span>
+              </NavLink>
+              <NavLink to="/societies" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
+                <Building2 size={17} />
+                <span>4. Societies Directory</span>
               </NavLink>
             </>
           )}
@@ -676,9 +676,37 @@ export default function AdminMobileDrawer() {
           {currentRoleId === 'DELIVERY_EXECUTIVE' && (
             <>
               <div className="drawer-nav-section-title">Rider Delivery Desk</div>
-              <NavLink to="/orders-fulfillment" onClick={handleClose} className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}>
+              <NavLink 
+                to="/orders-fulfillment#pending" 
+                onClick={handleClose} 
+                className={() => `sidebar-nav-item ${location.pathname === '/orders-fulfillment' && (!location.hash || location.hash === '#pending') ? 'active' : ''}`}
+              >
                 <Truck size={17} />
-                <span style={{ flex: 1 }}>My Delivery Manifest</span>
+                <span style={{ flex: 1 }}>1. To Deliver</span>
+              </NavLink>
+              <NavLink 
+                to="/orders-fulfillment#delivered" 
+                onClick={handleClose} 
+                className={() => `sidebar-nav-item ${location.pathname === '/orders-fulfillment' && location.hash === '#delivered' ? 'active' : ''}`}
+              >
+                <CheckCircle size={17} />
+                <span style={{ flex: 1 }}>2. Delivered</span>
+              </NavLink>
+              <NavLink 
+                to="/orders-fulfillment#cancelled" 
+                onClick={handleClose} 
+                className={() => `sidebar-nav-item ${location.pathname === '/orders-fulfillment' && location.hash === '#cancelled' ? 'active' : ''}`}
+              >
+                <RotateCcw size={17} />
+                <span style={{ flex: 1 }}>3. Undelivered / Returns</span>
+              </NavLink>
+              <NavLink 
+                to="/orders-fulfillment#all" 
+                onClick={handleClose} 
+                className={() => `sidebar-nav-item ${location.pathname === '/orders-fulfillment' && location.hash === '#all' ? 'active' : ''}`}
+              >
+                <ClipboardList size={17} />
+                <span style={{ flex: 1 }}>4. All Route Stops</span>
               </NavLink>
             </>
           )}

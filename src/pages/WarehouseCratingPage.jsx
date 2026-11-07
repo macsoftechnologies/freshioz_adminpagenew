@@ -1556,136 +1556,138 @@ export default function WarehouseCratingPage() {
                       </div>
                     </div>
 
-                    {/* Inline Flat Orders Table */}
-                    <div style={{ overflowX: 'auto' }}>
-                      <table className="admin-data-table" style={{ margin: 0 }}>
-                        <thead>
-                          <tr style={{ background: '#FAFBFB' }}>
-                            <th style={{ width: '110px', padding: '7px 12px' }}>Flat</th>
-                            <th style={{ width: '120px', padding: '7px 12px' }}>Order #</th>
-                            <th style={{ width: '170px', padding: '7px 12px' }}>Resident</th>
-                            <th style={{ padding: '7px 12px' }}>Produce Items</th>
-                            <th style={{ width: '125px', padding: '7px 12px' }}>Status</th>
-                            <th style={{ width: '155px', padding: '7px 12px', textAlign: 'right' }}>Action</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {crate.orders.map(order => {
-                            const { flat } = extractBlockAndFlat(order.flatNo);
-                            const isHanded = order.status === 'OUT_FOR_DELIVERY' || Boolean(order.deliveryLotId);
-                            const isPacked = order.status === 'PACKED' || isHanded || order.status === 'DELIVERED';
-                            const isPackingThis = Boolean(packingOrderIds[order.id]);
+                    {/* Inline Flat Orders List (Responsive for Tablet, Mobile & Desktop - No Horizontal Scroll) */}
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      {crate.orders.map((order, oIdx) => {
+                        const { flat } = extractBlockAndFlat(order.flatNo);
+                        const isHanded = order.status === 'OUT_FOR_DELIVERY' || Boolean(order.deliveryLotId);
+                        const isPacked = order.status === 'PACKED' || isHanded || order.status === 'DELIVERED';
+                        const isPackingThis = Boolean(packingOrderIds[order.id]);
 
-                            return (
-                              <tr key={order.id} style={{ background: isPacked ? '#F9FCF9' : '#FFF' }}>
-                                <td style={{ padding: '8px 12px' }}>
-                                  <span style={{
+                        return (
+                          <div
+                            key={order.id}
+                            style={{
+                              padding: '10px 14px',
+                              borderTop: oIdx === 0 ? 'none' : '1px solid #F1F5F9',
+                              background: isPacked ? '#F9FCF9' : '#FFFFFF',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              flexWrap: 'wrap',
+                              gap: '10px'
+                            }}
+                          >
+                            {/* Flat + Order ID + Resident */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', minWidth: '210px' }}>
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                background: '#EBF2EE',
+                                color: '#234B3C',
+                                fontWeight: 900,
+                                fontSize: '12.5px',
+                                padding: '3px 8px',
+                                borderRadius: '5px',
+                                border: '1px solid #A7C4B8'
+                              }}>
+                                <MapPin size={12} color="#234B3C" />
+                                <span>{flat}</span>
+                              </span>
+                              <strong style={{ fontSize: '12.5px', color: '#0F172A' }}>
+                                {order.userName || 'Resident'}
+                              </strong>
+                              <span style={{ fontFamily: 'monospace', color: '#64748B', fontSize: '11.5px', fontWeight: 700 }}>
+                                #{order.id}
+                              </span>
+                            </div>
+
+                            {/* Produce Items Pills */}
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', flex: 1, minWidth: '200px' }}>
+                              {(order.items || []).map((i, iIdx) => (
+                                <span
+                                  key={iIdx}
+                                  style={{
+                                    background: '#F1F5F9',
+                                    border: '1px solid #E2E8F0',
+                                    padding: '2px 8px',
+                                    borderRadius: '5px',
+                                    fontSize: '11.5px',
+                                    fontWeight: 600,
+                                    color: '#1E293B'
+                                  }}
+                                >
+                                  {i.name} <strong>× {i.qty} {i.unit}</strong>
+                                </span>
+                              ))}
+                            </div>
+
+                            {/* Status + 1-Tap Pack & Label Actions */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: 'auto' }}>
+                              {isHanded ? (
+                                <span style={{ fontSize: '10.5px', fontWeight: 800, padding: '3px 8px', borderRadius: '5px', background: '#FEF3C7', color: '#92400E' }}>
+                                  🚚 Handed Over
+                                </span>
+                              ) : isPacked ? (
+                                <span style={{ fontSize: '10.5px', fontWeight: 800, padding: '3px 8px', borderRadius: '5px', background: '#DCFCE7', color: '#15803D' }}>
+                                  ✓ Packed
+                                </span>
+                              ) : (
+                                <span style={{ fontSize: '10.5px', fontWeight: 800, padding: '3px 8px', borderRadius: '5px', background: '#F1F5F9', color: '#475569' }}>
+                                  ⏳ Pending
+                                </span>
+                              )}
+
+                              {!isPacked && (
+                                <button
+                                  type="button"
+                                  disabled={isPackingThis}
+                                  onClick={() => handleMarkPacked(order.id)}
+                                  style={{
+                                    fontSize: '12px',
+                                    fontWeight: 800,
+                                    padding: '5px 12px',
+                                    borderRadius: '6px',
+                                    border: 'none',
+                                    background: isPackingThis ? '#94A3B8' : '#059669',
+                                    color: '#FFFFFF',
+                                    cursor: isPackingThis ? 'not-allowed' : 'pointer',
                                     display: 'inline-flex',
                                     alignItems: 'center',
-                                    gap: '4px',
-                                    background: '#EBF2EE',
-                                    color: '#234B3C',
-                                    fontWeight: 900,
-                                    fontSize: '12.5px',
-                                    padding: '3px 8px',
-                                    borderRadius: '5px',
-                                    border: '1px solid #A7C4B8'
-                                  }}>
-                                    <MapPin size={12} color="#234B3C" />
-                                    <span>{flat}</span>
-                                  </span>
-                                </td>
+                                    gap: '4px'
+                                  }}
+                                >
+                                  <Check size={13} />
+                                  <span>{isPackingThis ? 'Packing...' : 'Pack'}</span>
+                                </button>
+                              )}
 
-                                <td style={{ padding: '8px 12px' }}>
-                                  <strong style={{ fontFamily: 'monospace', color: '#0F172A', fontSize: '12.5px' }}>
-                                    #{order.id}
-                                  </strong>
-                                </td>
-
-                                <td style={{ padding: '8px 12px' }}>
-                                  <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#0F172A' }}>{order.userName || 'Resident'}</div>
-                                  <div style={{ fontSize: '10.5px', color: '#64748B' }}>{formatMaskedPhone(order.userPhone)}</div>
-                                </td>
-
-                                <td style={{ padding: '8px 12px' }}>
-                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-                                    {(order.items || []).map((i, iIdx) => (
-                                      <span key={iIdx} style={{ background: '#F1F5F9', padding: '2px 7px', borderRadius: '4px', fontSize: '11.5px', fontWeight: 600, color: '#1E293B' }}>
-                                        {i.name} <strong>× {i.qty} {i.unit}</strong>
-                                      </span>
-                                    ))}
-                                  </div>
-                                </td>
-
-                                <td style={{ padding: '8px 12px' }}>
-                                  {isHanded ? (
-                                    <span style={{ fontSize: '10.5px', fontWeight: 800, padding: '2px 7px', borderRadius: '4px', background: '#FEF3C7', color: '#92400E' }}>
-                                      🚚 Handed Over
-                                    </span>
-                                  ) : isPacked ? (
-                                    <span style={{ fontSize: '10.5px', fontWeight: 800, padding: '2px 7px', borderRadius: '4px', background: '#DCFCE7', color: '#15803D' }}>
-                                      ✓ Packed
-                                    </span>
-                                  ) : (
-                                    <span style={{ fontSize: '10.5px', fontWeight: 800, padding: '2px 7px', borderRadius: '4px', background: '#F1F5F9', color: '#475569' }}>
-                                      ⏳ Pending
-                                    </span>
-                                  )}
-                                </td>
-
-                                <td style={{ padding: '8px 12px', textAlign: 'right' }}>
-                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                                    {!isPacked && (
-                                      <button
-                                        type="button"
-                                        disabled={isPackingThis}
-                                        onClick={() => handleMarkPacked(order.id)}
-                                        style={{
-                                          fontSize: '11.5px',
-                                          fontWeight: 800,
-                                          padding: '4px 10px',
-                                          borderRadius: '5px',
-                                          border: 'none',
-                                          background: isPackingThis ? '#94A3B8' : '#059669',
-                                          color: '#FFFFFF',
-                                          cursor: isPackingThis ? 'not-allowed' : 'pointer',
-                                          display: 'inline-flex',
-                                          alignItems: 'center',
-                                          gap: '4px'
-                                        }}
-                                      >
-                                        <Check size={12} />
-                                        <span>{isPackingThis ? 'Packing...' : 'Pack'}</span>
-                                      </button>
-                                    )}
-                                    <button
-                                      type="button"
-                                      onClick={() => setLabelModalOrder(order)}
-                                      style={{
-                                        background: '#FFFFFF',
-                                        border: '1px solid #CBD5E1',
-                                        padding: '4px 8px',
-                                        borderRadius: '5px',
-                                        fontSize: '11px',
-                                        fontWeight: 700,
-                                        color: '#334155',
-                                        cursor: 'pointer',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '4px'
-                                      }}
-                                      title="Print Flat Label"
-                                    >
-                                      <Printer size={12} />
-                                      <span>Label</span>
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                              <button
+                                type="button"
+                                onClick={() => setLabelModalOrder(order)}
+                                style={{
+                                  background: '#FFFFFF',
+                                  border: '1px solid #CBD5E1',
+                                  padding: '5px 9px',
+                                  borderRadius: '6px',
+                                  fontSize: '11.5px',
+                                  fontWeight: 700,
+                                  color: '#334155',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}
+                                title="Print Flat Label"
+                              >
+                                <Printer size={12} />
+                                <span>Label</span>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );

@@ -158,15 +158,12 @@ export default function SocietiesDirectoryPage() {
   return (
     <div className="admin-page-container">
       {/* Page Title & Live Counter Header */}
-      <div className="page-title-header" style={{ marginBottom: '16px' }}>
+      <div className="page-title-header" style={{ marginBottom: '12px' }}>
         <div>
-          <h1 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Building2 size={22} color="#234B3C" />
-            <span>Apartments, Hostels & Resident Directory</span>
+          <h1 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Building2 size={20} color="#234B3C" />
+            <span>{isSalesOfficer ? '4. Societies Directory' : 'Apartments, Hostels & Resident Directory'}</span>
           </h1>
-          <p style={{ fontSize: '13px', color: '#64748B', margin: '3px 0 0' }}>
-            Centralized database of onboarded residential complexes, student living spaces, and registered flat residents
-          </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>

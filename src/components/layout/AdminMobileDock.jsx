@@ -12,7 +12,9 @@ import {
   Users,
   Store,
   Menu,
-  PackageCheck
+  PackageCheck,
+  Boxes,
+  RotateCcw
 } from 'lucide-react';
 import { useAdminRole } from '../../context/AdminRoleContext';
 
@@ -82,17 +84,9 @@ export default function AdminMobileDock() {
       {/* Field Sales Officer Tabs */}
       {currentRoleId === 'SALES_OFFICER' && (
         <>
-          <NavLink to="/sales-onboarding" className={({ isActive }) => `admin-dock-item ${isActive ? 'active' : ''}`}>
-            <FilePlus size={18} />
-            <span>+ Onboard</span>
-          </NavLink>
-          <NavLink to="/sales-my-societies" className={({ isActive }) => `admin-dock-item ${isActive ? 'active' : ''}`}>
-            <Building2 size={18} />
-            <span>Societies</span>
-          </NavLink>
           <NavLink to="/inbound-leads" className={({ isActive }) => `admin-dock-item ${isActive ? 'active' : ''}`} style={{ position: 'relative' }}>
             <ClipboardList size={18} />
-            <span>Leads</span>
+            <span>1. Leads</span>
             {inboundLeadsCount > 0 && (
               <span style={{
                 position: 'absolute',
@@ -113,6 +107,50 @@ export default function AdminMobileDock() {
                 {inboundLeadsCount}
               </span>
             )}
+          </NavLink>
+          <NavLink to="/sales-onboarding" className={({ isActive }) => `admin-dock-item ${isActive ? 'active' : ''}`}>
+            <FilePlus size={18} />
+            <span>2. Onboard</span>
+          </NavLink>
+          <NavLink to="/sales-my-societies" className={({ isActive }) => `admin-dock-item ${isActive ? 'active' : ''}`}>
+            <Building2 size={18} />
+            <span>3. Societies</span>
+          </NavLink>
+          <button
+            type="button"
+            onClick={() => setIsMobileDrawerOpen(true)}
+            className="admin-dock-item"
+            style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+          >
+            <Menu size={18} />
+            <span>Menu</span>
+          </button>
+        </>
+      )}
+
+      {/* Warehouse Staff / Packer Tabs */}
+      {currentRoleId === 'WAREHOUSE_STAFF' && (
+        <>
+          <NavLink 
+            to="/warehouse-crating#packing" 
+            className={() => `admin-dock-item ${location.pathname === '/warehouse-crating' && (!location.hash || location.hash === '#packing') ? 'active' : ''}`}
+          >
+            <PackageCheck size={18} />
+            <span>1. Pack</span>
+          </NavLink>
+          <NavLink 
+            to="/warehouse-crating#dispatch" 
+            className={() => `admin-dock-item ${location.pathname === '/warehouse-crating' && ['#dispatch', '#lots', '#ready', '#out-for-delivery', '#delivered'].includes(location.hash) ? 'active' : ''}`}
+          >
+            <Boxes size={18} />
+            <span>2. Dispatch</span>
+          </NavLink>
+          <NavLink 
+            to="/warehouse-crating#returns" 
+            className={() => `admin-dock-item ${location.pathname === '/warehouse-crating' && (location.hash === '#returns' || location.hash === '#return-audit') ? 'active' : ''}`}
+          >
+            <RotateCcw size={18} />
+            <span>3. Returns</span>
           </NavLink>
           <button
             type="button"
@@ -185,13 +223,26 @@ export default function AdminMobileDock() {
       {/* Delivery Executive (Rider) Tabs */}
       {currentRoleId === 'DELIVERY_EXECUTIVE' && (
         <>
-          <NavLink to="/orders-fulfillment" className={({ isActive }) => `admin-dock-item ${isActive ? 'active' : ''}`}>
+          <NavLink 
+            to="/orders-fulfillment#pending" 
+            className={() => `admin-dock-item ${location.pathname === '/orders-fulfillment' && (!location.hash || location.hash === '#pending') ? 'active' : ''}`}
+          >
             <Truck size={18} />
-            <span>Route Manifest</span>
+            <span>1. Deliver</span>
           </NavLink>
-          <NavLink to="/warehouse-crating" className={({ isActive }) => `admin-dock-item ${isActive ? 'active' : ''}`}>
-            <ClipboardList size={18} />
-            <span>Loaded Crates</span>
+          <NavLink 
+            to="/orders-fulfillment#delivered" 
+            className={() => `admin-dock-item ${location.pathname === '/orders-fulfillment' && location.hash === '#delivered' ? 'active' : ''}`}
+          >
+            <CheckCircle size={18} />
+            <span>2. Delivered</span>
+          </NavLink>
+          <NavLink 
+            to="/orders-fulfillment#cancelled" 
+            className={() => `admin-dock-item ${location.pathname === '/orders-fulfillment' && location.hash === '#cancelled' ? 'active' : ''}`}
+          >
+            <RotateCcw size={18} />
+            <span>3. Returns</span>
           </NavLink>
           <button
             type="button"

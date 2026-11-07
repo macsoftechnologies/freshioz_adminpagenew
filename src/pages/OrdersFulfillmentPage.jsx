@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { 
   Truck, 
@@ -40,6 +41,7 @@ export default function OrdersFulfillmentPage() {
   const { currentUser, currentRoleId } = useAdminRole();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
+  const location = useLocation();
 
   const { data: rawOrders = [], isLoading: isLoadingOrders } = orderResource.useList();
   const { data: rawSocieties = [] } = societyResource.useList();
@@ -51,10 +53,9 @@ export default function OrdersFulfillmentPage() {
 
   const updateOrderStatusMutation = useUpdateOrderStatus();
 
-  // URL Hash synchronization (#packing, #dispatch, #delivered, etc.)
-  const getInitialStatusFilter = () => {
-    if (typeof window === 'undefined') return 'ALL';
-    const hash = (window.location.hash || '').toLowerCase();
+  // URL Hash synchronization (#packing, #dispatch, #delivered, #cancelled, etc.)
+  const getInitialStatusFilter = (hashStr) => {
+    const hash = (hashStr ?? (typeof window !== 'undefined' ? window.location.hash : '')).toLowerCase();
     if (hash === '#packing' || hash === '#packed') return 'PACKED';
     if (hash === '#dispatch' || hash === '#out_for_delivery' || hash === '#out-for-delivery') return 'OUT_FOR_DELIVERY';
     if (hash === '#delivered') return 'DELIVERED';
@@ -65,32 +66,28 @@ export default function OrdersFulfillmentPage() {
     return 'ALL';
   };
 
-  const getInitialRiderTab = () => {
-    if (typeof window === 'undefined') return 'PENDING';
-    const hash = (window.location.hash || '').toLowerCase();
+  const getInitialRiderTab = (hashStr) => {
+    const hash = (hashStr ?? (typeof window !== 'undefined' ? window.location.hash : '')).toLowerCase();
     if (hash === '#delivered') return 'DELIVERED';
+    if (hash === '#cancelled' || hash === '#undelivered' || hash === '#returns') return 'CANCELLED';
     if (hash === '#all') return 'ALL';
     return 'PENDING';
   };
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState(getInitialStatusFilter);
+  const [statusFilter, setStatusFilter] = useState(() => getInitialStatusFilter(location.hash));
   const [societyFilter, setSocietyFilter] = useState('ALL');
   const [blockFilter, setBlockFilter] = useState('ALL');
   const [warehouseFilter, setWarehouseFilter] = useState('ALL');
   const [slotFilter, setSlotFilter] = useState('ALL');
-  const [riderTab, setRiderTab] = useState(getInitialRiderTab); // 'PENDING' | 'DELIVERED' | 'ALL'
+  const [riderTab, setRiderTab] = useState(() => getInitialRiderTab(location.hash)); // 'PENDING' | 'DELIVERED' | 'CANCELLED' | 'ALL'
   const [dateFilter, setDateFilter] = useState('ALL'); // 'ALL' | 'TODAY' | 'YESTERDAY' | 'WEEK' | 'CUSTOM'
 
-  // Hash listener
+  // Sync with React Router location.hash & browser hashchange
   useEffect(() => {
-    const handleHashChange = () => {
-      setStatusFilter(getInitialStatusFilter());
-      setRiderTab(getInitialRiderTab());
-    };
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
-  }, []);
+    setStatusFilter(getInitialStatusFilter(location.hash));
+    setRiderTab(getInitialRiderTab(location.hash));
+  }, [location.hash]);
 
   const handleStatusFilterChange = (newStatus) => {
     setStatusFilter(newStatus);
@@ -113,11 +110,12 @@ export default function OrdersFulfillmentPage() {
   const handleRiderTabChange = (newTab) => {
     setRiderTab(newTab);
     const hashMap = {
-      PENDING: '#dispatch',
+      PENDING: '#pending',
       DELIVERED: '#delivered',
+      CANCELLED: '#cancelled',
       ALL: '#all'
     };
-    const targetHash = hashMap[newTab] || '#dispatch';
+    const targetHash = hashMap[newTab] || '#pending';
     if (window.location.hash !== targetHash) {
       window.location.hash = targetHash;
     }
@@ -640,6 +638,12 @@ export default function OrdersFulfillmentPage() {
   const totalPages = Math.max(1, Math.ceil(filteredOrders.length / pageSize));
   const sortedFilteredOrders = useMemo(() => {
     return [...filteredOrders].sort((a, b) => {
+      // Priority 1: Pending / Active stops at top above Delivered / Cancelled
+      const isPendingA = a.status !== 'DELIVERED' && a.status !== 'CANCELLED' ? 0 : 1;
+      const isPendingB = b.status !== 'DELIVERED' && b.status !== 'CANCELLED' ? 0 : 1;
+      if (isPendingA !== isPendingB) return isPendingA - isPendingB;
+
+      // Priority 2: Society -> Block -> Flat
       const socCompare = (a.societyName || '').localeCompare(b.societyName || '');
       if (socCompare !== 0) return socCompare;
       const bA = extractBlockAndFlat(a.flatNo || a.flatNumber);
@@ -654,6 +658,52 @@ export default function OrdersFulfillmentPage() {
     const start = (currentPage - 1) * pageSize;
     return sortedFilteredOrders.slice(start, start + pageSize);
   }, [sortedFilteredOrders, currentPage, pageSize]);
+
+  // Dynamic Warehouse Time-Batch Slots for Driver & Hub Filtering
+  const driverTimeSlots = useMemo(() => {
+    const rawSlots = resolvedWh?.deliverySlots || resolvedWh?.slots || [];
+    if (Array.isArray(rawSlots) && rawSlots.length > 0) {
+      return rawSlots.filter(s => s.active !== false && s.enabled !== false).map(s => ({
+        id: s.id || s.name || s.label,
+        label: s.name || s.label || 'Delivery Slot',
+        window: s.timeWindow || (s.startTime && s.endTime ? `${s.startTime} – ${s.endTime}` : '')
+      }));
+    }
+    return [
+      { id: 'Early Dawn Drop', label: 'Early Dawn Drop', window: '05:30 AM – 07:00 AM' },
+      { id: 'Morning Fresh Slot', label: 'Morning Fresh Slot', window: '07:00 AM – 08:30 AM' },
+      { id: 'Evening Fresh Run', label: 'Evening Fresh Run', window: '05:30 PM – 07:30 PM' }
+    ];
+  }, [resolvedWh]);
+
+  // Group Rider's Paginated Orders by Society + Block for 1-handed mobile route execution
+  const riderGroupedBlocks = useMemo(() => {
+    const map = new Map();
+    paginatedOrders.forEach(o => {
+      const socName = o.societyName || 'Assigned Society';
+      const { block } = extractBlockAndFlat(o.flatNo || o.flatNumber);
+      const blockLabel = block && block !== 'General' ? `Block ${block}` : 'Main Gate / Desk';
+      const key = `${socName}__${blockLabel}`;
+      if (!map.has(key)) {
+        const targetSoc = societies.find(s => s.id === o.societyId || s.name === o.societyName);
+        const socAddress = targetSoc?.address || `${socName}, Security Gate`;
+        const mapQuery = targetSoc?.lat && targetSoc?.lng
+          ? `${targetSoc.lat},${targetSoc.lng}`
+          : encodeURIComponent(`${socName} ${socAddress}`);
+        map.set(key, {
+          key,
+          societyName: socName,
+          blockLabel,
+          socAddress,
+          mapsUrl: `https://www.google.com/maps/search/?api=1&query=${mapQuery}`,
+          slotLabel: o.deliverySlot || 'Morning Fresh Slot',
+          orders: []
+        });
+      }
+      map.get(key).orders.push(o);
+    });
+    return Array.from(map.values());
+  }, [paginatedOrders, societies]);
 
   return (
     <div className="admin-page-container">
@@ -743,162 +793,134 @@ export default function OrdersFulfillmentPage() {
         </div>
       </div>
 
-      {/* RIDER-SPECIFIC SHIFT OVERVIEW & TABS */}
+      {/* RIDER-SPECIFIC STICKY SHIFT & TIME-BATCH BAR (Stage switching is in Left Menu & Bottom Dock) */}
       {isDeliveryExecutive ? (
-        <>
-          {/* Shift Overview Banner */}
-          <div style={{
-            background: '#FFFFFF',
-            borderRadius: '12px',
-            border: '1.5px solid #E2E8F0',
-            padding: '12px 16px',
-            marginBottom: '10px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '12px'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: '38px', height: '38px', borderRadius: '8px', background: '#DCFCE7', border: '1px solid #86EFAC', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#15803D' }}>
-                <Truck size={20} />
-              </div>
-              <div>
-                <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A' }}>
-                  {currentUser?.name || 'Society Gate Delivery Rider'}
-                  <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600, marginLeft: '6px' }}>
-                    ({currentUser?.phone || '+91 98450 33333'})
+        <div style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 20,
+          background: '#FFFFFF',
+          borderRadius: '12px',
+          border: '1.5px solid #E2E8F0',
+          padding: '10px 12px',
+          marginBottom: '10px',
+          boxShadow: '0 2px 8px rgba(15, 23, 42, 0.04)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px'
+        }}>
+          {/* Row 1: Active Left-Menu Stage Title + Rider Cash Summary Pills */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              <span style={{
+                padding: '4px 10px',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: 900,
+                background: riderTab === 'PENDING' ? '#EA580C' : riderTab === 'DELIVERED' ? '#059669' : riderTab === 'CANCELLED' ? '#DC2626' : '#234B3C',
+                color: '#FFF'
+              }}>
+                {riderTab === 'PENDING' ? `1. To Deliver (${countRiderPending})` :
+                 riderTab === 'DELIVERED' ? `2. Delivered (${countRiderDelivered})` :
+                 riderTab === 'CANCELLED' ? `3. Undelivered (${countRiderCancelled})` :
+                 `4. All Stops (${riderBaseOrders.length})`}
+              </span>
+              <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#B91C1C', background: '#FEF2F2', border: '1px solid #FECACA', padding: '3px 8px', borderRadius: '6px' }}>
+                COD to Collect: ₹{riderTotalCodToCollect.toLocaleString()}
+              </span>
+              <span style={{
+                fontSize: '11.5px',
+                fontWeight: 900,
+                color: riderCashCollectedInHand > 0 ? '#991B1B' : '#166534',
+                background: riderCashCollectedInHand > 0 ? '#FEE2E2' : '#DCFCE7',
+                border: `1px solid ${riderCashCollectedInHand > 0 ? '#FCA5A5' : '#86EFAC'}`,
+                padding: '3px 8px',
+                borderRadius: '6px'
+              }}>
+                💵 Cash in Hand: ₹{riderCashCollectedInHand.toLocaleString()}
+              </span>
+            </div>
+
+            {/* Quick Date Toggle */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              {[
+                { id: 'TODAY', label: 'Today' },
+                { id: 'ALL', label: 'All Dates' }
+              ].map(d => (
+                <button
+                  key={d.id}
+                  type="button"
+                  onClick={() => setDateFilter(d.id)}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    fontSize: '11.5px',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    border: dateFilter === d.id ? '1.5px solid #234B3C' : '1px solid #CBD5E1',
+                    background: dateFilter === d.id ? '#234B3C' : '#F8FAFC',
+                    color: dateFilter === d.id ? '#FFF' : '#475569'
+                  }}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Row 2: Dynamic Warehouse Time-Batch Pills */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflowX: 'auto', paddingBottom: '2px' }}>
+            <button
+              type="button"
+              onClick={() => setSlotFilter('ALL')}
+              style={{
+                padding: '5px 10px',
+                borderRadius: '6px',
+                fontSize: '11.5px',
+                fontWeight: 800,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                border: slotFilter === 'ALL' ? '1.5px solid #059669' : '1px solid #E2E8F0',
+                background: slotFilter === 'ALL' ? '#ECFDF5' : '#F8FAFC',
+                color: slotFilter === 'ALL' ? '#065F46' : '#475569'
+              }}
+            >
+              All Time Batches ({riderBaseOrders.length})
+            </button>
+            {driverTimeSlots.map(slot => {
+              const slotActive = slotFilter.toLowerCase() === slot.label.toLowerCase();
+              const slotCount = riderBaseOrders.filter(o => (o.deliverySlot || 'Morning Fresh Slot').toLowerCase().includes(slot.label.toLowerCase())).length;
+              return (
+                <button
+                  key={slot.id}
+                  type="button"
+                  onClick={() => setSlotFilter(slotActive ? 'ALL' : slot.label)}
+                  style={{
+                    padding: '5px 10px',
+                    borderRadius: '6px',
+                    fontSize: '11.5px',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    border: slotActive ? '1.5px solid #059669' : '1px solid #E2E8F0',
+                    background: slotActive ? '#ECFDF5' : '#FFF',
+                    color: slotActive ? '#065F46' : '#334155',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px'
+                  }}
+                >
+                  <span>{slot.label}</span>
+                  {slot.window && <span style={{ fontSize: '10.5px', color: '#059669', fontWeight: 700 }}>({slot.window})</span>}
+                  <span style={{ background: slotActive ? '#059669' : '#E2E8F0', color: slotActive ? '#FFF' : '#334155', padding: '1px 5px', borderRadius: '4px', fontSize: '10px' }}>
+                    {slotCount}
                   </span>
-                </div>
-                <div style={{ fontSize: '11.5px', color: '#475569', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span>Assigned Hub: <strong>🏢 {assignedWhCode ? `${assignedWhCode} — ${assignedWhName}` : (assignedWhName || currentUser?.assignedLocationName || 'Warehouse ONE')}</strong></span>
-                  <span style={{ fontSize: '10px', background: '#059669', color: '#FFF', padding: '1px 5px', borderRadius: '4px', fontWeight: 800 }}>🔒 Assigned Hub</span>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
-              <div style={{ textAlign: 'center', padding: '0 6px' }}>
-                <div style={{ fontSize: '16px', fontWeight: 900, color: '#EA580C' }}>{countRiderPending}</div>
-                <div style={{ fontSize: '10px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase' }}>To Deliver</div>
-              </div>
-              <div style={{ height: '24px', width: '1px', background: '#E2E8F0' }} />
-              <div style={{ textAlign: 'center', padding: '0 6px' }}>
-                <div style={{ fontSize: '16px', fontWeight: 900, color: '#059669' }}>{countRiderDelivered}</div>
-                <div style={{ fontSize: '10px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase' }}>Delivered</div>
-              </div>
-              <div style={{ height: '24px', width: '1px', background: '#E2E8F0' }} />
-              <div style={{ textAlign: 'center', padding: '0 6px' }}>
-                <div style={{ fontSize: '16px', fontWeight: 900, color: '#DC2626' }}>{countRiderCancelled}</div>
-                <div style={{ fontSize: '10px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase' }}>Cancelled</div>
-              </div>
-              <div style={{ height: '24px', width: '1px', background: '#E2E8F0' }} />
-              <div style={{ textAlign: 'center', padding: '0 6px' }}>
-                <div style={{ fontSize: '16px', fontWeight: 900, color: '#B91C1C' }}>₹{riderTotalCodToCollect.toLocaleString()}</div>
-                <div style={{ fontSize: '10px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase' }}>COD to Collect</div>
-              </div>
-              <div style={{ height: '24px', width: '1px', background: '#E2E8F0' }} />
-              <div style={{ textAlign: 'center', padding: '2px 8px', borderRadius: '6px', background: riderCashCollectedInHand > 0 ? '#FEF2F2' : '#F0FDF4', border: `1px solid ${riderCashCollectedInHand > 0 ? '#FECACA' : '#BBF7D0'}` }}>
-                <div style={{ fontSize: '16px', fontWeight: 900, color: riderCashCollectedInHand > 0 ? '#B91C1C' : '#15803D' }}>
-                  ₹{riderCashCollectedInHand.toLocaleString()}
-                </div>
-                <div style={{ fontSize: '9.5px', fontWeight: 800, color: riderCashCollectedInHand > 0 ? '#991B1B' : '#166534', textTransform: 'uppercase' }}>
-                  {riderCashCollectedInHand > 0 ? 'Cash in Hand (Pay Hub)' : 'COD Settled'}
-                </div>
-              </div>
-            </div>
+                </button>
+              );
+            })}
           </div>
-
-          {/* Rider Stage Tabs (Replaces 6 Admin Pipeline Stages) */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            marginBottom: '10px',
-            flexWrap: 'wrap'
-          }}>
-            <button
-              type="button"
-              onClick={() => handleRiderTabChange('PENDING')}
-              style={{
-                padding: '6px 14px',
-                borderRadius: '6px',
-                fontSize: '12px',
-                fontWeight: 800,
-                cursor: 'pointer',
-                border: 'none',
-                background: riderTab === 'PENDING' ? '#EA580C' : '#F1F5F9',
-                color: riderTab === 'PENDING' ? '#FFF' : '#475569',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '5px'
-              }}
-            >
-              <Truck size={13} />
-              <span>1. Pending Deliveries ({countRiderPending})</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleRiderTabChange('DELIVERED')}
-              style={{
-                padding: '6px 14px',
-                borderRadius: '6px',
-                fontSize: '12px',
-                fontWeight: 800,
-                cursor: 'pointer',
-                border: 'none',
-                background: riderTab === 'DELIVERED' ? '#059669' : '#F1F5F9',
-                color: riderTab === 'DELIVERED' ? '#FFF' : '#475569',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '5px'
-              }}
-            >
-              <CheckCircle2 size={13} />
-              <span>2. Completed Today ({countRiderDelivered})</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleRiderTabChange('CANCELLED')}
-              style={{
-                padding: '6px 14px',
-                borderRadius: '6px',
-                fontSize: '12px',
-                fontWeight: 800,
-                cursor: 'pointer',
-                border: 'none',
-                background: riderTab === 'CANCELLED' ? '#DC2626' : '#F1F5F9',
-                color: riderTab === 'CANCELLED' ? '#FFF' : '#475569',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '5px'
-              }}
-            >
-              <XCircle size={13} />
-              <span>3. Cancelled / Undelivered ({countRiderCancelled})</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleRiderTabChange('ALL')}
-              style={{
-                padding: '6px 14px',
-                borderRadius: '6px',
-                fontSize: '12px',
-                fontWeight: 800,
-                cursor: 'pointer',
-                border: 'none',
-                background: riderTab === 'ALL' ? '#234B3C' : '#F1F5F9',
-                color: riderTab === 'ALL' ? '#FFF' : '#475569'
-              }}
-            >
-              <span>All Assigned Stops ({riderBaseOrders.length})</span>
-            </button>
-          </div>
-        </>
-      ) : (
+        </div>
+      ) : currentRoleId === 'WAREHOUSE_STAFF' ? null : (
         /* ================= ADMIN ENTERPRISE 6-STAGE PIPELINE PILLS ================= */
         <>
           <div style={{
@@ -1284,342 +1306,326 @@ export default function OrdersFulfillmentPage() {
               </div>
             </div>
           ) : (
-            paginatedOrders.map((order, idx) => {
-              const targetSoc = societies.find(s => s.id === order.societyId || s.name === order.societyName);
-              const socAddress = targetSoc?.address || `${order.societyName}, Drop Desk / Security Gate`;
-              const mapQuery = targetSoc?.lat && targetSoc?.lng
-                ? `${targetSoc.lat},${targetSoc.lng}`
-                : encodeURIComponent(`${order.societyName} ${socAddress}`);
-              const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${mapQuery}`;
-              const isCod = (order.paymentMethod || '').includes('PAY_ON_DELIVERY');
-              const isDelivered = order.status === 'DELIVERED';
+            riderGroupedBlocks.map((group) => {
+              const pendingInGroup = group.orders.filter(o => o.status !== 'DELIVERED' && o.status !== 'CANCELLED').length;
+              const deliveredInGroup = group.orders.filter(o => o.status === 'DELIVERED').length;
 
               return (
-                <div 
-                  key={order.id}
+                <div
+                  key={group.key}
                   style={{
                     background: '#FFFFFF',
                     borderRadius: '12px',
-                    border: isDelivered ? '1.5px solid #BBF7D0' : '1.5px solid #CBD5E1',
+                    border: pendingInGroup > 0 ? '1.5px solid #94A3B8' : '1.5px solid #BBF7D0',
                     boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
-                    padding: '16px 18px',
-                    transition: 'border-color 0.15s ease'
+                    overflow: 'hidden'
                   }}
                 >
-                  {/* Top Bar: Stop #, Slot & Cutoff, Status */}
+                  {/* Society + Block Crate Header with 1-Tap Maps Navigation */}
                   <div style={{
+                    background: pendingInGroup > 0 ? '#F8FAFC' : '#F0FDF4',
+                    padding: '10px 14px',
+                    borderBottom: '1px solid #E2E8F0',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     flexWrap: 'wrap',
-                    gap: '8px',
-                    paddingBottom: '10px',
-                    borderBottom: '1px solid #F1F5F9',
-                    marginBottom: '12px'
+                    gap: '8px'
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                       <span style={{
-                        background: isDelivered ? '#059669' : '#EA580C',
+                        background: '#234B3C',
                         color: '#FFF',
-                        fontSize: '11px',
+                        fontSize: '12px',
                         fontWeight: 900,
-                        padding: '3px 8px',
-                        borderRadius: '4px',
-                        letterSpacing: '0.4px'
+                        padding: '3px 9px',
+                        borderRadius: '6px'
                       }}>
-                        STOP #{idx + 1}
+                        🏢 {group.societyName} · {group.blockLabel}
                       </span>
-                      <strong style={{ fontSize: '14px', color: '#0F172A', fontFamily: 'monospace' }}>
-                        #{order.id}
-                      </strong>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{
-                        fontSize: '11px',
-                        background: '#FEF3C7',
-                        color: '#B45309',
-                        fontWeight: 800,
-                        padding: '3px 8px',
-                        borderRadius: '4px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px'
-                      }}>
-                        <Clock size={12} />
-                        <span>{order.deliverySlot || 'Morning Run (06:30 AM - 08:30 AM)'}</span>
+                      <span style={{ fontSize: '11px', background: '#FEF3C7', color: '#B45309', fontWeight: 800, padding: '2px 7px', borderRadius: '4px' }}>
+                        ⏱ {group.slotLabel}
                       </span>
-
-                      <span style={{
-                        fontSize: '11px',
-                        fontWeight: 800,
-                        padding: '3px 8px',
-                        borderRadius: '4px',
-                        background: isDelivered ? '#DCFCE7' : '#FFF7ED',
-                        color: isDelivered ? '#15803D' : '#C2410C'
-                      }}>
-                        {isDelivered ? '✅ DELIVERED' : '🚚 TO DELIVER'}
+                      <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#475569' }}>
+                        {pendingInGroup > 0 ? <span style={{ color: '#EA580C' }}>{pendingInGroup} Pending</span> : null}
+                        {pendingInGroup > 0 && deliveredInGroup > 0 ? ' · ' : null}
+                        {deliveredInGroup > 0 ? <span style={{ color: '#059669' }}>{deliveredInGroup} Delivered</span> : null}
                       </span>
                     </div>
-                  </div>
 
-                  {/* 3 Core Delivery Columns: WHERE, TO WHOM, WHAT TO COLLECT & DROP */}
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-                    gap: '12px',
-                    marginBottom: '14px'
-                  }}>
-                    {/* 1. WHERE: Customer Location & Google Maps */}
-                    <div style={{ background: '#F8FAFC', padding: '12px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
-                      <div style={{ fontSize: '11px', fontWeight: 800, color: '#0369A1', textTransform: 'uppercase', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <MapPin size={13} color="#0369A1" />
-                        <span>Where: Drop Location</span>
-                      </div>
-                      <div style={{ fontSize: '15px', fontWeight: 900, color: '#0F172A' }}>
-                        {order.societyName}
-                      </div>
-                      <div style={{ fontSize: '13px', fontWeight: 800, color: '#166534', marginTop: '2px' }}>
-                        Flat / Door: {order.flatNumber || order.flatNo || 'Society Drop Desk'}
-                      </div>
-                      <div style={{ fontSize: '11.5px', color: '#64748B', marginTop: '4px', lineHeight: 1.4 }}>
-                        📍 {socAddress}
-                      </div>
-
-                      <div style={{ marginTop: '10px' }}>
-                        <a
-                          href={mapsUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            background: '#0284C7',
-                            color: '#FFF',
-                            padding: '6px 12px',
-                            borderRadius: '6px',
-                            fontSize: '11.5px',
-                            fontWeight: 800,
-                            textDecoration: 'none'
-                          }}
-                        >
-                          <MapPin size={13} />
-                          <span>Open in Google Maps ➔</span>
-                        </a>
-                      </div>
-                    </div>
-
-                    {/* 2. TO WHOM: Customer Contact */}
-                    <div style={{ background: '#F8FAFC', padding: '12px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
-                      <div style={{ fontSize: '11px', fontWeight: 800, color: '#166534', textTransform: 'uppercase', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <User size={13} color="#166534" />
-                        <span>To Whom: Resident</span>
-                      </div>
-                      <div style={{ fontSize: '14.5px', fontWeight: 900, color: '#0F172A' }}>
-                        {order.userName || order.customerName || 'Resident Customer'}
-                      </div>
-                      <div style={{ fontSize: '13px', fontWeight: 700, color: '#334155', marginTop: '3px' }}>
-                        +91 {order.userPhone || '98450 11999'}
-                      </div>
-
-                      <div style={{ marginTop: '10px' }}>
-                        <a
-                          href={`tel:${order.userPhone || '9845011999'}`}
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            background: '#ECFDF5',
-                            color: '#059669',
-                            border: '1px solid #A7F3D0',
-                            padding: '6px 12px',
-                            borderRadius: '6px',
-                            fontSize: '11.5px',
-                            fontWeight: 800,
-                            textDecoration: 'none'
-                          }}
-                        >
-                          <Phone size={13} />
-                          <span>Call Customer</span>
-                        </a>
-                      </div>
-                    </div>
-
-                    {/* 3. WHAT TO COLLECT & WHAT TO DROP */}
-                    <div style={{ background: '#F8FAFC', padding: '12px', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
-                      <div style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '4px' }}>
-                        Payment & Crate
-                      </div>
-
-                      {isCod ? (
-                        (order.paymentStatus === 'PAID' || order.codPaymentReceived) ? (
-                          <div style={{ background: '#ECFDF5', border: '1.5px solid #86EFAC', color: '#166534', padding: '7px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 900, marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span>✅ COD PAYMENT COLLECTED</span>
-                            <span style={{ fontSize: '12px' }}>₹{(order.totalAmount || 0).toLocaleString()} ({order.codReceivedMode === 'UPI_QR' ? 'UPI QR' : 'Cash'})</span>
-                          </div>
-                        ) : (
-                          <div style={{ background: '#FEF2F2', border: '1.5px solid #FCA5A5', color: '#991B1B', padding: '7px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 900, marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
-                            <span>💵 COD TO COLLECT: ₹{(order.totalAmount || 0).toLocaleString()}</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setCodModalOrder(order);
-                                setCodPaymentMode('CASH');
-                              }}
-                              style={{
-                                background: '#DC2626',
-                                color: '#FFF',
-                                border: 'none',
-                                padding: '3px 8px',
-                                borderRadius: '4px',
-                                fontSize: '11px',
-                                fontWeight: 800,
-                                cursor: 'pointer'
-                              }}
-                              title="Record cash collected from resident"
-                            >
-                              💵 Cash
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setCodModalOrder(order);
-                                setCodPaymentMode('UPI_QR');
-                              }}
-                              style={{
-                                background: '#0284C7',
-                                color: '#FFF',
-                                border: 'none',
-                                padding: '3px 8px',
-                                borderRadius: '4px',
-                                fontSize: '11px',
-                                fontWeight: 800,
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '3px'
-                              }}
-                              title="Show dynamic scannable UPI QR on phone screen"
-                            >
-                              <span>📱 UPI QR</span>
-                            </button>
-                          </div>
-                        )
-                      ) : (
-                        <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', color: '#065F46', padding: '5px 10px', borderRadius: '6px', fontSize: '11.5px', fontWeight: 800, marginBottom: '8px' }}>
-                          ✅ PAID ONLINE (₹0 to collect)
-                        </div>
-                      )}
-
-                      <div style={{ fontSize: '12px', color: '#0F172A', fontWeight: 700 }}>
-                        {(order.items || []).map((it, iIdx) => (
-                          <div key={iIdx} style={{ padding: '2px 0' }}>
-                            {(() => {
-                              const q = it.qty || it.quantity || 1;
-                              const cleanU = String(it.unit || '').replace(/\b(?:pc|pcs|pieces?)\b/gi, '').trim();
-                              return `• ${it.name || it.productName} — ${cleanU ? `${q} ${cleanU}` : `×${q}`}`;
-                            })()}
-                          </div>
-                        ))}
-                      </div>
-
-                      <div style={{ marginTop: '8px' }}>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedOrder(order)}
-                          style={{ background: 'none', border: 'none', color: '#0369A1', fontSize: '11.5px', fontWeight: 800, padding: 0, cursor: 'pointer', textDecoration: 'underline' }}
-                        >
-                          View Address Label & QR ➔
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Bottom Action Row: Strictly One-Way Mark Delivered for Rider */}
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px', borderTop: '1px solid #F1F5F9', paddingTop: '10px' }}>
-                    <button
-                      type="button"
-                      onClick={() => printOrderTaxInvoice(order)}
+                    <a
+                      href={group.mapsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',
-                        gap: '5px',
-                        background: '#F8FAFC',
-                        color: '#334155',
-                        border: '1px solid #CBD5E1',
-                        padding: '8px 12px',
-                        borderRadius: '8px',
-                        fontWeight: 700,
-                        fontSize: '12px',
-                        cursor: 'pointer'
+                        gap: '4px',
+                        background: '#0284C7',
+                        color: '#FFF',
+                        padding: '5px 10px',
+                        borderRadius: '6px',
+                        fontSize: '11.5px',
+                        fontWeight: 800,
+                        textDecoration: 'none'
                       }}
-                      title="Print Order Delivery Slip / Invoice"
                     >
-                      <Printer size={14} />
-                      <span>Print Slip</span>
-                    </button>
-                    {order.status === 'CANCELLED' ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#DC2626', fontWeight: 800, fontSize: '12px', background: '#FEF2F2', padding: '6px 12px', borderRadius: '6px', border: '1px solid #FCA5A5' }}>
-                        <XCircle size={15} />
-                        <span>Undelivered / Cancelled: {order.cancelledReason || 'Resident unavailable'}</span>
-                      </div>
-                    ) : !isDelivered ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setRiderCancelModalOrder(order);
-                            setRiderCancelReason('CUSTOMER_NOT_AVAILABLE');
-                            setRiderCancelNotes('');
-                          }}
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            background: '#FEF2F2',
-                            color: '#DC2626',
-                            border: '1px solid #FCA5A5',
-                            padding: '8px 12px',
-                            borderRadius: '8px',
-                            fontWeight: 800,
-                            fontSize: '12px',
-                            cursor: 'pointer'
-                          }}
-                          title="Report delivery exception or resident cancellation"
-                        >
-                          <XCircle size={14} />
-                          <span>Cancel Stop</span>
-                        </button>
+                      <MapPin size={12} />
+                      <span>Navigate</span>
+                    </a>
+                  </div>
 
-                        <button
-                          type="button"
-                          onClick={() => setDeliveryConfirmOrder(order)}
+                  {/* Individual Flat Rows inside the Block Group */}
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    {group.orders.map((order, idx) => {
+                      const isCod = (order.paymentMethod || '').includes('PAY_ON_DELIVERY') || order.paymentMethod === 'COD';
+                      const isDelivered = order.status === 'DELIVERED';
+                      const isCancelled = order.status === 'CANCELLED';
+                      const isCodPaid = order.paymentStatus === 'PAID' || order.codPaymentReceived;
+                      const flatDisplay = order.flatNumber || order.flatNo || 'Gate Desk';
+
+                      return (
+                        <div
+                          key={order.id}
                           style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            background: '#059669',
-                            color: '#FFF',
-                            border: 'none',
-                            padding: '8px 18px',
-                            borderRadius: '8px',
-                            fontWeight: 800,
-                            fontSize: '13px',
-                            cursor: 'pointer',
-                            boxShadow: '0 2px 4px rgba(5, 150, 105, 0.25)'
+                            padding: '12px 14px',
+                            borderBottom: idx < group.orders.length - 1 ? '1px solid #F1F5F9' : 'none',
+                            background: isDelivered ? '#FAFFFC' : isCancelled ? '#FFFBFB' : '#FFFFFF',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px'
                           }}
                         >
-                          <CheckCircle2 size={16} />
-                          <span>Mark Delivered at Drop Desk</span>
-                        </button>
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#059669', fontWeight: 800, fontSize: '12.5px' }}>
-                        <CheckCircle2 size={16} />
-                        <span>Delivered & Verified at Drop Desk ({order.lastStatusUpdate || 'Today'})</span>
-                      </div>
-                    )}
+                          {/* Row 1: Flat Badge + Resident + 1-Tap Call + Payment Badge */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span style={{
+                                background: isDelivered ? '#DCFCE7' : isCancelled ? '#FEE2E2' : '#FFF7ED',
+                                color: isDelivered ? '#15803D' : isCancelled ? '#B91C1C' : '#C2410C',
+                                border: `1.5px solid ${isDelivered ? '#86EFAC' : isCancelled ? '#FCA5A5' : '#FDBA74'}`,
+                                fontSize: '13px',
+                                fontWeight: 900,
+                                padding: '3px 9px',
+                                borderRadius: '6px'
+                              }}>
+                                Flat {flatDisplay}
+                              </span>
+                              <strong style={{ fontSize: '13.5px', color: '#0F172A' }}>
+                                {order.userName || order.customerName || 'Resident'}
+                              </strong>
+                              <span style={{ fontSize: '11.5px', color: '#64748B', fontFamily: 'monospace', fontWeight: 700 }}>
+                                #{order.id}
+                              </span>
+                              <a
+                                href={`tel:${order.userPhone || '9845011999'}`}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  background: '#ECFDF5',
+                                  color: '#059669',
+                                  border: '1px solid #A7F3D0',
+                                  padding: '3px 8px',
+                                  borderRadius: '6px',
+                                  fontSize: '11.5px',
+                                  fontWeight: 800,
+                                  textDecoration: 'none'
+                                }}
+                              >
+                                <Phone size={11} />
+                                <span>Call</span>
+                              </a>
+                            </div>
+
+                            {/* Payment Pill */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                              {isCod ? (
+                                isCodPaid ? (
+                                  <span style={{ background: '#DCFCE7', color: '#166534', border: '1px solid #86EFAC', padding: '3px 8px', borderRadius: '6px', fontSize: '11.5px', fontWeight: 900 }}>
+                                    ✅ COD Paid ₹{(order.totalAmount || 0).toLocaleString()} ({order.codReceivedMode === 'UPI_QR' ? 'UPI QR' : 'Cash'})
+                                  </span>
+                                ) : (
+                                  <span style={{ background: '#FEF2F2', color: '#B91C1C', border: '1.5px solid #FCA5A5', padding: '3px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: 900 }}>
+                                    💵 Collect ₹{(order.totalAmount || 0).toLocaleString()} COD
+                                  </span>
+                                )
+                              ) : (
+                                <span style={{ background: '#ECFDF5', color: '#065F46', border: '1px solid #A7F3D0', padding: '3px 8px', borderRadius: '6px', fontSize: '11.5px', fontWeight: 800 }}>
+                                  ✅ Prepaid Online
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Row 2: Compact Produce Item Pills + 1-Tap Rider Actions */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', flex: 1, minWidth: '180px' }}>
+                              {(order.items || []).map((it, iIdx) => {
+                                const q = it.qty || it.quantity || 1;
+                                const cleanU = String(it.unit || '').replace(/\b(?:pc|pcs|pieces?)\b/gi, '').trim();
+                                return (
+                                  <span
+                                    key={iIdx}
+                                    style={{
+                                      background: '#F1F5F9',
+                                      color: '#1E293B',
+                                      border: '1px solid #E2E8F0',
+                                      padding: '2px 7px',
+                                      borderRadius: '5px',
+                                      fontSize: '11.5px',
+                                      fontWeight: 700
+                                    }}
+                                  >
+                                    {it.name || it.productName} · <strong>{cleanU ? `${q} ${cleanU}` : `×${q}`}</strong>
+                                  </span>
+                                );
+                              })}
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedOrder(order)}
+                                style={{
+                                  background: '#F8FAFC',
+                                  color: '#475569',
+                                  border: '1px solid #CBD5E1',
+                                  padding: '5px 8px',
+                                  borderRadius: '6px',
+                                  fontSize: '11px',
+                                  fontWeight: 800,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Label
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => printOrderTaxInvoice(order)}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  background: '#F8FAFC',
+                                  color: '#334155',
+                                  border: '1px solid #CBD5E1',
+                                  padding: '5px 8px',
+                                  borderRadius: '6px',
+                                  fontWeight: 700,
+                                  fontSize: '11px',
+                                  cursor: 'pointer'
+                                }}
+                                title="Print Slip"
+                              >
+                                <Printer size={12} />
+                                <span>Slip</span>
+                              </button>
+
+                              {isCancelled ? (
+                                <span style={{ color: '#DC2626', fontWeight: 800, fontSize: '11.5px', background: '#FEF2F2', padding: '4px 9px', borderRadius: '6px', border: '1px solid #FCA5A5' }}>
+                                  ✕ Undelivered ({order.cancelledReason || 'Returned'})
+                                </span>
+                              ) : isDelivered ? (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#059669', fontWeight: 800, fontSize: '12px', background: '#DCFCE7', padding: '4px 10px', borderRadius: '6px' }}>
+                                  <CheckCircle2 size={14} />
+                                  <span>Delivered</span>
+                                </span>
+                              ) : (
+                                <>
+                                  {isCod && !isCodPaid && (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setCodModalOrder(order);
+                                          setCodPaymentMode('CASH');
+                                        }}
+                                        style={{
+                                          background: '#DC2626',
+                                          color: '#FFF',
+                                          border: 'none',
+                                          padding: '6px 10px',
+                                          borderRadius: '6px',
+                                          fontSize: '11.5px',
+                                          fontWeight: 800,
+                                          cursor: 'pointer'
+                                        }}
+                                      >
+                                        💵 Cash
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setCodModalOrder(order);
+                                          setCodPaymentMode('UPI_QR');
+                                        }}
+                                        style={{
+                                          background: '#0284C7',
+                                          color: '#FFF',
+                                          border: 'none',
+                                          padding: '6px 10px',
+                                          borderRadius: '6px',
+                                          fontSize: '11.5px',
+                                          fontWeight: 800,
+                                          cursor: 'pointer'
+                                        }}
+                                      >
+                                        📱 UPI QR
+                                      </button>
+                                    </>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => setDeliveryConfirmOrder(order)}
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      background: '#059669',
+                                      color: '#FFF',
+                                      border: 'none',
+                                      padding: '6px 12px',
+                                      borderRadius: '6px',
+                                      fontWeight: 800,
+                                      fontSize: '12px',
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    <CheckCircle2 size={14} />
+                                    <span>Deliver</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setRiderCancelModalOrder(order);
+                                      setRiderCancelReason('CUSTOMER_NOT_AVAILABLE');
+                                      setRiderCancelNotes('');
+                                    }}
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      background: '#FEF2F2',
+                                      color: '#DC2626',
+                                      border: '1px solid #FCA5A5',
+                                      padding: '6px 10px',
+                                      borderRadius: '6px',
+                                      fontWeight: 800,
+                                      fontSize: '11.5px',
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    <XCircle size={13} />
+                                    <span>Undelivered</span>
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );
