@@ -251,6 +251,11 @@ export default function OrdersFulfillmentPage() {
     const targetOrder = (orders || []).find(o => o.id === orderId);
     if (!targetOrder) return;
 
+    if (targetOrder.status === 'DELIVERED') {
+      showToast('Order has already been delivered and is final. Status cannot be modified.', 'error');
+      return;
+    }
+
     if (targetOrder.status === 'CANCELLED') {
       showToast('Cannot modify status of a CANCELLED order', 'error');
       return;
@@ -355,7 +360,7 @@ export default function OrdersFulfillmentPage() {
     e.preventDefault();
     if (!batchSociety) return;
 
-    const targetOrders = orders.filter(o => o.societyName === batchSociety && o.status !== 'CANCELLED' && o.status !== batchTargetStatus);
+    const targetOrders = orders.filter(o => o.societyName === batchSociety && o.status !== 'CANCELLED' && o.status !== 'DELIVERED' && o.status !== batchTargetStatus);
     if (targetOrders.length === 0) {
       showToast(`No pending orders found for "${batchSociety}" to set to ${batchTargetStatus}.`);
       return;
@@ -1864,8 +1869,8 @@ export default function OrdersFulfillmentPage() {
                         </td>
 
                         <td>
-                          {/* STRICT PERMISSION: Only Super Admin gets the reversible selector dropdown */}
-                          {isSuperAdmin ? (
+                          {/* STRICT PERMISSION: Only Super Admin gets the selector dropdown for non-terminal statuses */}
+                          {isSuperAdmin && currentStatus !== 'DELIVERED' && currentStatus !== 'CANCELLED' ? (
                             <select
                               value={currentStatus}
                               onChange={(e) => {
@@ -1896,15 +1901,18 @@ export default function OrdersFulfillmentPage() {
                             </select>
                           ) : (
                             <span style={{
-                              padding: '4px 8px',
+                              padding: '5px 10px',
                               borderRadius: '6px',
-                              background: `${statusConf.color}15`,
-                              color: statusConf.color,
+                              background: currentStatus === 'DELIVERED' ? '#DCFCE7' : `${statusConf.color}15`,
+                              color: currentStatus === 'DELIVERED' ? '#15803D' : statusConf.color,
                               fontWeight: 800,
                               fontSize: '11.5px',
-                              display: 'inline-block'
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              border: `1px solid ${currentStatus === 'DELIVERED' ? '#86EFAC' : statusConf.color + '40'}`
                             }}>
-                              {statusConf.label}
+                              {currentStatus === 'DELIVERED' ? '🔒 DELIVERED (Drop Desk)' : statusConf.label}
                             </span>
                           )}
                           {currentStatus === 'CANCELLED' && order.cancelledReason && (
