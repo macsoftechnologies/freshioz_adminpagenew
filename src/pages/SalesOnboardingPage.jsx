@@ -21,6 +21,7 @@ import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
 import { societies as societyResource, warehouses as warehouseResource, leads as leadResource } from '../hooks/resources';
 import { generateId, generateUUID } from '../utils/idGenerator';
+import { detectCurrentLocation } from '../utils/locationService';
 
 export default function SalesOnboardingPage() {
   const { currentUser } = useAdminRole();
@@ -60,64 +61,25 @@ export default function SalesOnboardingPage() {
 
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
 
-  // Auto-Detect Current GPS Position & Reverse-Geocode Address with IP Fallback
+  // Auto-Detect Current GPS Position & Reverse-Geocode Address (Unified Location Service)
   const handleAutoDetectLocation = async () => {
     setIsDetectingLocation(true);
+    const result = await detectCurrentLocation();
+    setIsDetectingLocation(false);
 
-    const applyLocation = async (latVal, lngVal, message) => {
-      let resolvedAddress = `Auto-Detected GPS: ${latVal}, ${lngVal}`;
-      try {
-        const res = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latVal}&lon=${lngVal}&zoom=18&addressdetails=1`,
-          { headers: { 'Accept': 'application/json', 'User-Agent': 'FreshiozApp/1.0 (admin@freshioz.local)' } }
-        );
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.display_name) {
-            resolvedAddress = data.display_name;
-          }
-        }
-      } catch (fetchErr) {
-        console.warn('Reverse geocoding fallback to coords:', fetchErr);
-      }
-
-      setFormData(prev => ({
-        ...prev,
-        lat: latVal,
-        lng: lngVal,
-        address: resolvedAddress
-      }));
-      setIsDetectingLocation(false);
-      showToast(message, 'success');
-    };
-
-    if (navigator.geolocation) {
-      const getPos = (highAcc, timeoutMs) =>
-        new Promise((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: highAcc,
-            timeout: timeoutMs,
-            maximumAge: 60000,
-          });
-        });
-
-      try {
-        const pos = await getPos(true, 5000).catch(() => getPos(false, 6000));
-        const latVal = Number(pos.coords.latitude.toFixed(6));
-        const lngVal = Number(pos.coords.longitude.toFixed(6));
-        await applyLocation(latVal, lngVal, 'Device GPS location & address detected!');
-        return;
-      } catch (geoErr) {
-        if (geoErr && geoErr.code === 1) {
-          setIsDetectingLocation(false);
-          showToast('Location permission denied in browser. Click lock icon in URL bar to allow.', 'error');
-          return;
-        }
-      }
+    if (!result.success) {
+      showToast(result.message || 'Could not detect location. Please enter society address manually.', 'error');
+      return;
     }
 
-    setIsDetectingLocation(false);
-    showToast('Device GPS unavailable. Please enter society address manually or drag pin.', 'info');
+    setFormData(prev => ({
+      ...prev,
+      lat: result.lat,
+      lng: result.lng,
+      address: result.address || prev.address
+    }));
+
+    showToast(result.note || 'Location auto-detected successfully!', 'success');
   };
 
   // Image Upload Handler (converts to base64)
@@ -560,33 +522,27 @@ export default function SalesOnboardingPage() {
               )}
             </div>
 
-            {/* GPS Pin */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px' }}>
+            {/* Geolocation status for early morning delivery route */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '12px 14px',
+              background: '#F0FDF4',
+              border: '1.5px solid #BBF7D0',
+              borderRadius: '8px',
+              color: '#166534',
+              fontSize: '12px',
+              fontWeight: 600
+            }}>
+              <Navigation size={16} color="#16A34A" />
               <div>
-                <label style={{ fontSize: '12px', fontWeight: 700, display: 'block', marginBottom: '4px' }}>
-                  GPS Latitude (For Delivery Partner Navigation)
-                </label>
-                <input
-                  type="number"
-                  step="0.0001"
-                  placeholder="e.g. 12.9260"
-                  value={formData.lat}
-                  onChange={(e) => setFormData({ ...formData, lat: e.target.value })}
-                  style={{ width: '100%', height: '40px', padding: '0 12px', borderRadius: '8px', border: '1.5px solid #CBD5E1', fontSize: '13px' }}
-                />
-              </div>
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: 700, display: 'block', marginBottom: '4px' }}>
-                  GPS Longitude
-                </label>
-                <input
-                  type="number"
-                  step="0.0001"
-                  placeholder="e.g. 77.6762"
-                  value={formData.lng}
-                  onChange={(e) => setFormData({ ...formData, lng: e.target.value })}
-                  style={{ width: '100%', height: '40px', padding: '0 12px', borderRadius: '8px', border: '1.5px solid #CBD5E1', fontSize: '13px' }}
-                />
+                <span style={{ fontWeight: 800 }}>Delivery Rider Navigation Geolocation: </span>
+                {formData.lat && formData.lng ? (
+                  <span>Auto-synced and locked for early morning drop desk navigation.</span>
+                ) : (
+                  <span>Will be auto-calculated from your street address & auto-detect.</span>
+                )}
               </div>
             </div>
           </div>

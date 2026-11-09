@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { MapPin, Navigation, Compass, CheckCircle2, Loader2, Sparkles } from 'lucide-react';
+import { reverseGeocode, detectCurrentLocation, DEFAULT_COORDS } from '../../utils/locationService';
 
 // Fix Leaflet standard icons in Vite bundler
 delete L.Icon.Default.prototype._getIconUrl;
@@ -49,42 +50,11 @@ export default function AdminWarehouseLocationMapPicker({
   const mapInstanceRef = useRef(null);
   const markerRef = useRef(null);
 
-  const [currentCoords, setCurrentCoords] = useState({ lat: lat || DEFAULT_LAT, lng: lng || DEFAULT_LNG });
+  const [currentCoords, setCurrentCoords] = useState({ lat: lat || DEFAULT_COORDS.lat, lng: lng || DEFAULT_COORDS.lng });
   const [currentAddress, setCurrentAddress] = useState(address);
   const [isLocating, setIsLocating] = useState(false);
   const [locateError, setLocateError] = useState('');
   const [locateNote, setLocateNote] = useState('');
-
-  // Reverse geocode lat/lng to clean address using OpenStreetMap Nominatim
-  const reverseGeocode = async (targetLat, targetLng) => {
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${targetLat}&lon=${targetLng}&addressdetails=1`,
-        { headers: { 'Accept': 'application/json', 'Accept-Language': 'en' } }
-      );
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.address) {
-          const a = data.address;
-          const parts = [
-            a.road || a.suburb || a.neighbourhood || a.commercial || a.industrial,
-            a.city || a.town || a.village || a.county || a.state_district,
-            a.state,
-            a.postcode
-          ].filter(Boolean);
-          if (parts.length > 0) {
-            return parts.join(', ');
-          }
-        }
-        if (data && data.display_name) {
-          return data.display_name;
-        }
-      }
-    } catch {
-      // Ignore network errors on reverse geocode
-    }
-    return `Mandi Hub (GPS: ${targetLat}, ${targetLng})`;
-  };
 
   // Synchronize when external props change
   useEffect(() => {
@@ -176,61 +146,35 @@ export default function AdminWarehouseLocationMapPicker({
     }
   };
 
-  // Auto-Detect Current GPS Position with Multi-Tier Fallback (High Accuracy -> Low Accuracy -> IP Geolocation)
+  // Auto-Detect Current GPS Position via Unified Location Service
   const handleAutoDetectLocation = async () => {
     setIsLocating(true);
     setLocateError('');
     setLocateNote('');
 
-    const applyPosition = async (detectedLat, detectedLng, note = '') => {
-      setCurrentCoords({ lat: detectedLat, lng: detectedLng });
-      const resolvedAddress = await reverseGeocode(detectedLat, detectedLng);
-      setCurrentAddress(resolvedAddress);
+    const res = await detectCurrentLocation();
+    setIsLocating(false);
 
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.flyTo([detectedLat, detectedLng], 15, { duration: 1.2 });
-      }
-      if (markerRef.current) {
-        markerRef.current.setLatLng([detectedLat, detectedLng]);
-        markerRef.current.openPopup();
-      }
-
-      triggerChange(detectedLat, detectedLng, resolvedAddress);
-      setIsLocating(false);
-      if (note) {
-        setLocateNote(note);
-      }
-    };
-
-    // Strategy 1: Browser GPS / Wi-Fi Geolocation
-    if (navigator.geolocation) {
-      const getBrowserPos = (highAccuracy, timeoutMs) =>
-        new Promise((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: highAccuracy,
-            timeout: timeoutMs,
-            maximumAge: 60000,
-          });
-        });
-
-      try {
-        const pos = await getBrowserPos(true, 5000).catch(() => getBrowserPos(false, 6000));
-        const detectedLat = Number(pos.coords.latitude.toFixed(6));
-        const detectedLng = Number(pos.coords.longitude.toFixed(6));
-        await applyPosition(detectedLat, detectedLng, 'Exact device GPS location detected.');
-        return;
-      } catch (geoErr) {
-        if (geoErr && geoErr.code === 1) { // PERMISSION_DENIED
-          setIsLocating(false);
-          setLocateError('Location permission was denied in your browser. Click the lock icon in your browser URL bar to allow location, or search city above.');
-          return;
-        }
-      }
+    if (!res.success) {
+      setLocateError(res.message || 'Could not detect location. Please type city or address manually.');
+      return;
     }
 
-    // Fallback if hardware GPS unavailable on device
-    setIsLocating(false);
-    setLocateError('Could not detect device GPS. Please type your city/mandi name in "Search any City or Mandi" above or click anywhere on the map to pin exact location.');
+    setCurrentCoords({ lat: res.lat, lng: res.lng });
+    setCurrentAddress(res.address);
+
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.flyTo([res.lat, res.lng], 15, { duration: 1.2 });
+    }
+    if (markerRef.current) {
+      markerRef.current.setLatLng([res.lat, res.lng]);
+      markerRef.current.openPopup();
+    }
+
+    triggerChange(res.lat, res.lng, res.address);
+    if (res.note) {
+      setLocateNote(res.note);
+    }
   };
 
   // Manual address input change
