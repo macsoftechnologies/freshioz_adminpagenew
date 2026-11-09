@@ -39,6 +39,7 @@ import { exportToExcel } from '../utils/excelExporter';
 import { printOrderTaxInvoice, printSocietyDispatchManifest } from '../utils/printInvoices';
 import { apiClient } from '../api/client';
 import { extractBlockAndFlat } from '../utils/addressParser';
+import { formatProduceQuantity } from '../utils/produceFormatter';
 
 export default function OrdersFulfillmentPage() {
   const { currentUser, currentRoleId } = useAdminRole();
@@ -554,43 +555,58 @@ export default function OrdersFulfillmentPage() {
   const [riderCancelModalOrder, setRiderCancelModalOrder] = useState(null);
   const [riderCancelReason, setRiderCancelReason] = useState('CUSTOMER_NOT_AVAILABLE');
   const [riderCancelNotes, setRiderCancelNotes] = useState('');
-  const [riderCancelPhoto, setRiderCancelPhoto] = useState(null);
+  const [riderCancelPhotos, setRiderCancelPhotos] = useState([]);
   const [isCompressingPhoto, setIsCompressingPhoto] = useState(false);
 
   const handlePhotoCapture = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
     setIsCompressingPhoto(true);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const maxDim = 800;
-        let width = img.width;
-        let height = img.height;
-        if (width > height) {
-          if (width > maxDim) {
-            height = Math.round((height * maxDim) / width);
-            width = maxDim;
+
+    const compressFile = (file) => new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const maxDim = 800;
+          let width = img.width;
+          let height = img.height;
+          if (width > height) {
+            if (width > maxDim) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            }
+          } else {
+            if (height > maxDim) {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
           }
-        } else {
-          if (height > maxDim) {
-            width = Math.round((width * maxDim) / height);
-            height = maxDim;
-          }
-        }
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
-        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
-        setRiderCancelPhoto(compressedBase64);
-        setIsCompressingPhoto(false);
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+          resolve(compressedBase64);
+        };
+        img.src = event.target.result;
       };
-      img.src = event.target.result;
-    };
-    reader.readAsDataURL(file);
+      reader.readAsDataURL(file);
+    });
+
+    Promise.all(files.map(compressFile))
+      .then((newPhotos) => {
+        setRiderCancelPhotos(prev => [...prev, ...newPhotos].slice(0, 5));
+        setIsCompressingPhoto(false);
+      })
+      .catch(() => {
+        setIsCompressingPhoto(false);
+      });
+  };
+
+  const handleRemovePhoto = (idx) => {
+    setRiderCancelPhotos(prev => prev.filter((_, i) => i !== idx));
   };
 
   const handleConfirmRiderCancel = async (e) => {
@@ -607,7 +623,11 @@ export default function OrdersFulfillmentPage() {
       OTHER: 'Other Exception'
     };
     const baseReason = `${reasonLabelMap[riderCancelReason] || riderCancelReason}${riderCancelNotes ? ` - ${riderCancelNotes}` : ''} (Reported by Rider ${currentUser?.name || 'Driver'})`;
-    const fullReason = riderCancelPhoto ? `${baseReason} [PROOF_PHOTO]${riderCancelPhoto}` : baseReason;
+    
+    let fullReason = baseReason;
+    if (riderCancelPhotos.length > 0) {
+      fullReason = `${baseReason} [PROOF_PHOTO]${riderCancelPhotos[0]} [PROOF_PHOTOS]${JSON.stringify(riderCancelPhotos)}`;
+    }
 
     try {
       await updateOrderStatusMutation.mutateAsync({
@@ -618,7 +638,7 @@ export default function OrdersFulfillmentPage() {
       });
       showToast(`Order #${targetOrder.id} marked Undelivered / Cancelled. Return produce bag to warehouse.`, 'info');
       setRiderCancelModalOrder(null);
-      setRiderCancelPhoto(null);
+      setRiderCancelPhotos([]);
       setRiderCancelNotes('');
     } catch (err) {
       showToast(err.message || 'Failed to cancel order.', 'error');
@@ -1865,8 +1885,7 @@ export default function OrdersFulfillmentPage() {
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', flex: 1, minWidth: '180px' }}>
                               {(order.items || []).map((it, iIdx) => {
-                                const q = it.qty || it.quantity || 1;
-                                const cleanU = String(it.unit || '').replace(/\b(?:pc|pcs|pieces?)\b/gi, '').trim();
+                                const produceFmt = formatProduceQuantity(it.qty || it.quantity || 1, it.unit);
                                 return (
                                   <span
                                     key={iIdx}
@@ -1880,7 +1899,7 @@ export default function OrdersFulfillmentPage() {
                                       fontWeight: 700
                                     }}
                                   >
-                                    {it.name || it.productName} · <strong>{cleanU ? `${q} ${cleanU}` : `×${q}`}</strong>
+                                    {it.name || it.productName} · <strong style={{ color: '#0F172A' }}>{produceFmt.badge}</strong>
                                   </span>
                                 );
                               })}
@@ -2770,16 +2789,12 @@ export default function OrdersFulfillmentPage() {
 
                   <div style={{ background: '#F8FAFC', borderRadius: '8px', padding: '6px 10px', border: '1px solid #E2E8F0' }}>
                     {(selectedOrder.items || []).map((it, idx) => {
-                      const q = it.qty || it.quantity || 1;
-                      const u = it.unit || 'Pack';
+                      const produceFmt = formatProduceQuantity(it.qty || it.quantity || 1, it.unit);
                       return (
                         <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: idx < selectedOrder.items.length - 1 ? '1px dashed #E2E8F0' : 'none', fontSize: '12.5px' }}>
                           <span style={{ fontWeight: 700, color: '#0F172A' }}>• {it.name || it.productName}</span>
                           <span style={{ fontWeight: 800, color: '#166534', background: '#DCFCE7', padding: '2px 8px', borderRadius: '4px', fontSize: '11.5px' }}>
-                            {(() => {
-                              const cleanU = String(u || '').replace(/\b(?:pc|pcs|pieces?)\b/gi, '').trim();
-                              return cleanU ? `${q} ${cleanU}` : `×${q}`;
-                            })()}
+                            {produceFmt.detailedLabel}
                           </span>
                         </div>
                       );
@@ -3360,29 +3375,52 @@ export default function OrdersFulfillmentPage() {
                       <Camera size={15} color="#DC2626" />
                       <span>Take Photo Proof (Door Locked / Rejected Produce)</span>
                     </span>
-                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>Audited by Hub Lead</span>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>
+                      {riderCancelPhotos.length}/5 Attached
+                    </span>
                   </label>
 
-                  {riderCancelPhoto ? (
-                    <div style={{ position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '1.5px solid #86EFAC', background: '#F0FDF4', padding: '8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <img
-                        src={riderCancelPhoto}
-                        alt="Cancellation Proof"
-                        style={{ width: '64px', height: '64px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #CBD5E1' }}
-                      />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: '12px', fontWeight: 800, color: '#166534' }}>✓ Photo Attached</div>
-                        <div style={{ fontSize: '11px', color: '#475569' }}>Will be audited during produce inward review</div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setRiderCancelPhoto(null)}
-                        style={{ padding: '4px 8px', background: '#FEE2E2', border: '1px solid #FCA5A5', color: '#991B1B', borderRadius: '6px', fontSize: '11.5px', fontWeight: 700, cursor: 'pointer' }}
-                      >
-                        Remove
-                      </button>
+                  {/* Multi-Photo Thumbnails List */}
+                  {riderCancelPhotos.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
+                      {riderCancelPhotos.map((photo, pIdx) => (
+                        <div key={pIdx} style={{ position: 'relative', width: '70px', height: '70px', borderRadius: '8px', overflow: 'hidden', border: '1.5px solid #86EFAC' }}>
+                          <img
+                            src={photo}
+                            alt={`Proof ${pIdx + 1}`}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePhoto(pIdx)}
+                            style={{
+                              position: 'absolute',
+                              top: '2px',
+                              right: '2px',
+                              background: 'rgba(220, 38, 38, 0.9)',
+                              color: '#FFF',
+                              border: 'none',
+                              borderRadius: '50%',
+                              width: '18px',
+                              height: '18px',
+                              fontSize: '10px',
+                              fontWeight: 900,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
+                            title="Remove Photo"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
                     </div>
-                  ) : (
+                  )}
+
+                  {/* Upload / Snap Button (allowed up to 5 photos) */}
+                  {riderCancelPhotos.length < 5 && (
                     <label style={{
                       display: 'flex',
                       flexDirection: 'column',
@@ -3398,15 +3436,18 @@ export default function OrdersFulfillmentPage() {
                     }}>
                       <Camera size={20} color="#64748B" />
                       <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#2563EB' }}>
-                        {isCompressingPhoto ? 'Processing Camera Photo...' : '📸 Snap Photo via Phone Camera / Upload'}
+                        {isCompressingPhoto 
+                          ? 'Processing Camera Photo...' 
+                          : riderCancelPhotos.length > 0 ? '＋ Add Another Photo Proof' : '📸 Snap Photo via Phone Camera / Upload'}
                       </span>
                       <span style={{ fontSize: '11px', color: '#64748B' }}>
-                        Photo of Flat Door #{extractBlockAndFlat(riderCancelModalOrder?.flatNo).flat || ''} or rejected produce
+                        Snap locked door, flat bell, or damaged crate (Multiple photos allowed)
                       </span>
                       <input
                         type="file"
                         accept="image/*"
                         capture="environment"
+                        multiple
                         onChange={handlePhotoCapture}
                         style={{ display: 'none' }}
                       />

@@ -31,6 +31,7 @@ import { useToast } from '../context/ToastContext';
 import { orders as orderResource, employees as employeeResource, warehouses as warehouseResource, societies as societyResource, procurement as procurementResource, useUpdateOrderStatus, useAdjustStock } from '../hooks/resources';
 import AdminPagination from '../components/common/AdminPagination';
 import { extractBlockAndFlat } from '../utils/addressParser';
+import { formatProduceQuantity } from '../utils/produceFormatter';
 
 // Helper to parse unit weight
 const parseUnitWeightInKg = (unitStr) => {
@@ -155,11 +156,31 @@ export default function WarehouseCratingPage() {
   const [isSubmittingAudit, setIsSubmittingAudit] = useState(false);
 
   const parseCancelDetails = (reasonStr) => {
-    if (!reasonStr) return { reason: 'Cancelled at Doorstep', photo: null };
+    if (!reasonStr) return { reason: 'Cancelled at Doorstep', photo: null, photos: [] };
+    
+    // Check for multi-photo tag [PROOF_PHOTOS]
+    if (reasonStr.includes(' [PROOF_PHOTOS]')) {
+      const parts = reasonStr.split(' [PROOF_PHOTOS]');
+      let photos = [];
+      try {
+        photos = JSON.parse(parts[1] || '[]');
+      } catch (e) {
+        photos = [];
+      }
+      const baseReason = (parts[0] || '').split(' [PROOF_PHOTO]')[0].trim();
+      return {
+        reason: baseReason || 'Cancelled at Doorstep',
+        photo: photos[0] || null,
+        photos: Array.isArray(photos) ? photos : []
+      };
+    }
+
+    // Single photo tag [PROOF_PHOTO] fallback
     const parts = reasonStr.split(' [PROOF_PHOTO]');
     return {
       reason: parts[0] || 'Cancelled at Doorstep',
-      photo: parts[1] || null
+      photo: parts[1] || null,
+      photos: parts[1] ? [parts[1]] : []
     };
   };
 
@@ -515,9 +536,10 @@ export default function WarehouseCratingPage() {
         const item = items[i];
         if (!item.productId) continue;
         const key = `${order.id}_${i}`;
+        const produceFmt = formatProduceQuantity(item.qty || 1, item.unit);
         const enteredGood = returnItemAdjustments[key]?.goodQty;
-        const goodQty = enteredGood !== undefined ? Number(enteredGood) : (item.qty || 1);
-        const wastageQty = Math.max(0, (item.qty || 1) - goodQty);
+        const goodQty = enteredGood !== undefined ? Number(enteredGood) : produceFmt.totalCount;
+        const wastageQty = Math.max(0, produceFmt.totalCount - goodQty);
         totalGoodKg += goodQty;
         totalWastageKg += wastageQty;
 
@@ -527,7 +549,7 @@ export default function WarehouseCratingPage() {
             productId: item.productId,
             qty: goodQty,
             action: 'ADD',
-            remarks: `Quality Restock from returned Order #${order.id} (${goodQty} kg good produce, ${wastageQty} kg wastage)`
+            remarks: `Quality Restock from returned Order #${order.id} (${goodQty} ${produceFmt.displayUnit} good produce, ${wastageQty} ${produceFmt.displayUnit} wastage)`
           });
         }
       }
@@ -543,7 +565,7 @@ export default function WarehouseCratingPage() {
       const updatedAudits = { ...returnAudits, [order.id]: auditRecord };
       setReturnAudits(updatedAudits);
       localStorage.setItem('freshioz_warehouse_return_audits', JSON.stringify(updatedAudits));
-      showToast(`✓ Quality Audit Completed for Order #${order.id}. Restocked ${totalGoodKg} kg produce to hub; ${totalWastageKg} kg written off as wastage.`, 'success');
+      showToast(`✓ Quality Audit Completed for Order #${order.id}. Restocked ${totalGoodKg} items/units to hub inventory; recorded ${totalWastageKg} items/units wastage.`, 'success');
     } catch (err) {
       showToast(err.message || 'Failed to complete quality audit.', 'error');
     } finally {
@@ -2006,7 +2028,7 @@ export default function WarehouseCratingPage() {
             </div>
           ) : (
             returnedOrders.map((order) => {
-              const { reason, photo } = parseCancelDetails(order.cancelledReason);
+              const { reason, photo, photos = [] } = parseCancelDetails(order.cancelledReason);
               const isAudited = Boolean(returnAudits[order.id]);
               const auditData = returnAudits[order.id];
               const items = Array.isArray(order.items) ? order.items : [];
@@ -2082,17 +2104,22 @@ export default function WarehouseCratingPage() {
                       )}
                     </div>
 
-                    {photo ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <img
-                          src={photo}
-                          alt="Cancellation Proof"
-                          onClick={() => setPreviewPhotoModal({ photo, title: `Order #${order.id} Doorstep Proof (${reason})` })}
-                          style={{ width: '56px', height: '56px', objectFit: 'cover', borderRadius: '8px', border: '1.5px solid #CBD5E1', cursor: 'pointer' }}
-                        />
+                    {photos.length > 0 ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          {photos.map((p, pIdx) => (
+                            <img
+                              key={pIdx}
+                              src={p}
+                              alt={`Proof ${pIdx + 1}`}
+                              onClick={() => setPreviewPhotoModal({ photos, activeIndex: pIdx, title: `Order #${order.id} Doorstep Proof (${pIdx + 1}/${photos.length})` })}
+                              style={{ width: '50px', height: '50px', objectFit: 'cover', borderRadius: '8px', border: '1.5px solid #CBD5E1', cursor: 'pointer' }}
+                            />
+                          ))}
+                        </div>
                         <button
                           type="button"
-                          onClick={() => setPreviewPhotoModal({ photo, title: `Order #${order.id} Doorstep Proof (${reason})` })}
+                          onClick={() => setPreviewPhotoModal({ photos, activeIndex: 0, title: `Order #${order.id} Doorstep Proof (1/${photos.length})` })}
                           style={{
                             background: '#EFF6FF',
                             border: '1px solid #BFDBFE',
@@ -2108,7 +2135,7 @@ export default function WarehouseCratingPage() {
                           }}
                         >
                           <Camera size={14} />
-                          <span>Enlarge Photo Proof</span>
+                          <span>View {photos.length > 1 ? `${photos.length} Photos` : 'Photo Proof'}</span>
                         </button>
                       </div>
                     ) : (
@@ -2123,68 +2150,115 @@ export default function WarehouseCratingPage() {
                     <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12.5px' }}>
                       <thead>
                         <tr style={{ background: '#F8FAFC', color: '#475569', textTransform: 'uppercase', fontSize: '11px', letterSpacing: '0.04em' }}>
-                          <th style={{ padding: '8px 12px', borderBottom: '1px solid #E2E8F0' }}>Produce Item</th>
-                          <th style={{ padding: '8px 12px', borderBottom: '1px solid #E2E8F0', textAlign: 'center' }}>Returned Qty</th>
-                          <th style={{ padding: '8px 12px', borderBottom: '1px solid #E2E8F0', textAlign: 'center' }}>Good Qty (Restock to Hub)</th>
-                          <th style={{ padding: '8px 12px', borderBottom: '1px solid #E2E8F0', textAlign: 'center' }}>Wastage / Spoilage Qty</th>
+                          <th style={{ padding: '10px 14px', borderBottom: '1px solid #E2E8F0' }}>Produce Item</th>
+                          <th style={{ padding: '10px 14px', borderBottom: '1px solid #E2E8F0', textAlign: 'center' }}>Returned Qty</th>
+                          <th style={{ padding: '10px 14px', borderBottom: '1px solid #E2E8F0', textAlign: 'center' }}>Good Qty (Restock to Hub)</th>
+                          <th style={{ padding: '10px 14px', borderBottom: '1px solid #E2E8F0', textAlign: 'center' }}>Wastage / Spoilage Qty</th>
                         </tr>
                       </thead>
                       <tbody>
                         {items.map((it, idx) => {
                           const key = `${order.id}_${idx}`;
+                          const produceFmt = formatProduceQuantity(it.qty || 1, it.unit);
+                          const totalAllowed = produceFmt.totalCount;
                           const enteredGood = returnItemAdjustments[key]?.goodQty;
-                          const goodQty = enteredGood !== undefined ? Number(enteredGood) : (it.qty || 1);
-                          const wastageQty = Math.max(0, (it.qty || 1) - goodQty);
+                          const goodQty = enteredGood !== undefined ? Number(enteredGood) : totalAllowed;
+                          const wastageQty = Math.max(0, totalAllowed - goodQty);
 
                           return (
                             <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                              <td style={{ padding: '8px 12px', fontWeight: 700, color: '#1E293B' }}>
+                              <td style={{ padding: '10px 14px', fontWeight: 700, color: '#1E293B' }}>
                                 {it.name || 'Fresh Produce'} <span style={{ color: '#64748B', fontWeight: 500 }}>({it.unit || '1 kg'})</span>
                               </td>
-                              <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, color: '#475569' }}>
-                                {it.qty || 1} {it.unit || 'kg'}
+                              <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 800, color: '#334155' }}>
+                                <span style={{ background: '#F1F5F9', border: '1px solid #CBD5E1', padding: '3px 9px', borderRadius: '6px', fontSize: '12px' }}>
+                                  {produceFmt.badge}
+                                </span>
                               </td>
-                              <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                              <td style={{ padding: '10px 14px', textAlign: 'center' }}>
                                 {isAudited ? (
-                                  <span style={{ fontWeight: 800, color: '#166534' }}>{goodQty} {it.unit || 'kg'}</span>
+                                  <span style={{ fontWeight: 800, color: '#166534', background: '#DCFCE7', padding: '4px 10px', borderRadius: '6px' }}>
+                                    {produceFmt.formatQty(goodQty)}
+                                  </span>
                                 ) : (
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    max={it.qty || 1}
-                                    step="0.1"
-                                    value={goodQty}
-                                    onChange={(e) => {
-                                      const val = parseFloat(e.target.value) || 0;
-                                      setReturnItemAdjustments(prev => ({
-                                        ...prev,
-                                        [key]: { goodQty: Math.min(it.qty || 1, Math.max(0, val)) }
-                                      }));
-                                    }}
-                                    style={{
-                                      width: '80px',
-                                      padding: '4px 8px',
-                                      border: '1.5px solid #86EFAC',
-                                      borderRadius: '6px',
-                                      textAlign: 'center',
-                                      fontWeight: 800,
-                                      color: '#166534',
-                                      background: '#F0FDF4'
-                                    }}
-                                  />
+                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      max={totalAllowed}
+                                      step={produceFmt.step}
+                                      value={goodQty}
+                                      onChange={(e) => {
+                                        const val = parseFloat(e.target.value);
+                                        const cleanVal = isNaN(val) ? 0 : Math.min(totalAllowed, Math.max(0, val));
+                                        setReturnItemAdjustments(prev => ({
+                                          ...prev,
+                                          [key]: { goodQty: cleanVal }
+                                        }));
+                                      }}
+                                      style={{
+                                        width: '75px',
+                                        padding: '5px 8px',
+                                        border: '1.5px solid #86EFAC',
+                                        borderRadius: '6px',
+                                        textAlign: 'center',
+                                        fontWeight: 800,
+                                        color: '#166534',
+                                        background: '#F0FDF4',
+                                        fontSize: '13px'
+                                      }}
+                                    />
+                                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 700 }}>
+                                      {produceFmt.displayUnit}
+                                    </span>
+                                  </div>
                                 )}
                               </td>
-                              <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                                <span style={{
-                                  padding: '2px 8px',
-                                  borderRadius: '6px',
-                                  fontSize: '11.5px',
-                                  fontWeight: 800,
-                                  background: wastageQty > 0 ? '#FEE2E2' : '#F1F5F9',
-                                  color: wastageQty > 0 ? '#DC2626' : '#64748B'
-                                }}>
-                                  {wastageQty.toFixed(1)} {it.unit || 'kg'}
-                                </span>
+                              <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                                {isAudited ? (
+                                  <span style={{
+                                    padding: '4px 10px',
+                                    borderRadius: '6px',
+                                    fontSize: '11.5px',
+                                    fontWeight: 800,
+                                    background: wastageQty > 0 ? '#FEE2E2' : '#F1F5F9',
+                                    color: wastageQty > 0 ? '#DC2626' : '#64748B'
+                                  }}>
+                                    {produceFmt.formatQty(wastageQty)}
+                                  </span>
+                                ) : (
+                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      max={totalAllowed}
+                                      step={produceFmt.step}
+                                      value={wastageQty}
+                                      onChange={(e) => {
+                                        const val = parseFloat(e.target.value);
+                                        const cleanWastage = isNaN(val) ? 0 : Math.min(totalAllowed, Math.max(0, val));
+                                        setReturnItemAdjustments(prev => ({
+                                          ...prev,
+                                          [key]: { goodQty: Math.max(0, totalAllowed - cleanWastage) }
+                                        }));
+                                      }}
+                                      style={{
+                                        width: '75px',
+                                        padding: '5px 8px',
+                                        border: wastageQty > 0 ? '1.5px solid #FCA5A5' : '1px solid #CBD5E1',
+                                        borderRadius: '6px',
+                                        textAlign: 'center',
+                                        fontWeight: 800,
+                                        color: wastageQty > 0 ? '#DC2626' : '#64748B',
+                                        background: wastageQty > 0 ? '#FEF2F2' : '#F8FAFC',
+                                        fontSize: '13px'
+                                      }}
+                                    />
+                                    <span style={{ fontSize: '11px', color: wastageQty > 0 ? '#DC2626' : '#64748B', fontWeight: 700 }}>
+                                      {produceFmt.displayUnit}
+                                    </span>
+                                  </div>
+                                )}
                               </td>
                             </tr>
                           );
@@ -2262,11 +2336,47 @@ export default function WarehouseCratingPage() {
               </button>
             </div>
             <div style={{ padding: '16px', textAlign: 'center', background: '#0F172A' }}>
-              <img
-                src={previewPhotoModal.photo}
-                alt="Enlarged Proof"
-                style={{ maxWidth: '100%', maxHeight: '70vh', borderRadius: '8px', objectFit: 'contain' }}
-              />
+              {(() => {
+                const photosList = previewPhotoModal.photos || (previewPhotoModal.photo ? [previewPhotoModal.photo] : []);
+                const currentIdx = previewPhotoModal.activeIndex || 0;
+                const activePhoto = photosList[currentIdx] || previewPhotoModal.photo;
+
+                return (
+                  <div>
+                    <img
+                      src={activePhoto}
+                      alt="Enlarged Proof"
+                      style={{ maxWidth: '100%', maxHeight: '60vh', borderRadius: '8px', objectFit: 'contain' }}
+                    />
+
+                    {photosList.length > 1 && (
+                      <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
+                        {photosList.map((p, pIdx) => (
+                          <img
+                            key={pIdx}
+                            src={p}
+                            alt={`Thumb ${pIdx + 1}`}
+                            onClick={() => setPreviewPhotoModal(prev => ({
+                              ...prev,
+                              activeIndex: pIdx,
+                              title: prev.title.replace(/\(\d+\/\d+\)/, `(${pIdx + 1}/${photosList.length})`)
+                            }))}
+                            style={{
+                              width: '48px',
+                              height: '48px',
+                              objectFit: 'cover',
+                              borderRadius: '6px',
+                              border: pIdx === currentIdx ? '2px solid #38BDF8' : '1px solid #475569',
+                              cursor: 'pointer',
+                              opacity: pIdx === currentIdx ? 1 : 0.6
+                            }}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
             <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'flex-end', background: '#F8FAFC', borderTop: '1px solid #E2E8F0' }}>
               <button
