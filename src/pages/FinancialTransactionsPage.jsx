@@ -829,33 +829,6 @@ export default function FinancialTransactionsPage() {
           </div>
         </div>
 
-        {/* 3. Community Payouts */}
-        <div 
-          onClick={() => handleSwitchTab('OUTFLOWS')}
-          style={{ 
-            background: '#FFFFFF', 
-            border: '1.5px solid #FDE68A', 
-            borderRadius: '12px', 
-            padding: '14px', 
-            boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
-            cursor: 'pointer',
-            transition: 'all 0.15s ease'
-          }}
-          title="Click to view Outflows & Withdrawals (#outflows)"
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-            <span style={{ fontSize: '11px', fontWeight: 800, color: '#92400E', textTransform: 'uppercase' }}>Society Payouts</span>
-            <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: '#FEF3C7', color: '#D97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Coins size={15} />
-            </div>
-          </div>
-          <div style={{ fontSize: '22px', fontWeight: 900, color: '#92400E' }}>
-            ₹{totalSocietyPayoutsSpent.toLocaleString()}
-          </div>
-          <div style={{ fontSize: '11px', color: '#B45309', marginTop: '4px' }}>
-            Community cashback withdrawals
-          </div>
-        </div>
 
         {/* 4. Net Operating Cashflow */}
         <div 
