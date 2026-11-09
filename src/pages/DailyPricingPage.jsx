@@ -243,9 +243,7 @@ export default function DailyPricingPage() {
       'Customer Retail Savings %',
       'Bulk Min Qty',
       'Bulk Discount %',
-      'Effective Bulk Rate / Unit (₹)',
-      'GST %',
-      'Tax Status'
+      'Effective Bulk Rate / Unit (₹)'
     ];
 
     const rows = products.map(p => {
@@ -264,13 +262,11 @@ export default function DailyPricingPage() {
         retailSavingsPct,
         stats ? `${stats.minQty} ${stats.unit}` : 'None',
         stats ? `${stats.discountPercent}%` : '0%',
-        stats ? `₹${stats.effectiveRate}/${stats.unit}` : '—',
-        `${p.gstPercent ?? 0}%`,
-        (p.gstPercent ?? 0) === 0 ? 'Exempt' : 'Taxable'
+        stats ? `₹${stats.effectiveRate}/${stats.unit}` : '—'
       ];
     });
 
-    exportToExcel('Freshioz_Daily_Pricing_GST_Master', headers, rows);
+    exportToExcel('Freshioz_Daily_Pricing_Master', headers, rows);
   };
 
   return (
@@ -288,10 +284,10 @@ export default function DailyPricingPage() {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <h1 style={{ fontSize: '18px', color: '#0F172A', fontWeight: 800, margin: 0 }}>
-            Daily Dynamic Pricing & GST Master
+            Daily Dynamic Pricing Master
           </h1>
           <span style={{ fontSize: '11px', background: '#ECFDF5', color: '#059669', fontWeight: 800, padding: '2px 8px', borderRadius: '4px' }}>
-            {products.length} Items Live
+            {products.length} Items Live • 0% GST Raw Produce
           </span>
         </div>
 
@@ -582,14 +578,14 @@ export default function DailyPricingPage() {
         <div className="admin-table-header">
           <div>
             <h3 style={{ fontSize: '15px', color: '#0F172A', fontWeight: 800, margin: 0 }}>
-              Daily Rate & Tax Master ({products.length} Items)
+              Daily Rate Sheet ({products.length} Items)
             </h3>
             <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>
-              Configure consumer retail pricing, wholesale bulk crate rates, and GST % side-by-side in each row.
+              Configure consumer retail pricing and wholesale bulk crate rates side-by-side in each row.
             </div>
           </div>
           <span style={{ fontSize: '12px', color: '#059669', fontWeight: 700, background: '#ECFDF5', padding: '4px 10px', borderRadius: '6px' }}>
-            0% Default GST for Raw Produce
+            0% Statutory GST Exempt on Fresh Produce
           </span>
         </div>
 
@@ -619,13 +615,12 @@ export default function DailyPricingPage() {
                     (Auto-Calculates % Discount)
                   </span>
                 </th>
-                <th style={{ minWidth: '120px' }}>GST % (Editable)</th>
               </tr>
             </thead>
             <tbody>
               {products.length === 0 ? (
                 <tr>
-                  <td colSpan="8">
+                  <td colSpan="7">
                     {isLoadingPricing || isLoading ? (
                       <div style={{ padding: '40px 20px', textAlign: 'center', color: '#64748B' }}>
                         <RefreshCw size={24} className="spin-icon" style={{ margin: '0 auto 10px', color: '#059669' }} />
@@ -870,58 +865,6 @@ export default function DailyPricingPage() {
                             — Standard Retail Only
                           </span>
                         )}
-                      </td>
-
-                      {/* EDITABLE GST % FIELD */}
-                      <td>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                          <input
-                            type="number"
-                            min="0"
-                            max="28"
-                            disabled={isPastDate}
-                            value={gst}
-                            onChange={(e) => handlePriceChange(prod.id, 'gstPercent', e.target.value)}
-                            style={{
-                              width: '58px',
-                              height: '34px',
-                              padding: '0 6px',
-                              borderRadius: '6px',
-                              border: '1.5px solid #CBD5E1',
-                              fontWeight: 800,
-                              color: gst === 0 ? '#059669' : '#0F172A',
-                              fontSize: '13px',
-                              textAlign: 'center',
-                              background: isPastDate ? '#F1F5F9' : '#FFF',
-                              cursor: isPastDate ? 'not-allowed' : 'text',
-                              outline: 'none'
-                            }}
-                          />
-                          <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748B' }}>%</span>
-                          {gst === 0 ? (
-                            <span style={{
-                              fontSize: '10.5px',
-                              background: '#ECFDF5',
-                              color: '#059669',
-                              padding: '2px 6px',
-                              borderRadius: '4px',
-                              fontWeight: 800
-                            }}>
-                              Exempt
-                            </span>
-                          ) : (
-                            <span style={{
-                              fontSize: '10.5px',
-                              background: '#FEF3C7',
-                              color: '#B45309',
-                              padding: '2px 6px',
-                              borderRadius: '4px',
-                              fontWeight: 800
-                            }}>
-                              Taxable
-                            </span>
-                          )}
-                        </div>
                       </td>
                     </tr>
                   );
