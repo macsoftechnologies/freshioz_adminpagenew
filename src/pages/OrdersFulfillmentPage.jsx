@@ -557,6 +557,7 @@ export default function OrdersFulfillmentPage() {
   const [riderCancelNotes, setRiderCancelNotes] = useState('');
   const [riderCancelPhotos, setRiderCancelPhotos] = useState([]);
   const [isCompressingPhoto, setIsCompressingPhoto] = useState(false);
+  const [isConfirmingRiderCancel, setIsConfirmingRiderCancel] = useState(false);
 
   const handlePhotoCapture = (e) => {
     const files = Array.from(e.target.files || []);
@@ -638,6 +639,7 @@ export default function OrdersFulfillmentPage() {
       });
       showToast(`Order #${targetOrder.id} marked Undelivered / Cancelled. Return produce bag to warehouse.`, 'info');
       setRiderCancelModalOrder(null);
+      setIsConfirmingRiderCancel(false);
       setRiderCancelPhotos([]);
       setRiderCancelNotes('');
     } catch (err) {
@@ -2029,6 +2031,7 @@ export default function OrdersFulfillmentPage() {
                                       setRiderCancelModalOrder(order);
                                       setRiderCancelReason('CUSTOMER_NOT_AVAILABLE');
                                       setRiderCancelNotes('');
+                                      setIsConfirmingRiderCancel(false);
                                     }}
                                     style={{
                                       display: 'inline-flex',
@@ -3480,46 +3483,113 @@ export default function OrdersFulfillmentPage() {
                   </div>
                 </div>
 
-                {/* Modal Buttons */}
-                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                  <button
-                    type="button"
-                    onClick={() => setRiderCancelModalOrder(null)}
-                    style={{
-                      padding: '9px 16px',
-                      borderRadius: '8px',
-                      border: '1px solid #CBD5E1',
-                      background: '#FFF',
-                      fontSize: '13px',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      color: '#475569'
-                    }}
-                  >
-                    Back / Keep Stop
-                  </button>
+                {/* Modal Buttons / Two-Step Confirmation */}
+                {isConfirmingRiderCancel ? (
+                  <div style={{
+                    background: '#FFF1F2',
+                    border: '1.5px solid #F43F5E',
+                    borderRadius: '10px',
+                    padding: '14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                    width: '100%',
+                    boxSizing: 'border-box'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#9F1239', fontWeight: 800, fontSize: '13.5px' }}>
+                      <AlertCircle size={18} color="#E11D48" />
+                      <span>Are you sure you want to cancel this delivery?</span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#4C0519', lineHeight: 1.5 }}>
+                      Order <strong>#{riderCancelModalOrder.id}</strong> will be marked <strong>Undelivered & Cancelled</strong>.<br />
+                      • Return produce crate/bag to the warehouse manager.<br />
+                      • Auto-refund will be initiated to the resident.
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '4px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setIsConfirmingRiderCancel(false)}
+                        style={{
+                          padding: '8px 14px',
+                          borderRadius: '8px',
+                          border: '1px solid #CBD5E1',
+                          background: '#FFF',
+                          fontSize: '12.5px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          color: '#475569'
+                        }}
+                      >
+                        ← Go Back
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={updateOrderStatusMutation.isPending}
+                        style={{
+                          padding: '8px 16px',
+                          borderRadius: '8px',
+                          border: 'none',
+                          background: '#DC2626',
+                          color: '#FFF',
+                          fontSize: '12.5px',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          boxShadow: '0 2px 4px rgba(220, 38, 38, 0.3)'
+                        }}
+                      >
+                        <XCircle size={15} />
+                        <span>{updateOrderStatusMutation.isPending ? 'Cancelling...' : 'Yes, Confirm Undelivered'}</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRiderCancelModalOrder(null);
+                        setIsConfirmingRiderCancel(false);
+                      }}
+                      style={{
+                        padding: '9px 16px',
+                        borderRadius: '8px',
+                        border: '1px solid #CBD5E1',
+                        background: '#FFF',
+                        fontSize: '13px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        color: '#475569'
+                      }}
+                    >
+                      Back / Keep Stop
+                    </button>
 
-                  <button
-                    type="submit"
-                    style={{
-                      padding: '9px 18px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      background: '#DC2626',
-                      color: '#FFF',
-                      fontSize: '13px',
-                      fontWeight: 800,
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      boxShadow: '0 2px 4px rgba(220, 38, 38, 0.25)'
-                    }}
-                  >
-                    <XCircle size={15} />
-                    <span>Confirm Undelivered & Cancel ➔</span>
-                  </button>
-                </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsConfirmingRiderCancel(true)}
+                      style={{
+                        padding: '9px 18px',
+                        borderRadius: '8px',
+                        border: 'none',
+                        background: '#DC2626',
+                        color: '#FFF',
+                        fontSize: '13px',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        boxShadow: '0 2px 4px rgba(220, 38, 38, 0.25)'
+                      }}
+                    >
+                      <XCircle size={15} />
+                      <span>Review & Mark Undelivered ➔</span>
+                    </button>
+                  </div>
+                )}
               </form>
             </div>
           </div>
