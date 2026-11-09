@@ -274,7 +274,12 @@ export default function WarehouseCratingPage() {
   };
 
   // Crating station is strictly for warehouse ops; visibleOrders filters by manager warehouse
-  const isRiderRole = currentUser?.role === 'DELIVERY_EXECUTIVE' && !currentUser?.roles?.includes('SUPER_ADMIN');
+  const isRiderRole = 
+    (currentRoleId === 'DELIVERY_EXECUTIVE' || 
+     currentUser?.role === 'DELIVERY_EXECUTIVE' || 
+     currentUser?.roles?.includes('DELIVERY_EXECUTIVE')) && 
+    !currentUser?.roles?.includes('SUPER_ADMIN') && 
+    currentRoleId !== 'SUPER_ADMIN';
 
   // Filter orders based on user's role and assigned warehouse / route / dispatch slot
   const isSuperDesk = currentRoleId === 'SUPER_ADMIN' && (currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.role === 'SUPER_ADMIN' || currentUser?.email === 'superadmin@gmail.com');
@@ -377,12 +382,25 @@ export default function WarehouseCratingPage() {
       }
 
       if (isRiderRole) {
-        const matchRider = 
-          order.deliveryPartnerId === currentUser.id ||
-          order.deliveryPartnerPhone === currentUser.phone ||
-          (order.deliveryPartnerName && order.deliveryPartnerName.toLowerCase() === currentUser.name?.toLowerCase()) ||
-          (currentUser.assignedLocationName && currentUser.assignedLocationName !== 'ALL' && currentUser.assignedLocationName !== 'Citywide' && order.societyName === currentUser.assignedLocationName);
-        if (!matchRider) return false;
+        // Strict Driver Isolation: Driver ONLY sees orders specifically assigned to them
+        const userPhoneDigits = (currentUser?.phone || '').replace(/\D/g, '').slice(-10);
+        const orderPhoneDigits = (order.deliveryPartnerPhone || '').replace(/\D/g, '').slice(-10);
+        const userNameLower = (currentUser?.name || '').trim().toLowerCase();
+        const orderDriverNameLower = (order.deliveryPartnerName || '').trim().toLowerCase();
+
+        const matchId = order.deliveryPartnerId && (
+          order.deliveryPartnerId === currentUser?.id || 
+          order.deliveryPartnerId === currentUser?.uuid ||
+          order.deliveryPartnerId === currentUser?.employeeId
+        );
+        const matchPhone = userPhoneDigits && orderPhoneDigits && userPhoneDigits === orderPhoneDigits;
+        const matchName = userNameLower && orderDriverNameLower && (
+          userNameLower === orderDriverNameLower || 
+          orderDriverNameLower.startsWith(userNameLower) || 
+          userNameLower.startsWith(orderDriverNameLower)
+        );
+
+        if (!matchId && !matchPhone && !matchName) return false;
       }
       return true;
     });

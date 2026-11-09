@@ -440,24 +440,10 @@ export default function OrdersFulfillmentPage() {
     // Match by Name (case-insensitive & whitespace trimmed)
     const orderName = (o.deliveryPartnerName || '').trim().toLowerCase();
     const userName = (currentUser?.name || '').trim().toLowerCase();
-    if (orderName && userName && (orderName === userName || orderName.includes(userName) || userName.includes(orderName))) return true;
+    if (orderName && userName && (orderName === userName || orderName.startsWith(userName) || userName.startsWith(orderName))) return true;
 
-    // Match by assigned location
-    if (currentUser?.assignedLocationName && currentUser.assignedLocationName !== 'ALL' && currentUser.assignedLocationName !== 'Citywide' && o.societyName === currentUser.assignedLocationName) return true;
-
-    // Warehouse Driver Fallback: If this driver is registered to a warehouse hub and an order is dispatched from that hub
-    if (currentUser?.assignedWarehouseId && currentUser.assignedWarehouseId !== 'ALL') {
-      const orderWhId = o.warehouseId || o.warehouse?.id;
-      const orderWhCode = o.warehouseCode || o.warehouse?.code;
-      const isMyWarehouse = 
-        (!orderWhId && !orderWhCode) ||
-        (orderWhId && (orderWhId === currentUser.assignedWarehouseId || orderWhId === assignedWhId || orderWhId === assignedWhCode)) ||
-        (orderWhCode && (orderWhCode === currentUser.assignedWarehouseId || orderWhCode === assignedWhCode || orderWhCode === assignedWhId));
-      if (isMyWarehouse && (!o.deliveryPartnerId || o.deliveryPartnerId === 'CUSTOM' || !o.deliveryPartnerPhone)) return true;
-    }
-
-    // Single Hub Fallback: If only 1 warehouse is configured in system, all out-for-delivery orders belong to this hub's fleet
-    if (warehouses.length <= 1) return true;
+    // Match by assigned location (only if not already assigned to another driver)
+    if (!o.deliveryPartnerId && !o.deliveryPartnerPhone && currentUser?.assignedLocationName && currentUser.assignedLocationName !== 'ALL' && currentUser.assignedLocationName !== 'Citywide' && o.societyName === currentUser.assignedLocationName) return true;
 
     return false;
   };
