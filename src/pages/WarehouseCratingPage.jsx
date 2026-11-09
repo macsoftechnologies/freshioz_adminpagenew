@@ -24,7 +24,8 @@ import {
   Filter,
   Check,
   RotateCcw,
-  Camera
+  Camera,
+  Edit2
 } from 'lucide-react';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
@@ -531,6 +532,7 @@ export default function WarehouseCratingPage() {
       const items = Array.isArray(order.items) ? order.items : [];
       let totalGoodKg = 0;
       let totalWastageKg = 0;
+      const auditedItemAdjustments = {};
 
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
@@ -542,6 +544,7 @@ export default function WarehouseCratingPage() {
         const wastageQty = Math.max(0, produceFmt.totalCount - goodQty);
         totalGoodKg += goodQty;
         totalWastageKg += wastageQty;
+        auditedItemAdjustments[key] = { goodQty, wastageQty };
 
         if (goodQty > 0) {
           await adjustStockMutation.mutateAsync({
@@ -559,7 +562,8 @@ export default function WarehouseCratingPage() {
         auditedBy: currentUser?.name || 'Warehouse Operations Lead',
         totalGoodKg,
         totalWastageKg,
-        itemsCount: items.length
+        itemsCount: items.length,
+        itemAdjustments: auditedItemAdjustments
       };
 
       const updatedAudits = { ...returnAudits, [order.id]: auditRecord };
@@ -1653,7 +1657,7 @@ export default function WarehouseCratingPage() {
                                     color: '#1E293B'
                                   }}
                                 >
-                                  {i.name} <strong>× {i.qty} {i.unit}</strong>
+                                  {i.name} <strong style={{ color: '#0F172A', marginLeft: '4px' }}>({i.qty} * {i.unit || '1 pc'})</strong>
                                 </span>
                               ))}
                             </div>
@@ -1852,7 +1856,7 @@ export default function WarehouseCratingPage() {
                             {o.flatNo} — {o.userName}
                           </div>
                           <div style={{ fontSize: '11px', color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {(o.items || []).map(it => `${it.name} (×${it.qty})`).join(', ')}
+                            {(o.items || []).map(it => `${it.name} (${it.qty} * ${it.unit || '1 pc'})`).join(', ')}
                           </div>
                         </div>
 
@@ -2064,12 +2068,50 @@ export default function WarehouseCratingPage() {
                       </span>
                     </div>
 
-                    <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       {isAudited ? (
-                        <span style={{ background: '#DCFCE7', color: '#166534', border: '1px solid #86EFAC', padding: '4px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                          <CheckCircle2 size={14} />
-                          <span>Audited & Restocked by {auditData.auditedBy}</span>
-                        </span>
+                        <>
+                          <span style={{ background: '#DCFCE7', color: '#166534', border: '1px solid #86EFAC', padding: '4px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                            <CheckCircle2 size={14} />
+                            <span>Audited & Restocked by {auditData.auditedBy}</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const currentAdjustments = {};
+                              items.forEach((it, idx) => {
+                                const k = `${order.id}_${idx}`;
+                                const saved = auditData?.itemAdjustments?.[k];
+                                const gQty = saved?.goodQty !== undefined ? saved.goodQty : (items.length === 1 && auditData?.totalGoodKg !== undefined ? auditData.totalGoodKg : formatProduceQuantity(it.qty || 1, it.unit).totalCount);
+                                currentAdjustments[k] = { goodQty: gQty };
+                              });
+                              setReturnItemAdjustments(prev => ({ ...prev, ...currentAdjustments }));
+                              setReturnAudits(prev => {
+                                const next = { ...prev };
+                                delete next[order.id];
+                                localStorage.setItem('freshioz_warehouse_return_audits', JSON.stringify(next));
+                                return next;
+                              });
+                            }}
+                            style={{
+                              background: '#FFFFFF',
+                              border: '1px solid #CBD5E1',
+                              color: '#334155',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              padding: '3px 8px',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                            title="Click to re-inspect or correct quantities"
+                          >
+                            <Edit2 size={11} />
+                            <span>Edit / Re-audit</span>
+                          </button>
+                        </>
                       ) : (
                         <span style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A', padding: '4px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: 800 }}>
                           ⏳ Pending Quality Inspection
@@ -2161,9 +2203,14 @@ export default function WarehouseCratingPage() {
                           const key = `${order.id}_${idx}`;
                           const produceFmt = formatProduceQuantity(it.qty || 1, it.unit);
                           const totalAllowed = produceFmt.totalCount;
-                          const enteredGood = returnItemAdjustments[key]?.goodQty;
+                          const savedItemAudit = auditData?.itemAdjustments?.[key];
+                          const enteredGood = isAudited
+                            ? (savedItemAudit?.goodQty !== undefined ? savedItemAudit.goodQty : (items.length === 1 && auditData?.totalGoodKg !== undefined ? auditData.totalGoodKg : totalAllowed))
+                            : returnItemAdjustments[key]?.goodQty;
                           const goodQty = enteredGood !== undefined ? Number(enteredGood) : totalAllowed;
-                          const wastageQty = Math.max(0, totalAllowed - goodQty);
+                          const wastageQty = isAudited
+                            ? (savedItemAudit?.wastageQty !== undefined ? Number(savedItemAudit.wastageQty) : (items.length === 1 && auditData?.totalWastageKg !== undefined ? Number(auditData.totalWastageKg) : Math.max(0, totalAllowed - goodQty)))
+                            : Math.max(0, totalAllowed - goodQty);
 
                           return (
                             <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>

@@ -492,45 +492,66 @@ export default function OrdersFulfillmentPage() {
   const [myDriverPayouts, setMyDriverPayouts] = useState([]);
   const [isLoadingPayouts, setIsLoadingPayouts] = useState(false);
 
-  useEffect(() => {
-    if (isDeliveryExecutive) {
-      let isMounted = true;
-      setIsLoadingPayouts(true);
-      apiClient('/payments/driver-payouts')
-        .then(res => {
-          if (isMounted && Array.isArray(res)) {
-            setMyDriverPayouts(res);
-          }
-        })
-        .catch(err => {
-          console.warn('Driver payouts fetch error, fallback to local cache:', err);
-          try {
-            const saved = localStorage.getItem('freshioz_driver_payout_logs');
-            if (saved) {
-              const allLogs = JSON.parse(saved);
-              const cleanMyPhone = (currentUser?.phone || '').replace(/\D/g, '').slice(-10);
-              const myNameLower = (currentUser?.name || '').trim().toLowerCase();
-              const filtered = allLogs.filter(l => 
-                (l.driverId && (l.driverId === currentUser?.id || l.driverId === currentUser?.uuid)) ||
-                (cleanMyPhone && (l.driverPhone || '').replace(/\D/g, '').slice(-10) === cleanMyPhone) ||
-                (myNameLower && (l.driverName || '').trim().toLowerCase() === myNameLower)
-              );
-              if (isMounted) setMyDriverPayouts(filtered);
-            }
-          } catch (e) {}
-        })
-        .finally(() => {
-          if (isMounted) setIsLoadingPayouts(false);
-        });
-
-      return () => { isMounted = false; };
+  const fetchMyDriverPayouts = React.useCallback(async () => {
+    if (!isDeliveryExecutive) return;
+    setIsLoadingPayouts(true);
+    try {
+      const res = await apiClient('/payments/driver-payouts');
+      if (Array.isArray(res)) {
+        setMyDriverPayouts(res);
+        try {
+          localStorage.setItem('freshioz_driver_payout_logs', JSON.stringify(res));
+        } catch (e) {}
+      }
+    } catch (err) {
+      console.warn('Driver payouts fetch error, fallback to local cache:', err);
+      try {
+        const saved = localStorage.getItem('freshioz_driver_payout_logs');
+        if (saved) {
+          const allLogs = JSON.parse(saved);
+          const cleanMyPhone = (currentUser?.phone || '').replace(/\D/g, '').slice(-10);
+          const myNameLower = (currentUser?.name || '').trim().toLowerCase();
+          const filtered = allLogs.filter(l => 
+            (l.driverId && (l.driverId === currentUser?.id || l.driverId === currentUser?.uuid)) ||
+            (cleanMyPhone && (l.driverPhone || '').replace(/\D/g, '').slice(-10) === cleanMyPhone) ||
+            (myNameLower && (l.driverName || '').trim().toLowerCase() === myNameLower)
+          );
+          setMyDriverPayouts(filtered);
+        }
+      } catch (e) {}
+    } finally {
+      setIsLoadingPayouts(false);
     }
   }, [isDeliveryExecutive, currentUser]);
+
+  // Refetch payouts on mount, whenever riderTab changes (e.g. clicking "5. My Payouts & Earnings"), and on active interval
+  useEffect(() => {
+    if (isDeliveryExecutive) {
+      fetchMyDriverPayouts();
+
+      // Auto-poll every 8 seconds when viewing the Payouts tab to catch manager disbursements in real-time
+      let intervalId = null;
+      if (riderTab === 'PAYOUTS') {
+        intervalId = setInterval(() => {
+          fetchMyDriverPayouts();
+        }, 8000);
+      }
+      return () => {
+        if (intervalId) clearInterval(intervalId);
+      };
+    }
+  }, [isDeliveryExecutive, riderTab, fetchMyDriverPayouts]);
 
   const paidDriverOrderIdsSet = useMemo(() => {
     const set = new Set();
     (myDriverPayouts || []).forEach(p => {
-      (p.coveredOrderIds || []).forEach(id => set.add(id));
+      let ids = p.coveredOrderIds;
+      if (typeof ids === 'string') {
+        try { ids = JSON.parse(ids); } catch (e) { ids = [ids]; }
+      }
+      if (Array.isArray(ids)) {
+        ids.forEach(id => set.add(id));
+      }
     });
     return set;
   }, [myDriverPayouts]);
@@ -827,7 +848,10 @@ export default function OrdersFulfillmentPage() {
             type="button"
             onClick={() => {
               queryClient.invalidateQueries({ queryKey: ['orders'] });
-              showToast('🔄 Synced live orders...', 'info');
+              if (isDeliveryExecutive) {
+                fetchMyDriverPayouts();
+              }
+              showToast('🔄 Synced live orders & payouts...', 'info');
             }}
             style={{
               display: 'inline-flex',

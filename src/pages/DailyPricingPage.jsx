@@ -51,6 +51,7 @@ export default function DailyPricingPage() {
   const [isConfirmPricingModalOpen, setIsConfirmPricingModalOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
+  const [globalGstRate, setGlobalGstRate] = useState(0);
   const isEditingRef = React.useRef(false);
 
   const isPastDate = selectedDate < todayStr;
@@ -60,6 +61,25 @@ export default function DailyPricingPage() {
   const rawProductsRef = React.useRef(rawProducts);
   rawProductsRef.current = rawProducts;
   const lastValidProductsRef = React.useRef([]);
+
+  // Sync global GST rate from loaded products if not actively editing
+  useEffect(() => {
+    if (products.length > 0 && !isEditingRef.current) {
+      const activeGst = products.find(p => p.gstPercent !== undefined && p.gstPercent !== null)?.gstPercent ?? 0;
+      setGlobalGstRate(Number(activeGst) || 0);
+    }
+  }, [products]);
+
+  const handleGlobalGstChange = (newVal) => {
+    if (isPastDate) return;
+    isEditingRef.current = true;
+    const rate = Math.min(28, Math.max(0, parseFloat(newVal) || 0));
+    setGlobalGstRate(rate);
+    setProducts(prev => prev.map(p => ({
+      ...p,
+      gstPercent: rate
+    })));
+  };
 
   const loadPricing = React.useCallback(async () => {
     setIsLoadingPricing(true);
@@ -210,7 +230,7 @@ export default function DailyPricingPage() {
       retailMarketPrice: Number(p.retailMarketPrice) || Number(p.retailPrice) || 0,
       bulkMinQty: Number(p.bulkMinQty) || 0,
       bulkDiscountPercent: Number(p.bulkDiscountPercent) || 0,
-      gstPercent: Number(p.gstPercent) || 0,
+      gstPercent: Number(globalGstRate) || 0,
     }));
 
     try {
@@ -286,8 +306,15 @@ export default function DailyPricingPage() {
           <h1 style={{ fontSize: '18px', color: '#0F172A', fontWeight: 800, margin: 0 }}>
             Daily Dynamic Pricing Master
           </h1>
-          <span style={{ fontSize: '11px', background: '#ECFDF5', color: '#059669', fontWeight: 800, padding: '2px 8px', borderRadius: '4px' }}>
-            {products.length} Items Live • 0% GST Raw Produce
+          <span style={{ 
+            fontSize: '11px', 
+            background: globalGstRate === 0 ? '#ECFDF5' : '#FEF3C7', 
+            color: globalGstRate === 0 ? '#059669' : '#B45309', 
+            fontWeight: 800, 
+            padding: '2px 8px', 
+            borderRadius: '4px' 
+          }}>
+            {products.length} Items Live • {globalGstRate}% GST {globalGstRate === 0 ? '(0% Exempt)' : 'Applied'}
           </span>
         </div>
 
@@ -575,7 +602,7 @@ export default function DailyPricingPage() {
 
       {/* Pricing Table: Both Retail and Wholesale Packaging configured in the SAME ROW */}
       <div className="admin-table-card">
-        <div className="admin-table-header">
+        <div className="admin-table-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
           <div>
             <h3 style={{ fontSize: '15px', color: '#0F172A', fontWeight: 800, margin: 0 }}>
               Daily Rate Sheet ({products.length} Items)
@@ -584,9 +611,89 @@ export default function DailyPricingPage() {
               Configure consumer retail pricing and wholesale bulk crate rates side-by-side in each row.
             </div>
           </div>
-          <span style={{ fontSize: '12px', color: '#059669', fontWeight: 700, background: '#ECFDF5', padding: '4px 10px', borderRadius: '6px' }}>
-            0% Statutory GST Exempt on Fresh Produce
-          </span>
+
+          {/* Interactive Customizable Consolidated GST Rate Control */}
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '10px',
+            background: '#FFFFFF',
+            border: '1.5px solid #CBD5E1',
+            borderRadius: '8px',
+            padding: '5px 12px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.06)'
+          }}>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: '11px', fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                Order GST % (Customizable)
+              </span>
+              <span style={{ fontSize: '10px', color: '#64748B' }}>
+                Consolidated tax on all produce
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <input
+                type="number"
+                min="0"
+                max="28"
+                step="0.5"
+                disabled={isPastDate}
+                value={globalGstRate}
+                onChange={(e) => handleGlobalGstChange(e.target.value)}
+                style={{
+                  width: '56px',
+                  height: '32px',
+                  borderRadius: '6px',
+                  border: '1.5px solid #059669',
+                  textAlign: 'center',
+                  fontWeight: 800,
+                  fontSize: '14px',
+                  color: globalGstRate === 0 ? '#059669' : '#0F172A',
+                  background: isPastDate ? '#F1F5F9' : '#FFFFFF',
+                  outline: 'none'
+                }}
+                title="Consolidated order GST % (e.g. 0 for exempt, 5 for 5% tax)"
+              />
+              <span style={{ fontSize: '13px', fontWeight: 800, color: '#334155' }}>%</span>
+            </div>
+
+            {/* Quick Presets */}
+            <div style={{ display: 'flex', gap: '4px' }}>
+              {[0, 5, 12, 18].map(rate => (
+                <button
+                  key={rate}
+                  type="button"
+                  disabled={isPastDate}
+                  onClick={() => handleGlobalGstChange(rate)}
+                  style={{
+                    padding: '3px 7px',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    borderRadius: '4px',
+                    border: '1px solid',
+                    borderColor: globalGstRate === rate ? '#059669' : '#E2E8F0',
+                    background: globalGstRate === rate ? '#ECFDF5' : '#F8FAFC',
+                    color: globalGstRate === rate ? '#059669' : '#64748B',
+                    cursor: isPastDate ? 'not-allowed' : 'pointer'
+                  }}
+                  title={`Set GST to ${rate}%`}
+                >
+                  {rate}%
+                </button>
+              ))}
+            </div>
+
+            {globalGstRate === 0 ? (
+              <span style={{ fontSize: '11px', background: '#ECFDF5', color: '#059669', padding: '3px 8px', borderRadius: '4px', fontWeight: 800 }}>
+                0% Exempt (Fresh Produce)
+              </span>
+            ) : (
+              <span style={{ fontSize: '11px', background: '#FEF3C7', color: '#B45309', padding: '3px 8px', borderRadius: '4px', fontWeight: 800 }}>
+                {globalGstRate}% Applied
+              </span>
+            )}
+          </div>
         </div>
 
         <div style={{ overflowX: 'auto', opacity: isLoadingPricing ? 0.7 : 1, transition: 'opacity 0.2s', pointerEvents: isLoadingPricing ? 'none' : 'auto' }}>
@@ -938,6 +1045,12 @@ export default function DailyPricingPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px dashed #CBD5E1' }}>
                 <span style={{ color: '#64748B', fontWeight: 600 }}>Total Cataloged Items:</span>
                 <span style={{ color: '#0F172A', fontWeight: 800 }}>{products.length} Products</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px dashed #CBD5E1' }}>
+                <span style={{ color: '#64748B', fontWeight: 600 }}>Consolidated Order GST:</span>
+                <span style={{ color: globalGstRate === 0 ? '#059669' : '#B45309', fontWeight: 800 }}>
+                  {globalGstRate}% {globalGstRate === 0 ? '(0% Statutory Exempt)' : 'Applied on Produce Sum'}
+                </span>
               </div>
 
               <div style={{ maxHeight: '180px', overflowY: 'auto', marginBottom: '8px', paddingRight: '4px' }}>

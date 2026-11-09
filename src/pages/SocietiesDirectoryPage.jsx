@@ -786,7 +786,7 @@ export default function SocietiesDirectoryPage() {
                             </span>
                           </div>
                           <div style={{ fontSize: '11.5px', color: '#475569', marginTop: '2px' }}>
-                            {o.items?.map(i => `${i.name} × ${i.qty} ${i.unit || ''}`).join(', ')}
+                            {o.items?.map(i => `${i.name} (${i.qty} * ${i.unit || '1 pc'})`).join(', ')}
                           </div>
                           <div style={{ fontSize: '10.5px', color: '#64748B', marginTop: '2px' }}>
                             📅 {o.deliveryDate} · {o.deliverySlot}
