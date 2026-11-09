@@ -27,7 +27,10 @@ import {
   Printer,
   QrCode,
   XCircle,
-  Camera
+  Camera,
+  Wallet,
+  Receipt,
+  ShieldCheck
 } from 'lucide-react';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
@@ -71,6 +74,7 @@ export default function OrdersFulfillmentPage() {
     if (hash === '#delivered') return 'DELIVERED';
     if (hash === '#cancelled' || hash === '#undelivered' || hash === '#returns') return 'CANCELLED';
     if (hash === '#all') return 'ALL';
+    if (hash === '#payouts' || hash === '#earnings') return 'PAYOUTS';
     return 'PENDING';
   };
 
@@ -80,7 +84,7 @@ export default function OrdersFulfillmentPage() {
   const [blockFilter, setBlockFilter] = useState('ALL');
   const [warehouseFilter, setWarehouseFilter] = useState('ALL');
   const [slotFilter, setSlotFilter] = useState('ALL');
-  const [riderTab, setRiderTab] = useState(() => getInitialRiderTab(location.hash)); // 'PENDING' | 'DELIVERED' | 'CANCELLED' | 'ALL'
+  const [riderTab, setRiderTab] = useState(() => getInitialRiderTab(location.hash)); // 'PENDING' | 'DELIVERED' | 'CANCELLED' | 'ALL' | 'PAYOUTS'
   const [dateFilter, setDateFilter] = useState('ALL'); // 'ALL' | 'TODAY' | 'YESTERDAY' | 'WEEK' | 'CUSTOM'
 
   // Sync with React Router location.hash & browser hashchange
@@ -113,7 +117,8 @@ export default function OrdersFulfillmentPage() {
       PENDING: '#pending',
       DELIVERED: '#delivered',
       CANCELLED: '#cancelled',
-      ALL: '#all'
+      ALL: '#all',
+      PAYOUTS: '#payouts'
     };
     const targetHash = hashMap[newTab] || '#pending';
     if (window.location.hash !== targetHash) {
@@ -482,6 +487,69 @@ export default function OrdersFulfillmentPage() {
     )
     .reduce((sum, o) => sum + (o.codCollectedAmount || o.totalAmount || 0), 0);
 
+  // Driver Payouts & Non-editable Ledger History State
+  const [myDriverPayouts, setMyDriverPayouts] = useState([]);
+  const [isLoadingPayouts, setIsLoadingPayouts] = useState(false);
+
+  useEffect(() => {
+    if (isDeliveryExecutive) {
+      let isMounted = true;
+      setIsLoadingPayouts(true);
+      apiClient('/payments/driver-payouts')
+        .then(res => {
+          if (isMounted && Array.isArray(res)) {
+            setMyDriverPayouts(res);
+          }
+        })
+        .catch(err => {
+          console.warn('Driver payouts fetch error, fallback to local cache:', err);
+          try {
+            const saved = localStorage.getItem('freshioz_driver_payout_logs');
+            if (saved) {
+              const allLogs = JSON.parse(saved);
+              const cleanMyPhone = (currentUser?.phone || '').replace(/\D/g, '').slice(-10);
+              const myNameLower = (currentUser?.name || '').trim().toLowerCase();
+              const filtered = allLogs.filter(l => 
+                (l.driverId && (l.driverId === currentUser?.id || l.driverId === currentUser?.uuid)) ||
+                (cleanMyPhone && (l.driverPhone || '').replace(/\D/g, '').slice(-10) === cleanMyPhone) ||
+                (myNameLower && (l.driverName || '').trim().toLowerCase() === myNameLower)
+              );
+              if (isMounted) setMyDriverPayouts(filtered);
+            }
+          } catch (e) {}
+        })
+        .finally(() => {
+          if (isMounted) setIsLoadingPayouts(false);
+        });
+
+      return () => { isMounted = false; };
+    }
+  }, [isDeliveryExecutive, currentUser]);
+
+  const paidDriverOrderIdsSet = useMemo(() => {
+    const set = new Set();
+    (myDriverPayouts || []).forEach(p => {
+      (p.coveredOrderIds || []).forEach(id => set.add(id));
+    });
+    return set;
+  }, [myDriverPayouts]);
+
+  const riderDeliveredOrders = useMemo(() => {
+    return riderBaseOrders.filter(o => o.status === 'DELIVERED');
+  }, [riderBaseOrders]);
+
+  const riderUnpaidOrders = useMemo(() => {
+    return riderDeliveredOrders.filter(o => !paidDriverOrderIdsSet.has(o.id));
+  }, [riderDeliveredOrders, paidDriverOrderIdsSet]);
+
+  const totalSettledEarnings = useMemo(() => {
+    return (myDriverPayouts || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  }, [myDriverPayouts]);
+
+  const totalSettledRidesCount = useMemo(() => {
+    return (myDriverPayouts || []).reduce((sum, p) => sum + (Number(p.completedStopsCount) || (p.coveredOrderIds?.length || 0)), 0);
+  }, [myDriverPayouts]);
+
   // Rider Cancellation / Exception Modal State
   const [riderCancelModalOrder, setRiderCancelModalOrder] = useState(null);
   const [riderCancelReason, setRiderCancelReason] = useState('CUSTOMER_NOT_AVAILABLE');
@@ -715,6 +783,7 @@ export default function OrdersFulfillmentPage() {
               ? (riderTab === 'PENDING' ? `1. To Deliver (${countRiderPending})` :
                  riderTab === 'DELIVERED' ? `2. Delivered (${countRiderDelivered})` :
                  riderTab === 'CANCELLED' ? `3. Undelivered (${countRiderCancelled})` :
+                 riderTab === 'PAYOUTS' ? `5. My Payouts (${myDriverPayouts.length})` :
                  `4. All Route Stops (${riderBaseOrders.length})`)
               : 'Order Fulfillment Pipeline'}
           </h1>
@@ -839,6 +908,45 @@ export default function OrdersFulfillmentPage() {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Row 1.5: Rider Desk Tab Switcher */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', overflowX: 'auto', paddingBottom: '2px' }}>
+            {[
+              { id: 'PENDING', label: `1. To Deliver (${countRiderPending})`, icon: Truck },
+              { id: 'DELIVERED', label: `2. Delivered (${countRiderDelivered})`, icon: CheckCircle2 },
+              { id: 'CANCELLED', label: `3. Returns (${countRiderCancelled})`, icon: XCircle },
+              { id: 'ALL', label: `4. All Stops (${riderBaseOrders.length})`, icon: Layers },
+              { id: 'PAYOUTS', label: `5. My Payouts (${myDriverPayouts.length})`, icon: Wallet }
+            ].map(tab => {
+              const active = riderTab === tab.id;
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => handleRiderTabChange(tab.id)}
+                  style={{
+                    padding: '4px 9px',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    border: active ? '1.5px solid #059669' : '1px solid #CBD5E1',
+                    background: active ? '#059669' : '#FFFFFF',
+                    color: active ? '#FFFFFF' : '#475569',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <Icon size={12} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
           </div>
 
           {/* Row 2: Compact Warehouse Time-Batch Pills */}
@@ -1266,6 +1374,320 @@ export default function OrdersFulfillmentPage() {
 
       {/* ================= PRIMARY CONTENT AREA ================= */}
       {isDeliveryExecutive ? (
+        riderTab === 'PAYOUTS' ? (
+          /* ================= DRIVER NON-EDITABLE TRANSACTION & EARNINGS VIEW ================= */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {/* Header Card */}
+            <div style={{
+              background: 'linear-gradient(135deg, #064E3B 0%, #065F46 100%)',
+              borderRadius: '14px',
+              padding: '16px 18px',
+              color: '#FFFFFF',
+              boxShadow: '0 4px 12px rgba(6, 78, 59, 0.15)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '10px',
+                    background: 'rgba(255, 255, 255, 0.15)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '1px solid rgba(255, 255, 255, 0.2)'
+                  }}>
+                    <Wallet size={20} color="#6EE7B7" />
+                  </div>
+                  <div>
+                    <h2 style={{ fontSize: '17px', fontWeight: 900, margin: 0, color: '#FFFFFF' }}>
+                      My Earnings & Payout Ledger
+                    </h2>
+                    <span style={{ fontSize: '11.5px', color: '#A7F3D0' }}>
+                      Delivery Executive: {currentUser?.name || 'Driver'} • {currentUser?.phone || ''}
+                    </span>
+                  </div>
+                </div>
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  background: 'rgba(255, 255, 255, 0.15)',
+                  border: '1px solid rgba(255, 255, 255, 0.25)',
+                  borderRadius: '20px',
+                  padding: '4px 10px',
+                  fontSize: '11px',
+                  fontWeight: 800,
+                  color: '#FFFFFF'
+                }}>
+                  <ShieldCheck size={14} color="#6EE7B7" />
+                  <span>Verified Non-Editable Record</span>
+                </span>
+              </div>
+            </div>
+
+            {/* KPI Cards Grid */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+              gap: '10px'
+            }}>
+              {/* Total Settled Earnings */}
+              <div style={{
+                background: '#FFFFFF',
+                borderRadius: '12px',
+                border: '1.5px solid #86EFAC',
+                padding: '12px 14px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+              }}>
+                <div style={{ fontSize: '10.5px', fontWeight: 800, color: '#166534', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                  Total Settled Earnings
+                </div>
+                <div style={{ fontSize: '22px', fontWeight: 900, color: '#065F46', marginTop: '2px' }}>
+                  ₹{totalSettledEarnings.toLocaleString()}
+                </div>
+                <div style={{ fontSize: '11px', color: '#059669', fontWeight: 700, marginTop: '2px' }}>
+                  ✓ Disbursed by Hub Manager
+                </div>
+              </div>
+
+              {/* Total Settled Rides */}
+              <div style={{
+                background: '#FFFFFF',
+                borderRadius: '12px',
+                border: '1.5px solid #E2E8F0',
+                padding: '12px 14px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+              }}>
+                <div style={{ fontSize: '10.5px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                  Settled Rides
+                </div>
+                <div style={{ fontSize: '22px', fontWeight: 900, color: '#0F172A', marginTop: '2px' }}>
+                  {totalSettledRidesCount} Rides
+                </div>
+                <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, marginTop: '2px' }}>
+                  Completed stops paid
+                </div>
+              </div>
+
+              {/* Unsettled Completed Deliveries */}
+              <div style={{
+                background: '#FFFFFF',
+                borderRadius: '12px',
+                border: riderUnpaidOrders.length > 0 ? '1.5px solid #FCD34D' : '1.5px solid #E2E8F0',
+                padding: '12px 14px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+              }}>
+                <div style={{ fontSize: '10.5px', fontWeight: 800, color: '#B45309', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                  Pending Settlement
+                </div>
+                <div style={{ fontSize: '22px', fontWeight: 900, color: riderUnpaidOrders.length > 0 ? '#D97706' : '#64748B', marginTop: '2px' }}>
+                  {riderUnpaidOrders.length} Rides
+                </div>
+                <div style={{ fontSize: '11px', color: '#92400E', fontWeight: 700, marginTop: '2px' }}>
+                  Delivered, awaiting payout
+                </div>
+              </div>
+
+              {/* COD Cash in Hand */}
+              <div style={{
+                background: '#FFFFFF',
+                borderRadius: '12px',
+                border: riderCashCollectedInHand > 0 ? '1.5px solid #FCA5A5' : '1.5px solid #E2E8F0',
+                padding: '12px 14px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+              }}>
+                <div style={{ fontSize: '10.5px', fontWeight: 800, color: '#991B1B', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                  Cash in Hand
+                </div>
+                <div style={{ fontSize: '22px', fontWeight: 900, color: riderCashCollectedInHand > 0 ? '#DC2626' : '#166534', marginTop: '2px' }}>
+                  ₹{riderCashCollectedInHand.toLocaleString()}
+                </div>
+                <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, marginTop: '2px' }}>
+                  To deposit at hub cashier
+                </div>
+              </div>
+            </div>
+
+            {/* Section 1: Official Disbursed Payout Transactions (Immutable Receipts) */}
+            <div style={{
+              background: '#FFFFFF',
+              borderRadius: '12px',
+              border: '1.5px solid #E2E8F0',
+              padding: '16px',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.04)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Receipt size={17} color="#059669" />
+                  <h3 style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                    Official Payout Settlement Receipts
+                  </h3>
+                </div>
+                <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#059669', background: '#ECFDF5', border: '1px solid #A7F3D0', padding: '2px 8px', borderRadius: '6px' }}>
+                  {myDriverPayouts.length} Settled Records
+                </span>
+              </div>
+
+              {isLoadingPayouts ? (
+                <div style={{ textAlign: 'center', padding: '24px 12px', color: '#64748B' }}>
+                  <RefreshCw size={20} style={{ animation: 'spin 1s linear infinite', margin: '0 auto 8px' }} />
+                  <div>Loading your transaction history...</div>
+                </div>
+              ) : myDriverPayouts.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '28px 14px', background: '#F8FAFC', borderRadius: '10px', border: '1px dashed #CBD5E1' }}>
+                  <Clock size={28} color="#94A3B8" style={{ margin: '0 auto 8px' }} />
+                  <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#334155' }}>No Payouts Settled Yet</div>
+                  <div style={{ fontSize: '12px', color: '#64748B', maxWidth: '360px', margin: '4px auto 0' }}>
+                    Once your Hub Manager settles your completed deliveries at the dispatch desk, your official payment receipts will appear here automatically.
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {myDriverPayouts.map((p, idx) => {
+                    const dt = p.createdAt || p.date || new Date().toISOString();
+                    const formattedDate = new Date(dt).toLocaleString('en-IN', {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      hour12: true
+                    });
+                    const stops = Number(p.completedStopsCount) || (p.coveredOrderIds?.length || 0);
+
+                    return (
+                      <div
+                        key={p.id || idx}
+                        style={{
+                          background: '#F8FAFC',
+                          borderRadius: '10px',
+                          border: '1.5px solid #E2E8F0',
+                          padding: '12px 14px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '8px'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '6px' }}>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '13px', fontWeight: 900, color: '#0F172A' }}>
+                                #{p.id || `DRV-PAY-${idx + 1}`}
+                              </span>
+                              <span style={{
+                                fontSize: '10.5px',
+                                fontWeight: 800,
+                                background: p.paymentMode === 'UPI' ? '#EFF6FF' : '#ECFDF5',
+                                color: p.paymentMode === 'UPI' ? '#1D4ED8' : '#047857',
+                                border: `1px solid ${p.paymentMode === 'UPI' ? '#BFDBFE' : '#A7F3D0'}`,
+                                padding: '1px 6px',
+                                borderRadius: '4px'
+                              }}>
+                                {p.paymentMode || 'CASH'}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                              <Calendar size={12} />
+                              <span>{formattedDate}</span>
+                            </div>
+                          </div>
+
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: '17px', fontWeight: 900, color: '#059669' }}>
+                              ₹{Number(p.amount || 0).toLocaleString()}
+                            </div>
+                            <div style={{ fontSize: '11px', fontWeight: 800, color: '#047857' }}>
+                              ✓ {stops} {stops === 1 ? 'Ride' : 'Rides'} Settled
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{
+                          borderTop: '1px dashed #CBD5E1',
+                          paddingTop: '8px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          flexWrap: 'wrap',
+                          gap: '6px',
+                          fontSize: '11px'
+                        }}>
+                          <span style={{ color: '#64748B' }}>
+                            Settled by: <strong style={{ color: '#0F172A' }}>{p.paidBy || 'Hub Manager'}</strong> ({p.warehouseName || 'Hub'})
+                          </span>
+                          {p.coveredOrderIds && p.coveredOrderIds.length > 0 && (
+                            <span style={{ color: '#64748B', fontSize: '10.5px' }}>
+                              Order IDs: <strong style={{ color: '#334155' }}>{p.coveredOrderIds.slice(0, 3).join(', ')}{p.coveredOrderIds.length > 3 ? ` +${p.coveredOrderIds.length - 3}` : ''}</strong>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Section 2: Completed Rides Awaiting Next Payout Batch */}
+            <div style={{
+              background: '#FFFFFF',
+              borderRadius: '12px',
+              border: '1.5px solid #E2E8F0',
+              padding: '16px',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.04)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Truck size={16} color="#D97706" />
+                  <h3 style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                    Completed Deliveries Awaiting Settlement
+                  </h3>
+                </div>
+                <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#B45309', background: '#FEF3C7', border: '1px solid #FDE68A', padding: '2px 8px', borderRadius: '6px' }}>
+                  {riderUnpaidOrders.length} Pending Deliveries
+                </span>
+              </div>
+
+              {riderUnpaidOrders.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '20px 12px', background: '#F8FAFC', borderRadius: '8px', color: '#64748B', fontSize: '12px' }}>
+                  ✓ All your delivered rides have been settled by the hub manager!
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {riderUnpaidOrders.map(o => (
+                    <div
+                      key={o.id}
+                      style={{
+                        background: '#FFFBEB',
+                        borderRadius: '8px',
+                        border: '1px solid #FDE68A',
+                        padding: '10px 12px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: '6px'
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A' }}>
+                          #{o.id} • {o.societyName || 'Society'} {o.flatNo || o.flatNumber ? `(${o.flatNo || o.flatNumber})` : ''}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#92400E' }}>
+                          Delivered to {o.userName || o.customerName || 'Resident'} • Payment: {o.paymentMethod || 'Prepaid'}
+                        </div>
+                      </div>
+                      <span style={{ fontSize: '10.5px', fontWeight: 800, background: '#FEF3C7', color: '#B45309', padding: '2px 8px', borderRadius: '4px' }}>
+                        ⏳ Queued for Next Payout
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
         /* RIDER DELIVERY MANIFEST CARDS VIEW (NO TABLE, NO REVERSAL DROPDOWNS) */
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {isLoadingOrders ? (
@@ -1644,6 +2066,7 @@ export default function OrdersFulfillmentPage() {
             </div>
           )}
         </div>
+        )
       ) : (
         /* ================= PRIMARY ENTERPRISE ORDERS DATA TABLE (ADMIN & WAREHOUSE) ================= */
         <div className="admin-table-card">

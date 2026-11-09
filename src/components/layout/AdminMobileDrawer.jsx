@@ -29,7 +29,8 @@ import {
   TrendingUp,
   Settings,
   RotateCcw,
-  Boxes
+  Boxes,
+  Wallet
 } from 'lucide-react';
 import FreshiozLogo from '../common/FreshiozLogo';
 import { useAdminRole, ROLES } from '../../context/AdminRoleContext';
@@ -705,6 +706,14 @@ export function AdminMobileDrawer() {
               >
                 <ClipboardList size={17} />
                 <span style={{ flex: 1 }}>4. All Route Stops</span>
+              </NavLink>
+              <NavLink 
+                to="/orders-fulfillment#payouts" 
+                onClick={handleClose} 
+                className={() => `sidebar-nav-item ${location.pathname === '/orders-fulfillment' && (location.hash === '#payouts' || location.hash === '#earnings') ? 'active' : ''}`}
+              >
+                <Wallet size={17} />
+                <span style={{ flex: 1 }}>5. My Payouts & Earnings</span>
               </NavLink>
             </>
           )}

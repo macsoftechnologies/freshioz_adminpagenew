@@ -14,7 +14,8 @@ import {
   Menu,
   PackageCheck,
   Boxes,
-  RotateCcw
+  RotateCcw,
+  Wallet
 } from 'lucide-react';
 import { useAdminRole } from '../../context/AdminRoleContext';
 
@@ -243,6 +244,13 @@ export default function AdminMobileDock() {
           >
             <RotateCcw size={18} />
             <span>3. Returns</span>
+          </NavLink>
+          <NavLink 
+            to="/orders-fulfillment#payouts" 
+            className={() => `admin-dock-item ${location.pathname === '/orders-fulfillment' && (location.hash === '#payouts' || location.hash === '#earnings') ? 'active' : ''}`}
+          >
+            <Wallet size={18} />
+            <span>4. Payouts</span>
           </NavLink>
           <button
             type="button"

@@ -27,6 +27,7 @@ import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
 import { warehouses as warehouseResource, orders as orderResource, procurement as procurementResource, societies as societyResource, employees as employeeResource, usePayouts, useUpdateOrderStatus } from '../hooks/resources';
 import { exportToExcel } from '../utils/excelExporter';
+import { apiClient } from '../api/client';
 
 const HASH_TAB_MAP = {
   '#all': 'ALL',
@@ -127,6 +128,26 @@ export default function FinancialTransactionsPage() {
   const [selectedPayoutDriverKey, setSelectedPayoutDriverKey] = useState('');
   const [driverPayoutAmount, setDriverPayoutAmount] = useState('');
   const [driverPayoutMode, setDriverPayoutMode] = useState('CASH');
+  const [confirmDriverPayoutModal, setConfirmDriverPayoutModal] = useState(null);
+  const [isSubmittingDriverPayout, setIsSubmittingDriverPayout] = useState(false);
+
+  // Load server driver payouts and sync
+  useEffect(() => {
+    let isMounted = true;
+    apiClient('/payments/driver-payouts')
+      .then(res => {
+        if (isMounted && Array.isArray(res) && res.length > 0) {
+          setDriverPayoutLogs(res);
+          try {
+            localStorage.setItem('freshioz_driver_payout_logs', JSON.stringify(res));
+          } catch (e) {}
+        }
+      })
+      .catch(err => {
+        console.warn('Fallback to local driver payout logs:', err);
+      });
+    return () => { isMounted = false; };
+  }, []);
 
   // Sync state with URL hash
   useEffect(() => {
@@ -523,26 +544,65 @@ export default function FinancialTransactionsPage() {
       return;
     }
     const coveredIds = activeSelectedDriver.unpaidOrders.map(o => o.id);
-    const newLog = {
-      id: `DRV-PAY-${Date.now().toString().slice(-6)}`,
-      driverId: activeSelectedDriver.id,
-      driverName: activeSelectedDriver.name,
-      warehouseId: resolvedWh?.id || currentUser?.assignedWarehouseId || 'ALL',
-      warehouseName: resolvedWh?.name || 'Central Warehouse Hub',
+    // Open clear confirmation modal with ride count, amount, and driver details
+    setConfirmDriverPayoutModal({
+      driver: activeSelectedDriver,
       amount: amt,
       paymentMode: driverPayoutMode,
-      completedStopsCount: coveredIds.length,
       coveredOrderIds: coveredIds,
-      paidBy: currentUser?.name || 'Hub Manager',
-      date: new Date().toISOString()
-    };
-    const updated = [newLog, ...(driverPayoutLogs || [])];
-    setDriverPayoutLogs(updated);
+      unpaidCount: activeSelectedDriver.unpaidOrders.length,
+      orders: activeSelectedDriver.unpaidOrders
+    });
+  };
+
+  const handleConfirmExecuteDriverPayout = async () => {
+    if (!confirmDriverPayoutModal) return;
+    const { driver, amount, paymentMode, coveredOrderIds, unpaidCount } = confirmDriverPayoutModal;
+    setIsSubmittingDriverPayout(true);
     try {
-      localStorage.setItem('freshioz_driver_payout_logs', JSON.stringify(updated));
-    } catch (err) {}
-    setDriverPayoutAmount('');
-    showToast(`✓ Paid ₹${amt.toLocaleString()} to ${activeSelectedDriver.name} (${coveredIds.length} completed deliveries settled)!`, 'success');
+      const payload = {
+        driverId: driver.id,
+        driverName: driver.name,
+        driverPhone: driver.phone || '',
+        warehouseId: resolvedWh?.id || currentUser?.assignedWarehouseId || 'ALL',
+        warehouseName: resolvedWh?.name || 'Central Warehouse Hub',
+        amount,
+        paymentMode,
+        completedStopsCount: unpaidCount,
+        coveredOrderIds
+      };
+
+      let serverRecord = null;
+      try {
+        serverRecord = await apiClient('/payments/driver-payouts', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+      } catch (err) {
+        console.warn('Backend driver payout post failed, storing locally:', err);
+      }
+
+      const newLog = serverRecord || {
+        id: `DRV-PAY-${Date.now().toString().slice(-6)}`,
+        ...payload,
+        paidBy: currentUser?.name || 'Hub Manager',
+        createdAt: new Date().toISOString(),
+        date: new Date().toISOString()
+      };
+
+      const updated = [newLog, ...(driverPayoutLogs || [])];
+      setDriverPayoutLogs(updated);
+      try {
+        localStorage.setItem('freshioz_driver_payout_logs', JSON.stringify(updated));
+      } catch (err) {}
+      setDriverPayoutAmount('');
+      setConfirmDriverPayoutModal(null);
+      showToast(`✓ Paid ₹${amount.toLocaleString()} to ${driver.name} (${unpaidCount} completed deliveries settled)!`, 'success');
+    } catch (err) {
+      showToast(err?.message || 'Failed to settle payout with driver', 'error');
+    } finally {
+      setIsSubmittingDriverPayout(false);
+    }
   };
 
   // Top KPIs
@@ -1752,6 +1812,182 @@ export default function FinancialTransactionsPage() {
               >
                 Close Slip
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIRM DRIVER PAYOUT MODAL */}
+      {confirmDriverPayoutModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(3px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '16px'
+        }}>
+          <div style={{
+            background: '#FFFFFF',
+            borderRadius: '16px',
+            maxWidth: '520px',
+            width: '100%',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            overflow: 'hidden'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              background: 'linear-gradient(135deg, #065F46 0%, #047857 100%)',
+              padding: '18px 20px',
+              color: '#FFFFFF'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Wallet size={20} color="#6EE7B7" />
+                  <h3 style={{ fontSize: '16px', fontWeight: 800, margin: 0, color: '#FFFFFF' }}>
+                    Confirm Delivery Partner Payout
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDriverPayoutModal(null)}
+                  style={{ background: 'none', border: 'none', color: '#D1FAE5', cursor: 'pointer', fontSize: '18px', lineHeight: 1 }}
+                >
+                  ✕
+                </button>
+              </div>
+              <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#A7F3D0' }}>
+                Review driver ride count and settlement amount before authorising payout
+              </p>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* Highlight summary card */}
+              <div style={{
+                background: '#ECFDF5',
+                border: '1.5px solid #A7F3D0',
+                borderRadius: '12px',
+                padding: '14px 16px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <div>
+                  <div style={{ fontSize: '11px', textTransform: 'uppercase', fontWeight: 800, color: '#047857', letterSpacing: '0.5px' }}>
+                    Total Payout Amount
+                  </div>
+                  <div style={{ fontSize: '26px', fontWeight: 900, color: '#065F46', marginTop: '2px' }}>
+                    ₹{confirmDriverPayoutModal.amount.toLocaleString()}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#059669', fontWeight: 700, marginTop: '2px' }}>
+                    via {confirmDriverPayoutModal.paymentMode} • Authorised by {currentUser?.name || 'Hub Manager'}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '11px', textTransform: 'uppercase', fontWeight: 800, color: '#64748B', letterSpacing: '0.5px' }}>
+                    Completed Deliveries
+                  </div>
+                  <div style={{ fontSize: '20px', fontWeight: 900, color: '#0F172A', marginTop: '2px' }}>
+                    {confirmDriverPayoutModal.unpaidCount} Rides
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#059669', fontWeight: 700, marginTop: '2px' }}>
+                    Delivery Stops
+                  </div>
+                </div>
+              </div>
+
+              {/* Driver Details Card */}
+              <div style={{ background: '#F8FAFC', borderRadius: '10px', padding: '12px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                  <span style={{ color: '#64748B', fontWeight: 700 }}>Delivery Executive:</span>
+                  <span style={{ color: '#0F172A', fontWeight: 800 }}>{confirmDriverPayoutModal.driver.name}</span>
+                </div>
+                {confirmDriverPayoutModal.driver.phone && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                    <span style={{ color: '#64748B', fontWeight: 700 }}>Contact Phone:</span>
+                    <span style={{ color: '#0F172A', fontWeight: 800 }}>{confirmDriverPayoutModal.driver.phone}</span>
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                  <span style={{ color: '#64748B', fontWeight: 700 }}>Fulfillment Hub:</span>
+                  <span style={{ color: '#0F172A', fontWeight: 800 }}>{resolvedWh?.name || 'Central Hub'}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                  <span style={{ color: '#64748B', fontWeight: 700 }}>Settled Orders ({confirmDriverPayoutModal.coveredOrderIds.length}):</span>
+                  <span style={{ color: '#0F172A', fontWeight: 700, fontSize: '11px', maxWidth: '260px', textAlign: 'right' }}>
+                    {confirmDriverPayoutModal.coveredOrderIds.slice(0, 4).join(', ')}{confirmDriverPayoutModal.coveredOrderIds.length > 4 ? ` +${confirmDriverPayoutModal.coveredOrderIds.length - 4} more` : ''}
+                  </span>
+                </div>
+              </div>
+
+              {/* Verification & Audit Note */}
+              <div style={{
+                background: '#FEF3C7',
+                border: '1px solid #FDE68A',
+                borderRadius: '8px',
+                padding: '10px 12px',
+                fontSize: '11.5px',
+                color: '#92400E',
+                display: 'flex',
+                gap: '8px',
+                alignItems: 'flex-start'
+              }}>
+                <ShieldCheck size={16} color="#B45309" style={{ flexShrink: 0, marginTop: '2px' }} />
+                <div>
+                  <strong>Audit Ledger Notice:</strong> Authorizing this payout marks these <strong>{confirmDriverPayoutModal.unpaidCount} rides</strong> as paid, records an irreversible outflow in the hub ledger, and syncs to the driver's read-only earnings transaction page.
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
+                <button
+                  type="button"
+                  onClick={() => setConfirmDriverPayoutModal(null)}
+                  disabled={isSubmittingDriverPayout}
+                  style={{
+                    padding: '9px 18px',
+                    borderRadius: '8px',
+                    background: '#F1F5F9',
+                    color: '#475569',
+                    fontWeight: 700,
+                    fontSize: '13px',
+                    border: '1px solid #CBD5E1',
+                    cursor: 'pointer'
+                  }}
+                >
+                  ✕ Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isSubmittingDriverPayout}
+                  onClick={handleConfirmExecuteDriverPayout}
+                  className="admin-btn-accent"
+                  style={{
+                    padding: '9px 20px',
+                    borderRadius: '8px',
+                    background: isSubmittingDriverPayout ? '#94A3B8' : '#059669',
+                    color: '#FFFFFF',
+                    fontWeight: 800,
+                    fontSize: '13px',
+                    border: 'none',
+                    cursor: isSubmittingDriverPayout ? 'not-allowed' : 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 4px 6px -1px rgba(5, 150, 105, 0.3)'
+                  }}
+                >
+                  <CheckCircle2 size={16} />
+                  <span>{isSubmittingDriverPayout ? 'Processing Settlement...' : `✓ Confirm & Pay Driver (₹${confirmDriverPayoutModal.amount.toLocaleString()})`}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
