@@ -1580,20 +1580,21 @@ export default function OrdersFulfillmentPage() {
                       <div
                         key={p.id || idx}
                         style={{
-                          background: '#F8FAFC',
-                          borderRadius: '10px',
+                          background: '#FFFFFF',
+                          borderRadius: '12px',
                           border: '1.5px solid #E2E8F0',
-                          padding: '12px 14px',
+                          padding: '14px 16px',
                           display: 'flex',
                           flexDirection: 'column',
-                          gap: '8px'
+                          gap: '10px',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
                         }}
                       >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '6px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
                           <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span style={{ fontSize: '13px', fontWeight: 900, color: '#0F172A' }}>
-                                #{p.id || `DRV-PAY-${idx + 1}`}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: '14.5px', fontWeight: 900, color: '#0F172A' }}>
+                                Settlement for {stops} {stops === 1 ? 'Delivery Ride' : 'Delivery Rides'}
                               </span>
                               <span style={{
                                 fontSize: '10.5px',
@@ -1601,24 +1602,28 @@ export default function OrdersFulfillmentPage() {
                                 background: p.paymentMode === 'UPI' ? '#EFF6FF' : '#ECFDF5',
                                 color: p.paymentMode === 'UPI' ? '#1D4ED8' : '#047857',
                                 border: `1px solid ${p.paymentMode === 'UPI' ? '#BFDBFE' : '#A7F3D0'}`,
-                                padding: '1px 6px',
+                                padding: '2px 7px',
                                 borderRadius: '4px'
                               }}>
-                                {p.paymentMode || 'CASH'}
+                                {p.paymentMode === 'UPI' ? '💳 UPI / Bank Transfer' : '💵 Cash Handed Over'}
                               </span>
                             </div>
-                            <div style={{ fontSize: '11px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
-                              <Calendar size={12} />
+                            <div style={{ fontSize: '11.5px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
+                              <Calendar size={13} color="#94A3B8" />
                               <span>{formattedDate}</span>
+                              <span>•</span>
+                              <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#475569' }}>
+                                Receipt #{String(p.id || `PAY-${idx + 1}`).slice(-6).toUpperCase()}
+                              </span>
                             </div>
                           </div>
 
                           <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontSize: '17px', fontWeight: 900, color: '#059669' }}>
+                            <div style={{ fontSize: '18px', fontWeight: 900, color: '#059669' }}>
                               ₹{Number(p.amount || 0).toLocaleString()}
                             </div>
                             <div style={{ fontSize: '11px', fontWeight: 800, color: '#047857' }}>
-                              ✓ {stops} {stops === 1 ? 'Ride' : 'Rides'} Settled
+                              ✓ Total Settled for {stops} {stops === 1 ? 'Ride' : 'Rides'}
                             </div>
                           </div>
                         </div>
@@ -1634,11 +1639,11 @@ export default function OrdersFulfillmentPage() {
                           fontSize: '11px'
                         }}>
                           <span style={{ color: '#64748B' }}>
-                            Settled by: <strong style={{ color: '#0F172A' }}>{p.paidBy || 'Hub Manager'}</strong> ({p.warehouseName || 'Hub'})
+                            Settled by: <strong style={{ color: '#0F172A' }}>{p.paidBy || 'Warehouse Manager'}</strong> ({p.warehouseName || 'Hub'})
                           </span>
                           {p.coveredOrderIds && p.coveredOrderIds.length > 0 && (
                             <span style={{ color: '#64748B', fontSize: '10.5px' }}>
-                              Order IDs: <strong style={{ color: '#334155' }}>{p.coveredOrderIds.slice(0, 3).join(', ')}{p.coveredOrderIds.length > 3 ? ` +${p.coveredOrderIds.length - 3}` : ''}</strong>
+                              Covered Orders ({p.coveredOrderIds.length}): <strong style={{ color: '#334155' }}>{p.coveredOrderIds.slice(0, 3).join(', ')}{p.coveredOrderIds.length > 3 ? ` +${p.coveredOrderIds.length - 3}` : ''}</strong>
                             </span>
                           )}
                         </div>

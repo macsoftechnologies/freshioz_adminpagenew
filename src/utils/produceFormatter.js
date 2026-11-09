@@ -80,3 +80,4 @@ export function formatProduceQuantity(qty, unitStr) {
     formatQty: (val) => `${val} ${rawUnit}`
   };
 }
+
