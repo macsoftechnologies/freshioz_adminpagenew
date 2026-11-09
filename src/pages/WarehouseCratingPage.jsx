@@ -394,11 +394,7 @@ export default function WarehouseCratingPage() {
           order.deliveryPartnerId === currentUser?.employeeId
         );
         const matchPhone = userPhoneDigits && orderPhoneDigits && userPhoneDigits === orderPhoneDigits;
-        const matchName = userNameLower && orderDriverNameLower && (
-          userNameLower === orderDriverNameLower || 
-          orderDriverNameLower.startsWith(userNameLower) || 
-          userNameLower.startsWith(orderDriverNameLower)
-        );
+        const matchName = userNameLower && orderDriverNameLower && userNameLower === orderDriverNameLower;
 
         if (!matchId && !matchPhone && !matchName) return false;
       }

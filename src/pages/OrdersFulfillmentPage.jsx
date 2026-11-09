@@ -422,8 +422,8 @@ export default function OrdersFulfillmentPage() {
     // Orders assigned to this driver that are in progress, delivered, or reported cancelled
     if (o.status !== 'OUT_FOR_DELIVERY' && o.status !== 'PACKED' && o.status !== 'DELIVERED' && o.status !== 'CANCELLED') return false;
 
-    // Super Admin preview: Allow Super Admin testing/previewing Rider desk to view all active dispatched orders
-    if (isSuperAdmin) return true;
+    // Super Admin preview: Allow previewing all active dispatched orders ONLY IF NOT on delivery executive desk
+    if (isSuperAdmin && currentRoleId !== 'DELIVERY_EXECUTIVE') return true;
 
     // Match by ID
     if (o.deliveryPartnerId && (
@@ -437,13 +437,13 @@ export default function OrdersFulfillmentPage() {
     const userPhone = (currentUser?.phone || '').replace(/\D/g, '').slice(-10);
     if (orderPhone && userPhone && orderPhone === userPhone) return true;
 
-    // Match by Name (case-insensitive & whitespace trimmed)
+    // Match by Name (case-insensitive & whitespace trimmed, EXACT match ONLY)
     const orderName = (o.deliveryPartnerName || '').trim().toLowerCase();
     const userName = (currentUser?.name || '').trim().toLowerCase();
-    if (orderName && userName && (orderName === userName || orderName.startsWith(userName) || userName.startsWith(orderName))) return true;
+    if (orderName && userName && orderName === userName) return true;
 
-    // Match by assigned location (only if not already assigned to another driver)
-    if (!o.deliveryPartnerId && !o.deliveryPartnerPhone && currentUser?.assignedLocationName && currentUser.assignedLocationName !== 'ALL' && currentUser.assignedLocationName !== 'Citywide' && o.societyName === currentUser.assignedLocationName) return true;
+    // Match by assigned location (ONLY if not already assigned to another driver)
+    if (!o.deliveryPartnerId && !o.deliveryPartnerPhone && !o.deliveryPartnerName && currentUser?.assignedLocationName && currentUser.assignedLocationName !== 'ALL' && currentUser.assignedLocationName !== 'Citywide' && o.societyName === currentUser.assignedLocationName) return true;
 
     return false;
   };
