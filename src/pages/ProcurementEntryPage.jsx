@@ -1012,8 +1012,8 @@ export default function ProcurementEntryPage() {
                         <label style={{ fontSize: '10px', fontWeight: 700, color: '#64748B', display: 'block', marginBottom: '2px' }}>Qty (kg)</label>
                         <input
                           type="number"
-                          min="1"
-                          step="0.5"
+                          min="0.01"
+                          step="any"
                           value={item.qty}
                           onChange={(e) => handleItemChange(idx, 'qty', e.target.value)}
                           style={{
@@ -1035,8 +1035,8 @@ export default function ProcurementEntryPage() {
                         <label style={{ fontSize: '10px', fontWeight: 700, color: '#64748B', display: 'block', marginBottom: '2px' }}>Rate (₹/kg)</label>
                         <input
                           type="number"
-                          min="1"
-                          step="0.5"
+                          min="0.01"
+                          step="any"
                           value={item.rate}
                           onChange={(e) => handleItemChange(idx, 'rate', e.target.value)}
                           style={{
