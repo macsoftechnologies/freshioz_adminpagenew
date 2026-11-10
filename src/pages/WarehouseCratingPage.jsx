@@ -2687,24 +2687,36 @@ export default function WarehouseCratingPage() {
           alignItems: 'center',
           justifyContent: 'center',
           zIndex: 9999,
-          padding: '20px'
+          padding: '16px'
         }}>
           <div style={{
             background: '#FFFFFF',
             borderRadius: '16px',
             maxWidth: '520px',
             width: '100%',
-            padding: '24px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)',
-            border: '1.5px solid #E2E8F0'
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)',
+            border: '1.5px solid #E2E8F0',
+            overflow: 'hidden'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', borderBottom: '1px solid #E2E8F0', paddingBottom: '12px' }}>
+            {/* Modal Header: Fixed at top */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '16px 22px',
+              borderBottom: '1px solid #E2E8F0',
+              background: '#FFFFFF',
+              flexShrink: 0
+            }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: '#FEF3C7', color: '#B45309', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <Truck size={18} />
                 </div>
                 <div>
-                  <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                  <h3 style={{ fontSize: '15.5px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
                     Handover Lot to Delivery Partner
                   </h3>
                   <div style={{ fontSize: '11.5px', color: '#64748B' }}>
@@ -2715,175 +2727,188 @@ export default function WarehouseCratingPage() {
               <button
                 type="button"
                 onClick={() => setHandoverLot(null)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', padding: '4px' }}
+                aria-label="Close"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleConfirmHandover}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px', marginBottom: '16px' }}>
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: 700, display: 'block', marginBottom: '4px', color: '#334155' }}>
-                    Select Registered Delivery Partner / Rider *
-                  </label>
-                  <select
-                    value={driverId}
-                    onChange={(e) => {
-                      const selectedVal = e.target.value;
-                      setDriverId(selectedVal);
-                      const rider = deliveryRiders.find(r => r.id === selectedVal);
-                      if (rider) {
-                        setDriverName(rider.name);
-                        setDriverPhone(rider.phone);
-                        if (rider.vehicleNumber) setVehicleNumber(rider.vehicleNumber);
-                      } else {
-                        setDriverName('');
-                        setDriverPhone('');
-                      }
-                    }}
-                    style={{
-                      width: '100%',
-                      height: '40px',
-                      padding: '0 10px',
-                      borderRadius: '8px',
-                      border: '1.5px solid #234B3C',
-                      background: '#F0FDF4',
-                      fontSize: '13px',
-                      fontWeight: 800,
-                      color: '#0F172A',
-                      cursor: 'pointer'
-                    }}
-                    required
-                  >
-                    {deliveryRiders.length === 0 ? (
-                      <option value="">No registered delivery partners found</option>
-                    ) : (
-                      <>
-                        <option value="">-- Select Registered Delivery Partner --</option>
-                        {deliveryRiders.map(r => {
-                          const isWarehouseMatch = 
-                            (assignedWhId && (r.assignedWarehouseId === assignedWhId || r.assignedWarehouseId === assignedWhCode)) ||
-                            (resolvedWh && (r.assignedWarehouseId === resolvedWh.id || r.assignedWarehouseId === resolvedWh.code || r.assignedWarehouseId === resolvedWh.uuid));
-                          return (
-                            <option key={r.id} value={r.id}>
-                              {r.name} • +91 {r.phone} {isWarehouseMatch ? '⭐ (Assigned to this Hub)' : ''}
-                            </option>
-                          );
-                        })}
-                      </>
-                    )}
-                  </select>
-
-                  {deliveryRiders.length === 0 && (
-                    <div style={{ marginTop: '8px', padding: '8px 12px', background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: '6px', fontSize: '11.5px', color: '#92400E' }}>
-                      ⚠️ No delivery partners registered for this hub. Delivery partners must be registered in Staff Management before dispatch.
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: 700, display: 'block', marginBottom: '4px', color: '#334155' }}>
-                    Driver Contact Phone
-                  </label>
-                  <input
-                    type="tel"
-                    placeholder="Auto-populated from partner profile"
-                    value={driverPhone ? `+91 ${driverPhone}` : ''}
-                    readOnly
-                    style={{
-                      width: '100%',
-                      height: '38px',
-                      padding: '0 10px',
-                      borderRadius: '6px',
-                      border: '1.5px solid #CBD5E1',
-                      fontSize: '13px',
-                      fontWeight: 700,
-                      background: '#F8FAFC',
-                      color: '#1E293B'
-                    }}
-                  />
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            {/* Modal Form with Scrollable Body & Sticky Footer */}
+            <form onSubmit={handleConfirmHandover} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              <div style={{ padding: '18px 22px', overflowY: 'auto', flex: 1 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px', marginBottom: '16px' }}>
                   <div>
                     <label style={{ fontSize: '12px', fontWeight: 700, display: 'block', marginBottom: '4px', color: '#334155' }}>
-                      Vehicle Type
+                      Select Registered Delivery Partner / Rider *
                     </label>
                     <select
-                      value={vehicleType}
-                      onChange={(e) => setVehicleType(e.target.value)}
-                      style={{ width: '100%', height: '38px', padding: '0 10px', borderRadius: '6px', border: '1.5px solid #CBD5E1', fontSize: '12.5px' }}
+                      value={driverId}
+                      onChange={(e) => {
+                        const selectedVal = e.target.value;
+                        setDriverId(selectedVal);
+                        const rider = deliveryRiders.find(r => r.id === selectedVal);
+                        if (rider) {
+                          setDriverName(rider.name);
+                          setDriverPhone(rider.phone);
+                          if (rider.vehicleNumber) setVehicleNumber(rider.vehicleNumber);
+                        } else {
+                          setDriverName('');
+                          setDriverPhone('');
+                        }
+                      }}
+                      style={{
+                        width: '100%',
+                        height: '40px',
+                        padding: '0 10px',
+                        borderRadius: '8px',
+                        border: '1.5px solid #234B3C',
+                        background: '#F0FDF4',
+                        fontSize: '13px',
+                        fontWeight: 800,
+                        color: '#0F172A',
+                        cursor: 'pointer'
+                      }}
+                      required
                     >
-                      <option value="Tata Ace (Mini-Truck)">Tata Ace (Mini-Truck)</option>
-                      <option value="EV 3-Wheeler Tempo">EV 3-Wheeler Tempo</option>
-                      <option value="Pickup Truck">Pickup Truck</option>
-                      <option value="Delivery Van">Delivery Van</option>
-                      <option value="Motorcycle (Two-Wheeler)">Motorcycle (Two-Wheeler)</option>
+                      {deliveryRiders.length === 0 ? (
+                        <option value="">No registered delivery partners found</option>
+                      ) : (
+                        <>
+                          <option value="">-- Select Registered Delivery Partner --</option>
+                          {deliveryRiders.map(r => {
+                            const isWarehouseMatch = 
+                              (assignedWhId && (r.assignedWarehouseId === assignedWhId || r.assignedWarehouseId === assignedWhCode)) ||
+                              (resolvedWh && (r.assignedWarehouseId === resolvedWh.id || r.assignedWarehouseId === resolvedWh.code || r.assignedWarehouseId === resolvedWh.uuid));
+                            return (
+                              <option key={r.id} value={r.id}>
+                                {r.name} • +91 {r.phone} {isWarehouseMatch ? '⭐ (Assigned to this Hub)' : ''}
+                              </option>
+                            );
+                          })}
+                        </>
+                      )}
                     </select>
+
+                    {deliveryRiders.length === 0 && (
+                      <div style={{ marginTop: '8px', padding: '8px 12px', background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: '6px', fontSize: '11.5px', color: '#92400E' }}>
+                        ⚠️ No delivery partners registered for this hub. Delivery partners must be registered in Staff Management before dispatch.
+                      </div>
+                    )}
                   </div>
 
                   <div>
                     <label style={{ fontSize: '12px', fontWeight: 700, display: 'block', marginBottom: '4px', color: '#334155' }}>
-                      Vehicle Registration # *
+                      Driver Contact Phone
                     </label>
                     <input
-                      type="text"
-                      placeholder="e.g. KA-04-E-5581"
-                      value={vehicleNumber}
-                      onChange={(e) => setVehicleNumber(e.target.value)}
-                      style={{ width: '100%', height: '38px', padding: '0 10px', borderRadius: '6px', border: '1.5px solid #CBD5E1', fontSize: '13px', fontFamily: 'monospace', fontWeight: 800 }}
-                      required
+                      type="tel"
+                      placeholder="Auto-populated from partner profile"
+                      value={driverPhone ? `+91 ${driverPhone}` : ''}
+                      readOnly
+                      style={{
+                        width: '100%',
+                        height: '38px',
+                        padding: '0 10px',
+                        borderRadius: '6px',
+                        border: '1.5px solid #CBD5E1',
+                        fontSize: '13px',
+                        fontWeight: 700,
+                        background: '#F8FAFC',
+                        color: '#1E293B'
+                      }}
                     />
                   </div>
-                </div>
-              </div>
 
-              {/* Handover Summary Box & Assigned Driver Preview */}
-              <div style={{ background: '#F8FAFC', border: '1.5px solid #CBD5E1', borderRadius: '10px', padding: '14px', marginBottom: '18px', fontSize: '12.5px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                  <span style={{ color: '#64748B' }}>Destination Community:</span>
-                  <strong style={{ color: '#0F172A', fontSize: '13px' }}>{handoverLot.societyName}</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                  <span style={{ color: '#64748B' }}>Total Customer Flats in Lot:</span>
-                  <strong>{handoverLot.orders.length} {handoverLot.orders.length === 1 ? 'Flat' : 'Flats'}</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <span style={{ color: '#64748B' }}>Total Produce Weight:</span>
-                  <strong style={{ color: '#234B3C' }}>{handoverLot.totalWeightKg} kg</strong>
-                </div>
-
-                <div style={{ borderTop: '1px dashed #CBD5E1', paddingTop: '8px', marginTop: '6px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                    <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Truck size={13} color="#D97706" />
-                      <span>Assigned Driver:</span>
-                    </span>
-                    <strong style={{ color: '#92400E' }}>{driverName || 'No driver selected'} ({driverPhone || '—'})</strong>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                    <span style={{ color: '#64748B' }}>Vehicle Info:</span>
-                    <strong style={{ color: '#1E293B' }}>{vehicleType} • <span style={{ fontFamily: 'monospace' }}>{vehicleNumber || '—'}</span></strong>
-                  </div>
-
-                  {/* Quick Pills of Customer Flats in Lot */}
-                  <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #E2E8F0' }}>
-                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '4px' }}>
-                      Flats Handed Over to Driver ({handoverLot.orders.length}):
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div>
+                      <label style={{ fontSize: '12px', fontWeight: 700, display: 'block', marginBottom: '4px', color: '#334155' }}>
+                        Vehicle Type
+                      </label>
+                      <select
+                        value={vehicleType}
+                        onChange={(e) => setVehicleType(e.target.value)}
+                        style={{ width: '100%', height: '38px', padding: '0 10px', borderRadius: '6px', border: '1.5px solid #CBD5E1', fontSize: '12.5px' }}
+                      >
+                        <option value="Tata Ace (Mini-Truck)">Tata Ace (Mini-Truck)</option>
+                        <option value="EV 3-Wheeler Tempo">EV 3-Wheeler Tempo</option>
+                        <option value="Pickup Truck">Pickup Truck</option>
+                        <option value="Delivery Van">Delivery Van</option>
+                        <option value="Motorcycle (Two-Wheeler)">Motorcycle (Two-Wheeler)</option>
+                      </select>
                     </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxHeight: '90px', overflowY: 'auto' }}>
-                      {handoverLot.orders.map(o => (
-                        <span key={o.id} style={{ background: '#FFFFFF', border: '1px solid #CBD5E1', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, color: '#0F172A' }}>
-                          Flat {extractBlockAndFlat(o.flatNo).flat || o.flatNo} ({o.userName || 'Resident'})
-                        </span>
-                      ))}
+
+                    <div>
+                      <label style={{ fontSize: '12px', fontWeight: 700, display: 'block', marginBottom: '4px', color: '#334155' }}>
+                        Vehicle Registration # *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. KA-04-E-5581"
+                        value={vehicleNumber}
+                        onChange={(e) => setVehicleNumber(e.target.value)}
+                        style={{ width: '100%', height: '38px', padding: '0 10px', borderRadius: '6px', border: '1.5px solid #CBD5E1', fontSize: '13px', fontFamily: 'monospace', fontWeight: 800 }}
+                        required
+                      />
                     </div>
                   </div>
                 </div>
+
+                {/* Handover Summary Box & Assigned Driver Preview */}
+                <div style={{ background: '#F8FAFC', border: '1.5px solid #CBD5E1', borderRadius: '10px', padding: '14px', fontSize: '12.5px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                    <span style={{ color: '#64748B' }}>Destination Community:</span>
+                    <strong style={{ color: '#0F172A', fontSize: '13px' }}>{handoverLot.societyName}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+                    <span style={{ color: '#64748B' }}>Total Customer Flats in Lot:</span>
+                    <strong>{handoverLot.orders.length} {handoverLot.orders.length === 1 ? 'Flat' : 'Flats'}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <span style={{ color: '#64748B' }}>Total Produce Weight:</span>
+                    <strong style={{ color: '#234B3C' }}>{handoverLot.totalWeightKg} kg</strong>
+                  </div>
+
+                  <div style={{ borderTop: '1px dashed #CBD5E1', paddingTop: '8px', marginTop: '6px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Truck size={13} color="#D97706" />
+                        <span>Assigned Driver:</span>
+                      </span>
+                      <strong style={{ color: '#92400E' }}>{driverName || 'No driver selected'} ({driverPhone || '—'})</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                      <span style={{ color: '#64748B' }}>Vehicle Info:</span>
+                      <strong style={{ color: '#1E293B' }}>{vehicleType} • <span style={{ fontFamily: 'monospace' }}>{vehicleNumber || '—'}</span></strong>
+                    </div>
+
+                    {/* Quick Pills of Customer Flats in Lot */}
+                    <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #E2E8F0' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '4px' }}>
+                        Flats Handed Over to Driver ({handoverLot.orders.length}):
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxHeight: '90px', overflowY: 'auto' }}>
+                        {handoverLot.orders.map(o => (
+                          <span key={o.id} style={{ background: '#FFFFFF', border: '1px solid #CBD5E1', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, color: '#0F172A' }}>
+                            Flat {extractBlockAndFlat(o.flatNo).flat || o.flatNo} ({o.userName || 'Resident'})
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              {/* Modal Footer: Sticky at bottom */}
+              <div style={{
+                display: 'flex',
+                gap: '10px',
+                justifyContent: 'flex-end',
+                padding: '14px 22px',
+                borderTop: '1px solid #E2E8F0',
+                background: '#F8FAFC',
+                flexShrink: 0
+              }}>
                 <button
                   type="button"
                   onClick={() => setHandoverLot(null)}
