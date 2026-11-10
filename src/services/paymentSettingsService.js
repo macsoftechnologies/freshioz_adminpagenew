@@ -33,11 +33,5 @@ export const paymentSettingsService = {
       body: JSON.stringify(payload),
     });
   },
-
-  async cleanOperationalData() {
-    return apiClient('/health/clean-operational-data', {
-      method: 'POST',
-    });
-  },
 };
 
