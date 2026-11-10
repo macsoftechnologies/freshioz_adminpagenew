@@ -169,11 +169,25 @@ export default function WarehouseCratingPage() {
   const [isSubmittingAudit, setIsSubmittingAudit] = useState(false);
 
   const parseCancelDetails = (reasonStr) => {
-    if (!reasonStr) return { reason: 'Cancelled at Doorstep', photo: null, photos: [] };
+    if (!reasonStr) return { reason: 'Cancelled at Doorstep', photo: null, photos: [], auditRecord: null };
     
+    let text = String(reasonStr);
+    let auditRecord = null;
+
+    // Check for persisted Quality Audit record [AUDIT_RECORD]
+    if (text.includes(' [AUDIT_RECORD]')) {
+      const auditSplit = text.split(' [AUDIT_RECORD]');
+      text = auditSplit[0];
+      try {
+        auditRecord = JSON.parse(auditSplit[1] || 'null');
+      } catch (e) {
+        auditRecord = null;
+      }
+    }
+
     // Check for multi-photo tag [PROOF_PHOTOS]
-    if (reasonStr.includes(' [PROOF_PHOTOS]')) {
-      const parts = reasonStr.split(' [PROOF_PHOTOS]');
+    if (text.includes(' [PROOF_PHOTOS]')) {
+      const parts = text.split(' [PROOF_PHOTOS]');
       let photos = [];
       try {
         photos = JSON.parse(parts[1] || '[]');
@@ -184,16 +198,18 @@ export default function WarehouseCratingPage() {
       return {
         reason: baseReason || 'Cancelled at Doorstep',
         photo: photos[0] || null,
-        photos: Array.isArray(photos) ? photos : []
+        photos: Array.isArray(photos) ? photos : [],
+        auditRecord
       };
     }
 
     // Single photo tag [PROOF_PHOTO] fallback
-    const parts = reasonStr.split(' [PROOF_PHOTO]');
+    const parts = text.split(' [PROOF_PHOTO]');
     return {
       reason: parts[0] || 'Cancelled at Doorstep',
       photo: parts[1] || null,
-      photos: parts[1] ? [parts[1]] : []
+      photos: parts[1] ? [parts[1]] : [],
+      auditRecord
     };
   };
 
@@ -541,6 +557,23 @@ export default function WarehouseCratingPage() {
     });
   }, [orders, isWarehouseScoped, warehouses.length, assignedWhId, assignedWhCode, resolvedWh, societies]);
 
+  // Auto-sync any existing local audits in localStorage to the backend so all clients/incognito tabs stay in sync
+  useEffect(() => {
+    if (!isReturnAuditAllowed) return;
+    returnedOrders.forEach(o => {
+      const local = returnAudits[o.id];
+      if (local && (!o.cancelledReason || !o.cancelledReason.includes(' [AUDIT_RECORD]'))) {
+        const raw = o.cancelledReason || 'Cancelled at Doorstep';
+        const cleanBase = raw.split(' [AUDIT_RECORD]')[0];
+        const newReason = `${cleanBase} [AUDIT_RECORD]${JSON.stringify(local)}`;
+        updateOrderStatusMutation.mutate({
+          id: o.id,
+          cancelledReason: newReason
+        });
+      }
+    });
+  }, [returnedOrders, returnAudits, isReturnAuditAllowed]);
+
   const handleApproveReturnAudit = async (order) => {
     if (!isReturnAuditAllowed) {
       showToast('Access Denied: Quality audit and return value adjustments must be performed by the Warehouse Manager.', 'error');
@@ -615,6 +648,20 @@ export default function WarehouseCratingPage() {
       const updatedAudits = { ...returnAudits, [order.id]: auditRecord };
       setReturnAudits(updatedAudits);
       localStorage.setItem('freshioz_warehouse_return_audits', JSON.stringify(updatedAudits));
+
+      // Persist to Server Database so all staff members, devices, and incognito sessions see it immediately
+      try {
+        const rawReason = order.cancelledReason || 'Cancelled at Doorstep';
+        const cleanBaseReason = rawReason.split(' [AUDIT_RECORD]')[0];
+        const newCancelledReason = `${cleanBaseReason} [AUDIT_RECORD]${JSON.stringify(auditRecord)}`;
+        await updateOrderStatusMutation.mutateAsync({
+          id: order.id,
+          cancelledReason: newCancelledReason
+        });
+      } catch (saveErr) {
+        console.warn('Could not persist audit record to database:', saveErr);
+      }
+
       showToast(`✓ Quality Audit Completed for Order #${order.id}. Restocked ${totalGoodKg} items/units to hub inventory; recorded ${totalWastageKg} items/units wastage.`, 'success');
     } catch (err) {
       showToast(err.message || 'Failed to complete quality audit.', 'error');
@@ -2179,9 +2226,9 @@ export default function WarehouseCratingPage() {
             </div>
           ) : (
             returnedOrders.map((order) => {
-              const { reason, photo, photos = [] } = parseCancelDetails(order.cancelledReason);
-              const isAudited = Boolean(returnAudits[order.id]);
-              const auditData = returnAudits[order.id];
+              const { reason, photo, photos = [], auditRecord: dbAudit } = parseCancelDetails(order.cancelledReason);
+              const auditData = returnAudits[order.id] || dbAudit;
+              const isAudited = Boolean(auditData);
               const items = Array.isArray(order.items) ? order.items : [];
 
               return (
@@ -2241,6 +2288,18 @@ export default function WarehouseCratingPage() {
                                   localStorage.setItem('freshioz_warehouse_return_audits', JSON.stringify(next));
                                   return next;
                                 });
+
+                                // Clear the audit tag on the database so other staff members see it reset immediately
+                                try {
+                                  const rawReason = order.cancelledReason || '';
+                                  const cleanBaseReason = rawReason.split(' [AUDIT_RECORD]')[0];
+                                  await updateOrderStatusMutation.mutateAsync({
+                                    id: order.id,
+                                    cancelledReason: cleanBaseReason
+                                  });
+                                } catch (e) {
+                                  console.warn('Could not reset audit on DB:', e);
+                                }
                               }}
                               style={{
                                 background: '#FFFFFF',
