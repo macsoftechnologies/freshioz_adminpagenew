@@ -2272,7 +2272,7 @@ export default function WarehouseCratingPage() {
                           {isReturnAuditAllowed && (
                             <button
                               type="button"
-                              onClick={() => {
+                              onClick={async () => {
                                 const currentAdjustments = {};
                                 items.forEach((it, idx) => {
                                   const k = `${order.id}_${idx}`;
