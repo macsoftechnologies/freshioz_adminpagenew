@@ -536,20 +536,46 @@ export default function WarehouseCratingPage() {
 
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
-        if (!item.productId) continue;
-        const key = `${order.id}_${i}`;
         const produceFmt = formatProduceQuantity(item.qty || 1, item.unit);
-        const enteredGood = returnItemAdjustments[key]?.goodQty;
-        const goodQty = enteredGood !== undefined ? Number(enteredGood) : produceFmt.totalCount;
-        const wastageQty = Math.max(0, produceFmt.totalCount - goodQty);
+        const total = produceFmt.totalCount;
+
+        // Check key variants to guarantee matching
+        const possibleKeys = [
+          `${order.id}_${i}`,
+          `${order.id}_${item.id}`,
+          `${order.id}_${item.productId}`,
+          `${order.id}_${item.name}`
+        ];
+        let adj = null;
+        for (const k of possibleKeys) {
+          if (returnItemAdjustments[k] !== undefined) {
+            adj = returnItemAdjustments[k];
+            break;
+          }
+        }
+
+        let goodQty, wastageQty;
+        if (adj?.wastageQty !== undefined) {
+          wastageQty = Math.min(total, Math.max(0, Number(adj.wastageQty)));
+          goodQty = Math.max(0, total - wastageQty);
+        } else if (adj?.goodQty !== undefined) {
+          goodQty = Math.min(total, Math.max(0, Number(adj.goodQty)));
+          wastageQty = Math.max(0, total - goodQty);
+        } else {
+          goodQty = total;
+          wastageQty = 0;
+        }
+
         totalGoodKg += goodQty;
         totalWastageKg += wastageQty;
-        auditedItemAdjustments[key] = { goodQty, wastageQty };
+        auditedItemAdjustments[`${order.id}_${i}`] = { goodQty, wastageQty };
+        if (item.id) auditedItemAdjustments[`${order.id}_${item.id}`] = { goodQty, wastageQty };
+        if (item.productId) auditedItemAdjustments[`${order.id}_${item.productId}`] = { goodQty, wastageQty };
 
-        if (goodQty > 0) {
+        if (goodQty > 0 && (item.productId || item.id)) {
           await adjustStockMutation.mutateAsync({
             warehouseId: targetWhId,
-            productId: item.productId,
+            productId: item.productId || item.id,
             qty: goodQty,
             action: 'ADD',
             remarks: `Quality Restock from returned Order #${order.id} (${goodQty} ${produceFmt.displayUnit} good produce, ${wastageQty} ${produceFmt.displayUnit} wastage)`
@@ -2083,7 +2109,8 @@ export default function WarehouseCratingPage() {
                                 const k = `${order.id}_${idx}`;
                                 const saved = auditData?.itemAdjustments?.[k];
                                 const gQty = saved?.goodQty !== undefined ? saved.goodQty : (items.length === 1 && auditData?.totalGoodKg !== undefined ? auditData.totalGoodKg : formatProduceQuantity(it.qty || 1, it.unit).totalCount);
-                                currentAdjustments[k] = { goodQty: gQty };
+                                const wQty = saved?.wastageQty !== undefined ? saved.wastageQty : Math.max(0, formatProduceQuantity(it.qty || 1, it.unit).totalCount - gQty);
+                                currentAdjustments[k] = { goodQty: gQty, wastageQty: wQty };
                               });
                               setReturnItemAdjustments(prev => ({ ...prev, ...currentAdjustments }));
                               setReturnAudits(prev => {
@@ -2203,14 +2230,16 @@ export default function WarehouseCratingPage() {
                           const key = `${order.id}_${idx}`;
                           const produceFmt = formatProduceQuantity(it.qty || 1, it.unit);
                           const totalAllowed = produceFmt.totalCount;
-                          const savedItemAudit = auditData?.itemAdjustments?.[key];
-                          const enteredGood = isAudited
-                            ? (savedItemAudit?.goodQty !== undefined ? savedItemAudit.goodQty : (items.length === 1 && auditData?.totalGoodKg !== undefined ? auditData.totalGoodKg : totalAllowed))
-                            : returnItemAdjustments[key]?.goodQty;
-                          const goodQty = enteredGood !== undefined ? Number(enteredGood) : totalAllowed;
+                          const savedItemAudit = auditData?.itemAdjustments?.[key] || (it.id ? auditData?.itemAdjustments?.[`${order.id}_${it.id}`] : null);
+                          const userAdj = returnItemAdjustments[key] || (it.id ? returnItemAdjustments[`${order.id}_${it.id}`] : null);
+
+                          const goodQty = isAudited
+                            ? (savedItemAudit?.goodQty !== undefined ? Number(savedItemAudit.goodQty) : (items.length === 1 && auditData?.totalGoodKg !== undefined ? Number(auditData.totalGoodKg) : totalAllowed))
+                            : (userAdj?.goodQty !== undefined ? Number(userAdj.goodQty) : (userAdj?.wastageQty !== undefined ? Math.max(0, totalAllowed - Number(userAdj.wastageQty)) : totalAllowed));
+
                           const wastageQty = isAudited
                             ? (savedItemAudit?.wastageQty !== undefined ? Number(savedItemAudit.wastageQty) : (items.length === 1 && auditData?.totalWastageKg !== undefined ? Number(auditData.totalWastageKg) : Math.max(0, totalAllowed - goodQty)))
-                            : Math.max(0, totalAllowed - goodQty);
+                            : (userAdj?.wastageQty !== undefined ? Number(userAdj.wastageQty) : Math.max(0, totalAllowed - goodQty));
 
                           return (
                             <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
@@ -2236,11 +2265,14 @@ export default function WarehouseCratingPage() {
                                       step={produceFmt.step}
                                       value={goodQty}
                                       onChange={(e) => {
-                                        const val = parseFloat(e.target.value);
+                                        const raw = e.target.value;
+                                        const val = parseFloat(raw);
                                         const cleanVal = isNaN(val) ? 0 : Math.min(totalAllowed, Math.max(0, val));
+                                        const cleanWaste = Math.max(0, totalAllowed - cleanVal);
                                         setReturnItemAdjustments(prev => ({
                                           ...prev,
-                                          [key]: { goodQty: cleanVal }
+                                          [key]: { goodQty: cleanVal, wastageQty: cleanWaste },
+                                          ...(it.id ? { [`${order.id}_${it.id}`]: { goodQty: cleanVal, wastageQty: cleanWaste } } : {})
                                         }));
                                       }}
                                       style={{
@@ -2282,11 +2314,14 @@ export default function WarehouseCratingPage() {
                                       step={produceFmt.step}
                                       value={wastageQty}
                                       onChange={(e) => {
-                                        const val = parseFloat(e.target.value);
+                                        const raw = e.target.value;
+                                        const val = parseFloat(raw);
                                         const cleanWastage = isNaN(val) ? 0 : Math.min(totalAllowed, Math.max(0, val));
+                                        const cleanGood = Math.max(0, totalAllowed - cleanWastage);
                                         setReturnItemAdjustments(prev => ({
                                           ...prev,
-                                          [key]: { goodQty: Math.max(0, totalAllowed - cleanWastage) }
+                                          [key]: { goodQty: cleanGood, wastageQty: cleanWastage },
+                                          ...(it.id ? { [`${order.id}_${it.id}`]: { goodQty: cleanGood, wastageQty: cleanWastage } } : {})
                                         }));
                                       }}
                                       style={{

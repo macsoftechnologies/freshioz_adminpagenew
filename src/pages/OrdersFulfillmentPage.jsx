@@ -498,9 +498,27 @@ export default function OrdersFulfillmentPage() {
     try {
       const res = await apiClient('/payments/driver-payouts');
       if (Array.isArray(res)) {
-        setMyDriverPayouts(res);
+        const cleanMyPhone = (currentUser?.phone || '').replace(/\D/g, '').slice(-10);
+        const myNameLower = (currentUser?.name || '').trim().toLowerCase();
+        const myUsername = (currentUser?.email || '').split('@')[0].trim().toLowerCase();
+
+        const filtered = res.filter(p => {
+          if (!p) return false;
+          const pDriverId = String(p.driverId || '').trim();
+          const pDriverNameLower = String(p.driverName || '').trim().toLowerCase();
+          const pDriverPhone = String(p.driverPhone || '').replace(/\D/g, '').slice(-10);
+
+          if (pDriverId && (pDriverId === currentUser?.id || pDriverId === currentUser?.uuid)) return true;
+          if (cleanMyPhone && pDriverPhone && pDriverPhone === cleanMyPhone) return true;
+          if (myNameLower && (pDriverNameLower === myNameLower || pDriverNameLower.includes(myNameLower) || myNameLower.includes(pDriverNameLower))) return true;
+          if (myUsername && myUsername.length >= 3 && (pDriverNameLower.includes(myUsername) || pDriverId.toLowerCase().includes(myUsername))) return true;
+          return false;
+        });
+
+        const definitive = filtered.length > 0 ? filtered : res;
+        setMyDriverPayouts(definitive);
         try {
-          localStorage.setItem('freshioz_driver_payout_logs', JSON.stringify(res));
+          localStorage.setItem('freshioz_driver_payout_logs', JSON.stringify(definitive));
         } catch (e) {}
       }
     } catch (err) {
@@ -511,11 +529,19 @@ export default function OrdersFulfillmentPage() {
           const allLogs = JSON.parse(saved);
           const cleanMyPhone = (currentUser?.phone || '').replace(/\D/g, '').slice(-10);
           const myNameLower = (currentUser?.name || '').trim().toLowerCase();
-          const filtered = allLogs.filter(l => 
-            (l.driverId && (l.driverId === currentUser?.id || l.driverId === currentUser?.uuid)) ||
-            (cleanMyPhone && (l.driverPhone || '').replace(/\D/g, '').slice(-10) === cleanMyPhone) ||
-            (myNameLower && (l.driverName || '').trim().toLowerCase() === myNameLower)
-          );
+          const myUsername = (currentUser?.email || '').split('@')[0].trim().toLowerCase();
+          const filtered = allLogs.filter(l => {
+            if (!l) return false;
+            const lDriverId = String(l.driverId || '').trim();
+            const lDriverNameLower = String(l.driverName || '').trim().toLowerCase();
+            const lDriverPhone = String(l.driverPhone || '').replace(/\D/g, '').slice(-10);
+
+            if (lDriverId && (lDriverId === currentUser?.id || lDriverId === currentUser?.uuid)) return true;
+            if (cleanMyPhone && lDriverPhone && lDriverPhone === cleanMyPhone) return true;
+            if (myNameLower && (lDriverNameLower === myNameLower || lDriverNameLower.includes(myNameLower) || myNameLower.includes(lDriverNameLower))) return true;
+            if (myUsername && myUsername.length >= 3 && (lDriverNameLower.includes(myUsername) || lDriverId.toLowerCase().includes(myUsername))) return true;
+            return false;
+          });
           setMyDriverPayouts(filtered);
         }
       } catch (e) {}

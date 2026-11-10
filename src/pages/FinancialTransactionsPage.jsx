@@ -560,10 +560,20 @@ export default function FinancialTransactionsPage() {
     const { driver, amount, paymentMode, coveredOrderIds, unpaidCount } = confirmDriverPayoutModal;
     setIsSubmittingDriverPayout(true);
     try {
+      // Resolve driver with registered employee record to guarantee definitive phone & ID
+      const matchingEmp = employees.find(e => 
+        (driver.id && (e.id === driver.id || e.uuid === driver.id)) ||
+        (e.name && driver.name && e.name.trim().toLowerCase() === driver.name.trim().toLowerCase()) ||
+        (driver.phone && e.phone && e.phone.replace(/\D/g, '').slice(-10) === driver.phone.replace(/\D/g, '').slice(-10))
+      );
+      const definitiveDriverId = matchingEmp?.id || matchingEmp?.uuid || driver.id;
+      const definitiveDriverName = matchingEmp?.name || driver.name;
+      const definitiveDriverPhone = matchingEmp?.phone || driver.phone || '';
+
       const payload = {
-        driverId: driver.id,
-        driverName: driver.name,
-        driverPhone: driver.phone || '',
+        driverId: definitiveDriverId,
+        driverName: definitiveDriverName,
+        driverPhone: definitiveDriverPhone,
         warehouseId: resolvedWh?.id || currentUser?.assignedWarehouseId || 'ALL',
         warehouseName: resolvedWh?.name || 'Central Warehouse Hub',
         amount,
