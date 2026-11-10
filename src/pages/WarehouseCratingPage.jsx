@@ -226,6 +226,10 @@ export default function WarehouseCratingPage() {
 
   // Handover modal state
   const [handoverLot, setHandoverLot] = useState(null); // { societyName, orders, totalWeight, ... }
+  const [isSubmittingHandover, setIsSubmittingHandover] = useState(false);
+  const [viewHandoverDetailsLot, setViewHandoverDetailsLot] = useState(null);
+  const [bulkPackModalCrate, setBulkPackModalCrate] = useState(null);
+  const [isSubmittingBulkPack, setIsSubmittingBulkPack] = useState(false);
   const [driverId, setDriverId] = useState(deliveryRiders[0]?.id || '');
   const [driverName, setDriverName] = useState(deliveryRiders[0]?.name || '');
   const [driverPhone, setDriverPhone] = useState(deliveryRiders[0]?.phone || '');
@@ -960,6 +964,7 @@ export default function WarehouseCratingPage() {
       return;
     }
 
+    setIsSubmittingHandover(true);
     try {
       await Promise.all(ordersToDispatch.map(o => updateOrderStatusMutation.mutateAsync({
         id: o.id,
@@ -972,11 +977,13 @@ export default function WarehouseCratingPage() {
         dispatchedBy: currentUser?.name || 'Warehouse Dispatch Lead',
         dispatchedById: currentUser?.id || 'emp-lead'
       })));
-      showToast(`✓ Lot #${handoverLot.lotId} handed over to driver ${driverName} (${vehicleNumber})!`, 'success');
+      showToast(`✓ Lot #${handoverLot.lotId} (${ordersToDispatch.length} flats) handed over to driver ${driverName} (${vehicleNumber})!`, 'success');
       setHandoverLot(null);
     } catch (err) {
       console.error('Backend dispatch status update failed:', err);
       showToast(`Failed to dispatch orders on server: ${err?.message || 'Server error'}`, 'error');
+    } finally {
+      setIsSubmittingHandover(false);
     }
   };
 
@@ -996,8 +1003,8 @@ export default function WarehouseCratingPage() {
     }
   };
 
-  // Controlled Bulk Pack All Remaining in Block Crate (with per-order validation & concurrency guard)
-  const handlePackEntireBlock = async (crate) => {
+  // Controlled Bulk Pack All Remaining in Block Crate (opens verification review modal)
+  const handlePackEntireBlock = (crate) => {
     const candidateOrders = crate.orders.filter(
       o => o.status !== 'PACKED' && o.status !== 'OUT_FOR_DELIVERY' && o.status !== 'DELIVERED' && o.status !== 'CANCELLED' && !packingOrderIds[o.id]
     );
@@ -1005,8 +1012,21 @@ export default function WarehouseCratingPage() {
       showToast('All orders in this crate are already packed!', 'info');
       return;
     }
+    setBulkPackModalCrate(crate);
+  };
 
-    // Validate each order's item list and eligibility
+  const executeBulkPackCrate = async () => {
+    if (!bulkPackModalCrate) return;
+    const crate = bulkPackModalCrate;
+    const candidateOrders = crate.orders.filter(
+      o => o.status !== 'PACKED' && o.status !== 'OUT_FOR_DELIVERY' && o.status !== 'DELIVERED' && o.status !== 'CANCELLED' && !packingOrderIds[o.id]
+    );
+    if (candidateOrders.length === 0) {
+      showToast('All orders in this crate are already packed!', 'info');
+      setBulkPackModalCrate(null);
+      return;
+    }
+
     const validOrders = [];
     const invalidOrders = [];
     candidateOrders.forEach(o => {
@@ -1020,14 +1040,11 @@ export default function WarehouseCratingPage() {
 
     if (validOrders.length === 0) {
       showToast(`Cannot pack: ${invalidOrders.length} order(s) failed item/payment validation.`, 'error');
+      setBulkPackModalCrate(null);
       return;
     }
 
-    const confirmed = window.confirm(
-      `Pack all ${validOrders.length} remaining flat(s) in ${crate.societyName} · ${crate.blockName} (${crate.slotLabel})?`
-    );
-    if (!confirmed) return;
-
+    setIsSubmittingBulkPack(true);
     const lockMap = {};
     validOrders.forEach(o => { lockMap[o.id] = true; });
     setPackingOrderIds(prev => ({ ...prev, ...lockMap }));
@@ -1045,13 +1062,15 @@ export default function WarehouseCratingPage() {
       const failed = results.filter(r => r.status === 'rejected').length + invalidOrders.length;
 
       if (failed === 0) {
-        showToast(`✓ Packed ${succeeded} flat(s) in ${crate.societyName} [${crate.blockName}]!`, 'success');
+        showToast(`✓ Packed all ${succeeded} flat(s) in ${crate.societyName} [${crate.blockName}]!`, 'success');
       } else {
         showToast(`Packed ${succeeded} flat(s); ${failed} exception(s) skipped.`, 'warning');
       }
+      setBulkPackModalCrate(null);
     } catch (err) {
       showToast(`Failed to pack crate: ${err?.message || 'Server error'}`, 'error');
     } finally {
+      setIsSubmittingBulkPack(false);
       setPackingOrderIds(prev => {
         const next = { ...prev };
         validOrders.forEach(o => { delete next[o.id]; });
@@ -1531,11 +1550,46 @@ export default function WarehouseCratingPage() {
                           🗓️ {crate.deliveryDate} · ⏰ {crate.slotLabel} ({crate.slotTimeWindow})
                         </span>
 
-                        {crate.isHandedOver ? (
-                          <span style={{ fontSize: '11px', background: '#FEF3C7', color: '#92400E', fontWeight: 800, padding: '2px 8px', borderRadius: '5px', border: '1px solid #FDE68A' }}>
-                            🚚 Handed to Driver
-                          </span>
-                        ) : isCrateDone ? (
+                        {crate.isHandedOver ? (() => {
+                          const handedOrder = crate.orders.find(o => o.deliveryPartnerName);
+                          const dName = handedOrder?.deliveryPartnerName || 'Driver';
+                          const dVehicle = handedOrder?.vehicleNumber;
+                          const dPhone = handedOrder?.deliveryPartnerPhone;
+                          return (
+                            <span 
+                              onClick={() => {
+                                const matchingSocLot = societyLots.find(l => l.lotKey === crate.societyBatchKey);
+                                setViewHandoverDetailsLot(matchingSocLot || {
+                                  societyName: crate.societyName,
+                                  lotId: handedOrder?.deliveryLotId || 'BATCH',
+                                  deliveryPartnerName: dName,
+                                  deliveryPartnerPhone: dPhone,
+                                  vehicleNumber: dVehicle,
+                                  dispatchedBy: handedOrder?.dispatchedBy,
+                                  orders: crate.orders.filter(o => o.status === 'OUT_FOR_DELIVERY' || o.status === 'DELIVERED'),
+                                  totalWeightKg: crate.totalWeightKg
+                                });
+                              }}
+                              style={{ 
+                                fontSize: '11px', 
+                                background: '#FEF3C7', 
+                                color: '#92400E', 
+                                fontWeight: 800, 
+                                padding: '2px 8px', 
+                                borderRadius: '5px', 
+                                border: '1px solid #FDE68A',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px'
+                              }}
+                              title="Click to view driver handover details"
+                            >
+                              <Truck size={12} color="#D97706" />
+                              <span>Handed to: {dName} {dVehicle ? `(${dVehicle})` : ''}</span>
+                            </span>
+                          );
+                        })() : isCrateDone ? (
                           <span style={{ fontSize: '11px', background: '#DCFCE7', color: '#166534', fontWeight: 800, padding: '2px 8px', borderRadius: '5px', border: '1px solid #86EFAC' }}>
                             ✓ {crate.packedCount}/{crate.orders.length} Packed
                           </span>
@@ -1691,9 +1745,17 @@ export default function WarehouseCratingPage() {
                             {/* Status + 1-Tap Pack & Label Actions */}
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: 'auto' }}>
                               {isHanded ? (
-                                <span style={{ fontSize: '10.5px', fontWeight: 800, padding: '3px 8px', borderRadius: '5px', background: '#FEF3C7', color: '#92400E' }}>
-                                  🚚 Handed Over
-                                </span>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                                  <span style={{ fontSize: '10.5px', fontWeight: 800, padding: '3px 8px', borderRadius: '5px', background: '#FEF3C7', color: '#92400E', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    <Truck size={11} color="#D97706" />
+                                    <span>Handed Over</span>
+                                  </span>
+                                  {order.deliveryPartnerName && (
+                                    <span style={{ fontSize: '10px', color: '#B45309', fontWeight: 700 }}>
+                                      Driver: {order.deliveryPartnerName} {order.vehicleNumber ? `(${order.vehicleNumber})` : ''}
+                                    </span>
+                                  )}
+                                </div>
                               ) : isPacked ? (
                                 <span style={{ fontSize: '10.5px', fontWeight: 800, padding: '3px 8px', borderRadius: '5px', background: '#DCFCE7', color: '#15803D' }}>
                                   ✓ Packed
@@ -1708,7 +1770,7 @@ export default function WarehouseCratingPage() {
                                 <button
                                   type="button"
                                   disabled={isPackingThis}
-                                  onClick={() => handleMarkPacked(order.id)}
+                                  onClick={() => handleOpenPackingVerification(order)}
                                   style={{
                                     fontSize: '12px',
                                     fontWeight: 800,
@@ -1722,6 +1784,7 @@ export default function WarehouseCratingPage() {
                                     alignItems: 'center',
                                     gap: '4px'
                                   }}
+                                  title="Verify Produce Items & Confirm Packing"
                                 >
                                   <Check size={13} />
                                   <span>{isPackingThis ? 'Packing...' : 'Pack'}</span>
@@ -1914,10 +1977,10 @@ export default function WarehouseCratingPage() {
                     gap: '10px'
                   }}>
                     {lot.deliveryPartnerName ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                         <Truck size={16} color="#D97706" />
                         <span style={{ fontSize: '12px', fontWeight: 800, color: '#92400E' }}>
-                          Driver: {lot.deliveryPartnerName} {lot.vehicleNumber ? `(${lot.vehicleNumber})` : ''}
+                          Driver: {lot.deliveryPartnerName} {lot.vehicleNumber ? `(${lot.vehicleNumber})` : ''} {lot.deliveryPartnerPhone ? `• 📞 +91 ${lot.deliveryPartnerPhone}` : ''}
                         </span>
                       </div>
                     ) : (
@@ -1929,7 +1992,7 @@ export default function WarehouseCratingPage() {
                     )}
 
                     {/* Actions */}
-                    <div style={{ display: 'flex', gap: '8px' }}>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                       {(lot.status === 'PENDING_PACKING' || lot.status === 'PARTIALLY_PACKED') && (
                         <button
                           type="button"
@@ -1962,9 +2025,40 @@ export default function WarehouseCratingPage() {
                       )}
 
                       {lot.status === 'OUT_FOR_DELIVERY' && (
-                        <span style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            background: '#FEF3C7',
+                            color: '#92400E',
+                            border: '1px solid #FDE68A',
+                            padding: '4px 10px',
+                            borderRadius: '6px',
+                            fontSize: '11.5px',
+                            fontWeight: 800
+                          }}>
+                            <Truck size={13} color="#D97706" />
+                            <span>In-Transit</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setViewHandoverDetailsLot(lot)}
+                            style={{
+                              padding: '4px 10px',
+                              borderRadius: '6px',
+                              border: '1px solid #CBD5E1',
+                              background: '#FFFFFF',
+                              color: '#334155',
+                              fontSize: '11.5px',
+                              fontWeight: 700,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            View Manifest
+                          </button>
+                        </div>
+                      )}
                           gap: '5px',
                           background: '#FEF3C7',
                           color: '#92400E',
@@ -2636,19 +2730,47 @@ export default function WarehouseCratingPage() {
                 </div>
               </div>
 
-              {/* Handover Summary Box */}
-              <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '12px', marginBottom: '18px', fontSize: '12.5px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+              {/* Handover Summary Box & Assigned Driver Preview */}
+              <div style={{ background: '#F8FAFC', border: '1.5px solid #CBD5E1', borderRadius: '10px', padding: '14px', marginBottom: '18px', fontSize: '12.5px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
                   <span style={{ color: '#64748B' }}>Destination Community:</span>
-                  <strong style={{ color: '#0F172A' }}>{handoverLot.societyName}</strong>
+                  <strong style={{ color: '#0F172A', fontSize: '13px' }}>{handoverLot.societyName}</strong>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
                   <span style={{ color: '#64748B' }}>Total Customer Flats in Lot:</span>
                   <strong>{handoverLot.orders.length} {handoverLot.orders.length === 1 ? 'Flat' : 'Flats'}</strong>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                   <span style={{ color: '#64748B' }}>Total Produce Weight:</span>
                   <strong style={{ color: '#234B3C' }}>{handoverLot.totalWeightKg} kg</strong>
+                </div>
+
+                <div style={{ borderTop: '1px dashed #CBD5E1', paddingTop: '8px', marginTop: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Truck size={13} color="#D97706" />
+                      <span>Assigned Driver:</span>
+                    </span>
+                    <strong style={{ color: '#92400E' }}>{driverName || 'No driver selected'} ({driverPhone || '—'})</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <span style={{ color: '#64748B' }}>Vehicle Info:</span>
+                    <strong style={{ color: '#1E293B' }}>{vehicleType} • <span style={{ fontFamily: 'monospace' }}>{vehicleNumber || '—'}</span></strong>
+                  </div>
+
+                  {/* Quick Pills of Customer Flats in Lot */}
+                  <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #E2E8F0' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      Flats Handed Over to Driver ({handoverLot.orders.length}):
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxHeight: '90px', overflowY: 'auto' }}>
+                      {handoverLot.orders.map(o => (
+                        <span key={o.id} style={{ background: '#FFFFFF', border: '1px solid #CBD5E1', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, color: '#0F172A' }}>
+                          Flat {extractBlockAndFlat(o.flatNo).flat || o.flatNo} ({o.userName || 'Resident'})
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -2656,24 +2778,25 @@ export default function WarehouseCratingPage() {
                 <button
                   type="button"
                   onClick={() => setHandoverLot(null)}
-                  style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid #CBD5E1', background: '#FFF', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+                  disabled={isSubmittingHandover}
+                  style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid #CBD5E1', background: '#FFF', fontSize: '13px', fontWeight: 600, cursor: isSubmittingHandover ? 'not-allowed' : 'pointer' }}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   className="admin-btn-accent"
-                  disabled={!driverId || deliveryRiders.length === 0}
+                  disabled={!driverId || deliveryRiders.length === 0 || isSubmittingHandover}
                   style={{
                     padding: '8px 18px',
                     borderRadius: '6px',
                     fontSize: '13px',
                     fontWeight: 800,
-                    opacity: (!driverId || deliveryRiders.length === 0) ? 0.5 : 1,
-                    cursor: (!driverId || deliveryRiders.length === 0) ? 'not-allowed' : 'pointer'
+                    opacity: (!driverId || deliveryRiders.length === 0 || isSubmittingHandover) ? 0.5 : 1,
+                    cursor: (!driverId || deliveryRiders.length === 0 || isSubmittingHandover) ? 'not-allowed' : 'pointer'
                   }}
                 >
-                  Confirm Handover & Dispatch ➔
+                  {isSubmittingHandover ? 'Dispatching & Handing Over...' : 'Confirm Handover & Dispatch ➔'}
                 </button>
               </div>
             </form>
@@ -3136,6 +3259,7 @@ export default function WarehouseCratingPage() {
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button
                     type="button"
+                    disabled={Boolean(packingOrderIds[packingModalOrder.id])}
                     onClick={() => handleConfirmVerification(false)}
                     style={{
                       padding: '8px 14px',
@@ -3145,13 +3269,15 @@ export default function WarehouseCratingPage() {
                       color: '#0F172A',
                       fontSize: '13px',
                       fontWeight: 800,
-                      cursor: 'pointer'
+                      cursor: packingOrderIds[packingModalOrder.id] ? 'not-allowed' : 'pointer',
+                      opacity: packingOrderIds[packingModalOrder.id] ? 0.6 : 1
                     }}
                   >
-                    ✓ Confirm Packed
+                    {packingOrderIds[packingModalOrder.id] ? 'Saving...' : '✓ Confirm Packed'}
                   </button>
                   <button
                     type="button"
+                    disabled={Boolean(packingOrderIds[packingModalOrder.id])}
                     onClick={() => handleConfirmVerification(true)}
                     className="admin-btn-accent"
                     style={{
@@ -3162,13 +3288,279 @@ export default function WarehouseCratingPage() {
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: '6px',
-                      background: '#234B3C'
+                      background: '#234B3C',
+                      cursor: packingOrderIds[packingModalOrder.id] ? 'not-allowed' : 'pointer',
+                      opacity: packingOrderIds[packingModalOrder.id] ? 0.6 : 1
                     }}
                   >
                     <Printer size={14} />
-                    <span>Confirm & Print Label</span>
+                    <span>{packingOrderIds[packingModalOrder.id] ? 'Saving...' : 'Confirm & Print Label'}</span>
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* MODAL: BULK PACK REVIEW & VERIFICATION */}
+      {bulkPackModalCrate && (() => {
+        const crate = bulkPackModalCrate;
+        const candidateOrders = crate.orders.filter(
+          o => o.status !== 'PACKED' && o.status !== 'OUT_FOR_DELIVERY' && o.status !== 'DELIVERED' && o.status !== 'CANCELLED'
+        );
+
+        return (
+          <div style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000,
+            padding: '20px'
+          }}>
+            <div style={{
+              background: '#FFFFFF',
+              borderRadius: '16px',
+              maxWidth: '560px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              border: '2px solid #166534',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)',
+              display: 'flex',
+              flexDirection: 'column'
+            }}>
+              {/* Header */}
+              <div style={{
+                padding: '16px 20px',
+                borderBottom: '1.5px solid #E2E8F0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: '#FAFBFB'
+              }}>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 800, color: '#166534', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                    Bulk Packing Verification
+                  </div>
+                  <h3 style={{ fontSize: '17px', fontWeight: 900, color: '#0F172A', margin: '2px 0 0' }}>
+                    Pack All Flats in {crate.societyName} [{crate.blockName}]
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setBulkPackModalCrate(null)}
+                  disabled={isSubmittingBulkPack}
+                  style={{
+                    background: '#F1F5F9',
+                    border: 'none',
+                    borderRadius: '8px',
+                    width: '32px',
+                    height: '32px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    color: '#64748B'
+                  }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ background: '#F0FDF4', border: '1.5px solid #86EFAC', borderRadius: '10px', padding: '12px 14px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 800, color: '#166534', marginBottom: '4px' }}>
+                    {candidateOrders.length} Flats Pending Packing · ~{crate.totalWeightKg.toFixed(1)} kg Total Weight
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#475569' }}>
+                    Slot: <strong>{crate.slotLabel} ({crate.slotTimeWindow})</strong> · Date: <strong>{crate.deliveryDate}</strong>
+                  </div>
+                </div>
+
+                <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A' }}>
+                  Flats & Produce Contents in this Block Crate:
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '280px', overflowY: 'auto' }}>
+                  {candidateOrders.map(order => (
+                    <div key={order.id} style={{ padding: '10px 12px', borderRadius: '8px', background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <span style={{ fontWeight: 800, color: '#0F172A', fontSize: '13px' }}>
+                          Flat {extractBlockAndFlat(order.flatNo).flat || order.flatNo} • {order.userName || 'Resident'}
+                        </span>
+                        <span style={{ fontSize: '11px', fontFamily: 'monospace', color: '#64748B' }}>
+                          #{order.id}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {(order.items || []).map((it, idx) => (
+                          <span key={idx} style={{ background: '#FFFFFF', border: '1px solid #CBD5E1', padding: '2px 7px', borderRadius: '4px', fontSize: '11px', color: '#334155' }}>
+                            {it.name} <strong>({it.qty} * {it.unit || '1 pc'})</strong>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ fontSize: '11.5px', color: '#64748B', fontStyle: 'italic', background: '#FFFBEB', border: '1px solid #FDE68A', padding: '8px 12px', borderRadius: '6px' }}>
+                  ⚠️ Confirming will update the status of all {candidateOrders.length} flats to <strong>PACKED</strong> and advance the lot to Handover Ready.
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div style={{ padding: '14px 20px', borderTop: '1.5px solid #E2E8F0', background: '#FAFBFB', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setBulkPackModalCrate(null)}
+                  disabled={isSubmittingBulkPack}
+                  style={{ padding: '8px 16px', borderRadius: '8px', border: '1.5px solid #CBD5E1', background: '#FFF', fontSize: '13px', fontWeight: 700, cursor: 'pointer', color: '#475569' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={executeBulkPackCrate}
+                  disabled={isSubmittingBulkPack}
+                  style={{ padding: '8px 18px', borderRadius: '8px', border: 'none', background: '#166534', color: '#FFF', fontSize: '13px', fontWeight: 800, cursor: isSubmittingBulkPack ? 'not-allowed' : 'pointer', opacity: isSubmittingBulkPack ? 0.7 : 1 }}
+                >
+                  {isSubmittingBulkPack ? 'Packing All Flats...' : `✓ Confirm & Pack All (${candidateOrders.length}) Flats`}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* MODAL: HANDOVER DISPATCH DETAILS & MANIFEST */}
+      {viewHandoverDetailsLot && (() => {
+        const lot = viewHandoverDetailsLot;
+        const dName = lot.deliveryPartnerName || 'Driver';
+        const dPhone = lot.deliveryPartnerPhone || '';
+        const dVehicle = lot.vehicleNumber || 'KA-04-E-5581';
+        const dType = lot.vehicleType || 'Tata Ace (Mini-Truck)';
+        const ordersList = Array.isArray(lot.orders) ? lot.orders : [];
+
+        return (
+          <div style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000,
+            padding: '20px'
+          }}>
+            <div style={{
+              background: '#FFFFFF',
+              borderRadius: '16px',
+              maxWidth: '540px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              border: '2px solid #D97706',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)',
+              display: 'flex',
+              flexDirection: 'column'
+            }}>
+              {/* Header */}
+              <div style={{
+                padding: '16px 20px',
+                borderBottom: '1.5px solid #E2E8F0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: '#FFFBEB'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '38px', height: '38px', borderRadius: '8px', background: '#D97706', color: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Truck size={20} />
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: '16px', fontWeight: 900, color: '#92400E', margin: 0 }}>
+                      Handover Dispatch Manifest
+                    </h3>
+                    <div style={{ fontSize: '11.5px', color: '#B45309' }}>
+                      {lot.societyName} • Lot #{lot.lotId || 'DISPATCH'}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setViewHandoverDetailsLot(null)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Driver Details Card */}
+              <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ background: '#F8FAFC', border: '1.5px solid #CBD5E1', borderRadius: '10px', padding: '14px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+                    Assigned Delivery Partner & Vehicle
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <span style={{ color: '#475569', fontSize: '12px' }}>Driver Name:</span>
+                    <strong style={{ fontSize: '14px', color: '#0F172A' }}>{dName}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <span style={{ color: '#475569', fontSize: '12px' }}>Contact Phone:</span>
+                    {dPhone ? (
+                      <a href={`tel:${dPhone}`} style={{ color: '#0284C7', fontWeight: 800, fontSize: '13px', textDecoration: 'none' }}>
+                        📞 +91 {dPhone}
+                      </a>
+                    ) : (
+                      <span style={{ color: '#94A3B8' }}>Not provided</span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <span style={{ color: '#475569', fontSize: '12px' }}>Vehicle:</span>
+                    <strong style={{ color: '#1E293B', fontSize: '13px' }}>{dType} • <span style={{ fontFamily: 'monospace' }}>{dVehicle}</span></strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed #CBD5E1', paddingTop: '6px', marginTop: '6px' }}>
+                    <span style={{ color: '#475569', fontSize: '12px' }}>Dispatched By:</span>
+                    <strong style={{ color: '#234B3C', fontSize: '12px' }}>{lot.dispatchedBy || 'Warehouse Dispatch Lead'}</strong>
+                  </div>
+                </div>
+
+                {/* Flats Included */}
+                <div>
+                  <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A', marginBottom: '6px' }}>
+                    Flats in this Dispatch ({ordersList.length}):
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto' }}>
+                    {ordersList.map(o => (
+                      <div key={o.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0', fontSize: '12px' }}>
+                        <div>
+                          <strong>Flat {extractBlockAndFlat(o.flatNo).flat || o.flatNo}</strong> • {o.userName || 'Resident'}
+                        </div>
+                        <span style={{ color: '#059669', fontWeight: 700, fontSize: '11px' }}>
+                          {(o.items || []).length} items
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div style={{ padding: '12px 20px', borderTop: '1px solid #E2E8F0', background: '#FAFBFB', textAlign: 'right' }}>
+                <button
+                  type="button"
+                  onClick={() => setViewHandoverDetailsLot(null)}
+                  style={{ padding: '7px 18px', background: '#234B3C', color: '#FFF', border: 'none', borderRadius: '6px', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Close Manifest
+                </button>
               </div>
             </div>
           </div>
