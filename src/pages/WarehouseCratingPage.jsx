@@ -3157,7 +3157,7 @@ export default function WarehouseCratingPage() {
               maxWidth: '520px',
               width: '100%',
               maxHeight: '90vh',
-              overflowY: 'auto',
+              overflow: 'hidden',
               border: '2px solid #234B3C',
               boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)',
               display: 'flex',
@@ -3170,7 +3170,8 @@ export default function WarehouseCratingPage() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                background: '#FAFBFB'
+                background: '#FAFBFB',
+                flexShrink: 0
               }}>
                 <div>
                   <div style={{ fontSize: '11px', fontWeight: 800, color: '#234B3C', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
@@ -3201,7 +3202,7 @@ export default function WarehouseCratingPage() {
               </div>
 
               {/* Modal Content */}
-              <div style={{ padding: '20px', flex: 1, display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ padding: '20px', flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 {/* Destination & Target Block Crate Banner */}
                 <div style={{
                   background: '#F0FDF4',
@@ -3362,7 +3363,8 @@ export default function WarehouseCratingPage() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                gap: '10px'
+                gap: '10px',
+                flexShrink: 0
               }}>
                 <button
                   type="button"
@@ -3453,7 +3455,7 @@ export default function WarehouseCratingPage() {
               maxWidth: '560px',
               width: '100%',
               maxHeight: '90vh',
-              overflowY: 'auto',
+              overflow: 'hidden',
               border: '2px solid #166534',
               boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)',
               display: 'flex',
@@ -3466,7 +3468,8 @@ export default function WarehouseCratingPage() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                background: '#FAFBFB'
+                background: '#FAFBFB',
+                flexShrink: 0
               }}>
                 <div>
                   <div style={{ fontSize: '11px', fontWeight: 800, color: '#166534', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
@@ -3498,7 +3501,7 @@ export default function WarehouseCratingPage() {
               </div>
 
               {/* Body */}
-              <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ padding: '20px', flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 <div style={{ background: '#F0FDF4', border: '1.5px solid #86EFAC', borderRadius: '10px', padding: '12px 14px' }}>
                   <div style={{ fontSize: '13px', fontWeight: 800, color: '#166534', marginBottom: '4px' }}>
                     {candidateOrders.length} Flats Pending Packing · ~{crate.totalWeightKg.toFixed(1)} kg Total Weight
@@ -3540,7 +3543,7 @@ export default function WarehouseCratingPage() {
               </div>
 
               {/* Footer */}
-              <div style={{ padding: '14px 20px', borderTop: '1.5px solid #E2E8F0', background: '#FAFBFB', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <div style={{ padding: '14px 20px', borderTop: '1.5px solid #E2E8F0', background: '#FAFBFB', display: 'flex', justifyContent: 'flex-end', gap: '10px', flexShrink: 0 }}>
                 <button
                   type="button"
                   onClick={() => setBulkPackModalCrate(null)}
@@ -3590,7 +3593,7 @@ export default function WarehouseCratingPage() {
               maxWidth: '540px',
               width: '100%',
               maxHeight: '90vh',
-              overflowY: 'auto',
+              overflow: 'hidden',
               border: '2px solid #D97706',
               boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)',
               display: 'flex',
@@ -3603,7 +3606,8 @@ export default function WarehouseCratingPage() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                background: '#FFFBEB'
+                background: '#FFFBEB',
+                flexShrink: 0
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <div style={{ width: '38px', height: '38px', borderRadius: '8px', background: '#D97706', color: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -3628,7 +3632,7 @@ export default function WarehouseCratingPage() {
               </div>
 
               {/* Driver Details Card */}
-              <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ padding: '20px', flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 <div style={{ background: '#F8FAFC', border: '1.5px solid #CBD5E1', borderRadius: '10px', padding: '14px' }}>
                   <div style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
                     Assigned Delivery Partner & Vehicle
@@ -3678,7 +3682,7 @@ export default function WarehouseCratingPage() {
               </div>
 
               {/* Footer */}
-              <div style={{ padding: '12px 20px', borderTop: '1px solid #E2E8F0', background: '#FAFBFB', textAlign: 'right' }}>
+              <div style={{ padding: '12px 20px', borderTop: '1px solid #E2E8F0', background: '#FAFBFB', textAlign: 'right', flexShrink: 0 }}>
                 <button
                   type="button"
                   onClick={() => setViewHandoverDetailsLot(null)}

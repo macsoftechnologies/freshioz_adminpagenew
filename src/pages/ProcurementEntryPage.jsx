@@ -1355,14 +1355,26 @@ export default function ProcurementEntryPage() {
           <div style={{
             background: '#FFFFFF',
             borderRadius: '16px',
-            maxWidth: '540px',
+            maxWidth: '560px',
             width: '100%',
-            padding: '24px',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)',
-            border: '1.5px solid #E2E8F0'
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            border: '1.5px solid #CBD5E1',
+            overflow: 'hidden'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {/* Fixed Modal Header */}
+            <div style={{
+              padding: '16px 20px',
+              borderBottom: '1.5px solid #E2E8F0',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: '#FAFBFB',
+              flexShrink: 0
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <div style={{
                   width: '36px',
                   height: '36px',
@@ -1371,7 +1383,8 @@ export default function ProcurementEntryPage() {
                   color: '#B45309',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center'
+                  justifyContent: 'center',
+                  flexShrink: 0
                 }}>
                   <AlertTriangle size={20} />
                 </div>
@@ -1383,64 +1396,102 @@ export default function ProcurementEntryPage() {
                 type="button"
                 onClick={() => setShowConfirmModal(false)}
                 style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '4px' }}
+                aria-label="Close modal"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <p style={{ fontSize: '13px', color: '#475569', lineHeight: 1.5, margin: '0 0 16px' }}>
-              Are you sure you want to log this APMC Mandi purchase? This will commit <strong>₹{totalAmount.toLocaleString()}</strong> (₹{produceAmount.toLocaleString()} produce + ₹{transportCharge} transport freight) to the ledger.
-            </p>
-
+            {/* Scrollable Modal Body */}
             <div style={{
-              background: '#F8FAFC',
-              borderRadius: '10px',
-              padding: '12px 14px',
-              border: '1px solid #E2E8F0',
-              marginBottom: '20px',
-              fontSize: '12.5px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '6px'
+              padding: '18px 20px',
+              overflowY: 'auto',
+              flex: 1
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#64748B' }}>Vendor / Mandi Yard:</span>
-                <strong style={{ color: '#0F172A' }}>{vendorName} ({mandiLocation})</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#64748B' }}>Bill / Invoice #:</span>
-                <span style={{ color: '#0F172A', fontWeight: 700, fontFamily: 'monospace' }}>{billNumber}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#64748B' }}>Bill Photo Attached:</span>
-                <span style={{ color: receiptPhoto ? '#059669' : '#B45309', fontWeight: 700 }}>
-                  {receiptPhoto ? '✓ Yes (Weighing Slip Uploaded)' : '⚠ No Photo Attached'}
-                </span>
-              </div>
-              <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '6px', marginTop: '4px' }}>
-                <div style={{ color: '#64748B', marginBottom: '4px', fontWeight: 700 }}>Line Items to be Procured:</div>
-                {items.map((it, idx) => (
-                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
-                    <span>• {it.name} ({it.qty} * {it.unit}) @ ₹{it.rate}/kg</span>
-                    <strong>₹{it.total.toLocaleString()}</strong>
+              <p style={{ fontSize: '13px', color: '#475569', lineHeight: 1.5, margin: '0 0 14px' }}>
+                Are you sure you want to log this APMC Mandi purchase? This will commit <strong>₹{totalAmount.toLocaleString()}</strong> (₹{produceAmount.toLocaleString()} produce + ₹{transportCharge} transport freight) to the ledger.
+              </p>
+
+              <div style={{
+                background: '#F8FAFC',
+                borderRadius: '10px',
+                padding: '12px 14px',
+                border: '1px solid #E2E8F0',
+                fontSize: '12.5px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '6px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#64748B' }}>Vendor / Mandi Yard:</span>
+                  <strong style={{ color: '#0F172A' }}>{vendorName} ({mandiLocation})</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#64748B' }}>Bill / Invoice #:</span>
+                  <span style={{ color: '#0F172A', fontWeight: 700, fontFamily: 'monospace' }}>{billNumber}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#64748B' }}>Bill Photo Attached:</span>
+                  <span style={{ color: receiptPhoto ? '#059669' : '#B45309', fontWeight: 700 }}>
+                    {receiptPhoto ? '✓ Yes (Weighing Slip Uploaded)' : '⚠ No Photo Attached'}
+                  </span>
+                </div>
+
+                {/* Dedicated Scrollable Line Items Box */}
+                <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '8px', marginTop: '4px' }}>
+                  <div style={{ color: '#334155', marginBottom: '6px', fontWeight: 800, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>Line Items to be Procured ({items.length}):</span>
+                    <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>Scroll list to inspect</span>
                   </div>
-                ))}
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #E2E8F0', paddingTop: '6px', marginTop: '4px' }}>
-                <span style={{ color: '#64748B' }}>Produce Subtotal:</span>
-                <strong>₹{produceAmount.toLocaleString()}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#0284C7', fontWeight: 700 }}>Transport / Freight:</span>
-                <strong style={{ color: '#0284C7' }}>₹{transportCharge.toLocaleString()}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1.5px solid #CBD5E1', paddingTop: '6px', marginTop: '4px' }}>
-                <span style={{ color: '#0F172A', fontWeight: 800 }}>Total Mandi Spend:</span>
-                <strong style={{ color: '#059669', fontSize: '15px' }}>₹{totalAmount.toLocaleString()}</strong>
+                  <div style={{
+                    maxHeight: '180px',
+                    overflowY: 'auto',
+                    background: '#FFFFFF',
+                    border: '1.5px solid #E2E8F0',
+                    borderRadius: '8px',
+                    padding: '8px 12px'
+                  }}>
+                    {items.map((it, idx) => (
+                      <div 
+                        key={idx} 
+                        style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between', 
+                          padding: '4px 0',
+                          borderBottom: idx === items.length - 1 ? 'none' : '1px dashed #F1F5F9'
+                        }}
+                      >
+                        <span style={{ color: '#1E293B' }}>• {it.name} ({it.qty} {it.unit || 'kg'}) @ ₹{it.rate}/kg</span>
+                        <strong style={{ color: '#0F172A' }}>₹{it.total.toLocaleString()}</strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #E2E8F0', paddingTop: '6px', marginTop: '4px' }}>
+                  <span style={{ color: '#64748B' }}>Produce Subtotal:</span>
+                  <strong>₹{produceAmount.toLocaleString()}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#0284C7', fontWeight: 700 }}>Transport / Freight:</span>
+                  <strong style={{ color: '#0284C7' }}>₹{transportCharge.toLocaleString()}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1.5px solid #CBD5E1', paddingTop: '6px', marginTop: '4px' }}>
+                  <span style={{ color: '#0F172A', fontWeight: 800 }}>Total Mandi Spend:</span>
+                  <strong style={{ color: '#059669', fontSize: '15px' }}>₹{totalAmount.toLocaleString()}</strong>
+                </div>
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '10px' }}>
+            {/* Fixed Modal Action Footer */}
+            <div style={{
+              padding: '14px 20px',
+              borderTop: '1.5px solid #E2E8F0',
+              background: '#FAFBFB',
+              display: 'flex',
+              gap: '12px',
+              flexShrink: 0
+            }}>
               <button
                 type="button"
                 onClick={() => setShowConfirmModal(false)}
@@ -1470,10 +1521,14 @@ export default function ProcurementEntryPage() {
                   color: '#FFFFFF',
                   fontSize: '13px',
                   fontWeight: 800,
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
                 }}
               >
-                Yes, Confirm & Log Bill
+                <span>Yes, Confirm & Log Bill</span>
               </button>
             </div>
           </div>
