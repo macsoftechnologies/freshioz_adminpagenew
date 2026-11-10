@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { 
@@ -15,6 +15,8 @@ import {
   Eye, 
   X, 
   AlertCircle,
+  AlertTriangle,
+  Bell,
   Layers,
   ChevronRight,
   ArrowRight,
@@ -287,7 +289,7 @@ export default function OrdersFulfillmentPage() {
         return;
       }
       if (targetOrder.status === 'CANCELLED') {
-        showToast('This order has already been cancelled.', 'info');
+        showToast('🚫 DO NOT DELIVER: This order was cancelled by the customer. Retain items and return to Hub.', 'error');
         return;
       }
     }
@@ -475,6 +477,67 @@ export default function OrdersFulfillmentPage() {
   const countRiderPending = riderBaseOrders.filter(o => o.status === 'OUT_FOR_DELIVERY' || o.status === 'PACKED').length;
   const countRiderDelivered = riderBaseOrders.filter(o => o.status === 'DELIVERED').length;
   const countRiderCancelled = riderBaseOrders.filter(o => o.status === 'CANCELLED').length;
+
+  // Active customer-cancelled orders assigned to this rider's route run
+  const customerCancelledOrders = useMemo(() => {
+    return riderBaseOrders.filter(o => o.status === 'CANCELLED');
+  }, [riderBaseOrders]);
+
+  // Audio synthesizer & mobile haptic alert when an order is cancelled
+  const playCancellationAlertChime = React.useCallback(() => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(800, now);
+      osc.frequency.setValueAtTime(500, now + 0.15);
+      gain.gain.setValueAtTime(0.25, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.35);
+
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate([300, 150, 300]);
+      }
+    } catch (e) {
+      // Audio or vibration blocked
+    }
+  }, []);
+
+  // Track cancellations in real-time to alert the driver immediately
+  const prevCancelledIdsRef = useRef(new Set());
+  const isInitialCancelLoadRef = useRef(true);
+
+  useEffect(() => {
+    if (!isDeliveryExecutive) return;
+    const currentCancelledIds = new Set(customerCancelledOrders.map(o => o.id));
+
+    if (isInitialCancelLoadRef.current) {
+      prevCancelledIdsRef.current = currentCancelledIds;
+      isInitialCancelLoadRef.current = false;
+      return;
+    }
+
+    const newlyCancelled = customerCancelledOrders.filter(o => !prevCancelledIdsRef.current.has(o.id));
+    if (newlyCancelled.length > 0) {
+      playCancellationAlertChime();
+      newlyCancelled.forEach(o => {
+        showToast(
+          `🚨 DO NOT DELIVER: Order #${o.id} for Flat ${o.flatNo || o.flatNumber} (${o.userName}) was CANCELLED by resident! Return items to Hub.`,
+          'error'
+        );
+      });
+    }
+
+    prevCancelledIdsRef.current = currentCancelledIds;
+  }, [customerCancelledOrders, isDeliveryExecutive, playCancellationAlertChime, showToast]);
+
   const riderTotalCodToCollect = riderBaseOrders
     .filter(o => o.status !== 'DELIVERED' && o.status !== 'CANCELLED' && ((o.paymentMethod || '').includes('PAY_ON_DELIVERY') || o.paymentMethod === 'COD'))
     .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
@@ -989,7 +1052,7 @@ export default function OrdersFulfillmentPage() {
             {[
               { id: 'PENDING', label: `1. To Deliver (${countRiderPending})`, icon: Truck },
               { id: 'DELIVERED', label: `2. Delivered (${countRiderDelivered})`, icon: CheckCircle2 },
-              { id: 'CANCELLED', label: `3. Returns (${countRiderCancelled})`, icon: XCircle },
+              { id: 'CANCELLED', label: `3. Returns (${countRiderCancelled})`, icon: XCircle, hasAlert: customerCancelledOrders.length > 0 },
               { id: 'ALL', label: `4. All Stops (${riderBaseOrders.length})`, icon: Layers },
               { id: 'PAYOUTS', label: `5. My Payouts (${myDriverPayouts.length})`, icon: Wallet }
             ].map(tab => {
@@ -1007,17 +1070,26 @@ export default function OrdersFulfillmentPage() {
                     fontWeight: 800,
                     cursor: 'pointer',
                     whiteSpace: 'nowrap',
-                    border: active ? '1.5px solid #059669' : '1px solid #CBD5E1',
-                    background: active ? '#059669' : '#FFFFFF',
-                    color: active ? '#FFFFFF' : '#475569',
+                    border: active
+                      ? (tab.hasAlert ? '1.5px solid #DC2626' : '1.5px solid #059669')
+                      : (tab.hasAlert ? '1.5px solid #F87171' : '1px solid #CBD5E1'),
+                    background: active
+                      ? (tab.hasAlert ? '#DC2626' : '#059669')
+                      : (tab.hasAlert ? '#FEF2F2' : '#FFFFFF'),
+                    color: active ? '#FFFFFF' : (tab.hasAlert ? '#991B1B' : '#475569'),
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '4px',
                     transition: 'all 0.15s ease'
                   }}
                 >
-                  <Icon size={12} />
+                  <Icon size={12} color={active ? '#FFFFFF' : (tab.hasAlert ? '#DC2626' : undefined)} />
                   <span>{tab.label}</span>
+                  {tab.hasAlert && !active && (
+                    <span style={{ background: '#DC2626', color: '#FFF', fontSize: '9.5px', padding: '1px 5px', borderRadius: '9999px', fontWeight: 900 }}>
+                      ⚠️ DO NOT DELIVER
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -1447,6 +1519,102 @@ export default function OrdersFulfillmentPage() {
       )}
 
       {/* ================= PRIMARY CONTENT AREA ================= */}
+      {/* URGENT DRIVER CANCELLATION NOTICE BANNER */}
+      {isDeliveryExecutive && customerCancelledOrders.length > 0 && (
+        <div style={{
+          background: '#FEF2F2',
+          border: '2px solid #EF4444',
+          borderRadius: '12px',
+          padding: '12px 16px',
+          marginBottom: '12px',
+          boxShadow: '0 4px 14px rgba(239, 68, 68, 0.12)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{
+                background: '#DC2626',
+                color: '#FFF',
+                width: '32px',
+                height: '32px',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 900,
+                fontSize: '16px',
+                flexShrink: 0
+              }}>
+                🚫
+              </div>
+              <div>
+                <div style={{ fontSize: '13.5px', fontWeight: 900, color: '#991B1B' }}>
+                  DO NOT DELIVER — {customerCancelledOrders.length} Order(s) Cancelled on Your Route!
+                </div>
+                <div style={{ fontSize: '11.5px', color: '#B91C1C', marginTop: '1px' }}>
+                  Resident cancelled this order. Retain crate items in vehicle and return them to the Warehouse Hub inventory.
+                </div>
+              </div>
+            </div>
+            {riderTab !== 'CANCELLED' && (
+              <button
+                type="button"
+                onClick={() => handleRiderTabChange('CANCELLED')}
+                style={{
+                  background: '#DC2626',
+                  color: '#FFF',
+                  border: 'none',
+                  padding: '6px 14px',
+                  borderRadius: '6px',
+                  fontSize: '11.5px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 4px rgba(220, 38, 38, 0.25)'
+                }}
+              >
+                Review Cancelled Stops ({customerCancelledOrders.length}) →
+              </button>
+            )}
+          </div>
+
+          {/* List of Cancelled Flats */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed #FCA5A5' }}>
+            {customerCancelledOrders.map(co => (
+              <div
+                key={co.id}
+                style={{
+                  background: '#FFFFFF',
+                  border: '1.5px solid #F87171',
+                  borderRadius: '6px',
+                  padding: '4px 10px',
+                  fontSize: '11.5px',
+                  color: '#1E293B',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <span style={{ fontWeight: 900, color: '#DC2626', fontSize: '12.5px' }}>
+                  {co.flatNo || co.flatNumber || 'Flat'}
+                </span>
+                <span style={{ color: '#94A3B8' }}>•</span>
+                <span style={{ fontWeight: 700, color: '#0F172A' }}>{co.userName}</span>
+                <span style={{ fontFamily: 'monospace', fontSize: '11px', color: '#64748B' }}>#{co.id}</span>
+                <span style={{
+                  background: '#FEE2E2',
+                  color: '#991B1B',
+                  fontSize: '10.5px',
+                  fontWeight: 800,
+                  padding: '1px 6px',
+                  borderRadius: '4px'
+                }}>
+                  {co.cancelledReason || 'Cancelled by resident'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {isDeliveryExecutive ? (
         riderTab === 'PAYOUTS' ? (
           /* ================= DRIVER NON-EDITABLE TRANSACTION & EARNINGS VIEW ================= */
@@ -1792,6 +1960,7 @@ export default function OrdersFulfillmentPage() {
             riderGroupedBlocks.map((group) => {
               const pendingInGroup = group.orders.filter(o => o.status !== 'DELIVERED' && o.status !== 'CANCELLED').length;
               const deliveredInGroup = group.orders.filter(o => o.status === 'DELIVERED').length;
+              const cancelledInGroup = group.orders.filter(o => o.status === 'CANCELLED').length;
 
               return (
                 <div
@@ -1799,14 +1968,14 @@ export default function OrdersFulfillmentPage() {
                   style={{
                     background: '#FFFFFF',
                     borderRadius: '12px',
-                    border: pendingInGroup > 0 ? '1.5px solid #94A3B8' : '1.5px solid #BBF7D0',
+                    border: pendingInGroup > 0 ? '1.5px solid #94A3B8' : (cancelledInGroup > 0 && pendingInGroup === 0 ? '1.5px solid #FCA5A5' : '1.5px solid #BBF7D0'),
                     boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
                     overflow: 'hidden'
                   }}
                 >
                   {/* Society + Block Crate Header with 1-Tap Maps Navigation */}
                   <div style={{
-                    background: pendingInGroup > 0 ? '#F8FAFC' : '#F0FDF4',
+                    background: pendingInGroup > 0 ? '#F8FAFC' : (cancelledInGroup > 0 ? '#FEF2F2' : '#F0FDF4'),
                     padding: '10px 14px',
                     borderBottom: '1px solid #E2E8F0',
                     display: 'flex',
@@ -1833,6 +2002,8 @@ export default function OrdersFulfillmentPage() {
                         {pendingInGroup > 0 ? <span style={{ color: '#EA580C' }}>{pendingInGroup} Pending</span> : null}
                         {pendingInGroup > 0 && deliveredInGroup > 0 ? ' · ' : null}
                         {deliveredInGroup > 0 ? <span style={{ color: '#059669' }}>{deliveredInGroup} Delivered</span> : null}
+                        {(pendingInGroup > 0 || deliveredInGroup > 0) && cancelledInGroup > 0 ? ' · ' : null}
+                        {cancelledInGroup > 0 ? <span style={{ color: '#DC2626', background: '#FEE2E2', padding: '1px 6px', borderRadius: '4px', fontWeight: 900 }}>🚫 {cancelledInGroup} Cancelled (Do Not Deliver)</span> : null}
                       </span>
                     </div>
 
@@ -2020,9 +2191,29 @@ export default function OrdersFulfillmentPage() {
                               </button>
 
                               {isCancelled ? (
-                                <span style={{ color: '#DC2626', fontWeight: 800, fontSize: '11.5px', background: '#FEF2F2', padding: '4px 9px', borderRadius: '6px', border: '1px solid #FCA5A5' }}>
-                                  ✕ Undelivered ({order.cancelledReason || 'Returned'})
-                                </span>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
+                                  <span style={{
+                                    color: '#991B1B',
+                                    fontWeight: 900,
+                                    fontSize: '11.5px',
+                                    background: '#FEE2E2',
+                                    border: '1.5px solid #EF4444',
+                                    padding: '3px 8px',
+                                    borderRadius: '6px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px'
+                                  }}>
+                                    <XCircle size={13} color="#DC2626" />
+                                    <span>DO NOT DELIVER • CANCELLED</span>
+                                  </span>
+                                  <span style={{ fontSize: '10.5px', color: '#B91C1C', fontWeight: 700 }}>
+                                    {order.cancelledReason || 'Cancelled by resident'}
+                                  </span>
+                                  <span style={{ fontSize: '10px', color: '#166534', fontWeight: 800, background: '#DCFCE7', padding: '1px 6px', borderRadius: '4px' }}>
+                                    ↩ Return Produce to Hub
+                                  </span>
+                                </div>
                               ) : isDelivered ? (
                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#059669', fontWeight: 800, fontSize: '12px', background: '#DCFCE7', padding: '4px 10px', borderRadius: '6px' }}>
                                   <CheckCircle2 size={14} />
