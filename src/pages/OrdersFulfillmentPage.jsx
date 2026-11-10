@@ -810,7 +810,9 @@ export default function OrdersFulfillmentPage() {
     paginatedOrders.forEach(o => {
       const socName = o.societyName || 'Assigned Society';
       const { block } = extractBlockAndFlat(o.flatNo || o.flatNumber);
-      const blockLabel = block && block !== 'General' ? `Block ${block}` : 'Main Gate / Desk';
+      const rawBlock = (block || '').trim();
+      const cleanBlock = rawBlock.replace(/^(?:block\s*)+/i, '').trim();
+      const blockLabel = cleanBlock && cleanBlock !== 'General' && cleanBlock !== 'Main Wing' ? `Block ${cleanBlock}` : 'Main Gate / Desk';
       const key = `${socName}__${blockLabel}`;
       if (!map.has(key)) {
         const targetSoc = societies.find(s => s.id === o.societyId || s.name === o.societyName);
@@ -1940,23 +1942,38 @@ export default function OrdersFulfillmentPage() {
 
                           {/* Row 2: Compact Produce Item Pills + 1-Tap Rider Actions */}
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', flex: 1, minWidth: '180px' }}>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', flex: 1, minWidth: '180px' }}>
                               {(order.items || []).map((it, iIdx) => {
                                 const produceFmt = formatProduceQuantity(it.qty || it.quantity || 1, it.unit);
                                 return (
                                   <span
                                     key={iIdx}
                                     style={{
-                                      background: '#F1F5F9',
+                                      background: '#F8FAFC',
                                       color: '#1E293B',
-                                      border: '1px solid #E2E8F0',
-                                      padding: '2px 7px',
-                                      borderRadius: '5px',
-                                      fontSize: '11.5px',
-                                      fontWeight: 700
+                                      border: '1px solid #CBD5E1',
+                                      padding: '3px 8px',
+                                      borderRadius: '6px',
+                                      fontSize: '12px',
+                                      fontWeight: 600,
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '6px'
                                     }}
                                   >
-                                    {it.name || it.productName} · <strong style={{ color: '#0F172A' }}>{produceFmt.badge}</strong>
+                                    <span>{it.name || it.productName}</span>
+                                    <strong style={{ 
+                                      color: '#166534', 
+                                      background: '#DCFCE7', 
+                                      border: '1px solid #86EFAC',
+                                      padding: '1px 6px', 
+                                      borderRadius: '4px',
+                                      fontWeight: 900,
+                                      fontSize: '11px',
+                                      whiteSpace: 'nowrap'
+                                    }}>
+                                      {produceFmt.badge}
+                                    </strong>
                                   </span>
                                 );
                               })}
