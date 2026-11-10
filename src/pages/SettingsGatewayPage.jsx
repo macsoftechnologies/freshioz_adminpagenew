@@ -18,7 +18,9 @@ import {
   Settings as SettingsIcon,
   HelpCircle,
   RefreshCw,
-  Truck
+  Truck,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react';
 import { paymentSettingsService } from '../services/paymentSettingsService';
 import { useToast } from '../context/ToastContext';
@@ -76,6 +78,53 @@ export default function SettingsGatewayPage() {
       }
     } catch (e) {
       console.warn('Could not load delivery settings:', e);
+    }
+  };
+
+  const [cleaningData, setCleaningData] = useState(false);
+  const [cleanReport, setCleanReport] = useState(null);
+
+  const handleCleanOperationalData = async () => {
+    const confirmed = window.confirm(
+      "⚠️ DANGER ZONE: Reset Live Operational Test Data?\n\n" +
+      "This will WIPE all:\n" +
+      "• Orders & Order Items\n" +
+      "• Warehouse Inventory (resets live stock to 0)\n" +
+      "• Mandi Procurement Bills & Vendors\n" +
+      "• Driver & Society Payouts\n" +
+      "• Customer Accounts & Societies\n\n" +
+      "IT WILL STRICTLY PRESERVE:\n" +
+      "✓ Products (Produce Catalog)\n" +
+      "✓ Employees (Staff & Delivery Logins)\n" +
+      "✓ Master Units & Categories\n" +
+      "✓ Warehouses (Vizag Hub, etc.)\n" +
+      "✓ Payment & System Settings\n\n" +
+      "Are you sure you want to proceed?"
+    );
+    if (!confirmed) return;
+
+    setCleaningData(true);
+    try {
+      const res = await paymentSettingsService.cleanOperationalData();
+      setCleanReport(res);
+      showToast('Live operational test data successfully cleared! Clean slate ready.', 'success');
+      
+      // Preserve auth token & user info while resetting local caches
+      const token = localStorage.getItem('token');
+      const role = localStorage.getItem('role');
+      const user = localStorage.getItem('user');
+      localStorage.clear();
+      if (token) localStorage.setItem('token', token);
+      if (role) localStorage.setItem('role', role);
+      if (user) localStorage.setItem('user', user);
+
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+    } catch (err) {
+      showToast(err?.message || 'Failed to clean operational data', 'error');
+    } finally {
+      setCleaningData(false);
     }
   };
 
@@ -927,6 +976,71 @@ export default function SettingsGatewayPage() {
                 <li>Go to <strong>Webhooks</strong> &rarr; Add Webhook URL and select <code>order.paid</code>.</li>
               </ol>
             </div>
+          </div>
+
+          {/* Danger Zone: Operational Test Data Reset Card */}
+          <div style={{
+            background: '#FFF5F5',
+            border: '1.5px solid #FECACA',
+            borderRadius: '12px',
+            padding: '18px 20px',
+            boxShadow: '0 1px 3px rgba(239,68,68,0.06)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+              <div style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: '6px',
+                background: '#FEE2E2',
+                color: '#DC2626',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <Trash2 size={15} />
+              </div>
+              <h3 style={{ fontSize: '14px', fontWeight: 800, color: '#991B1B', margin: 0 }}>
+                Danger Zone: Reset Live Operational Test Data
+              </h3>
+            </div>
+
+            <p style={{ fontSize: '11.5px', color: '#7F1D1D', margin: '0 0 10px', lineHeight: 1.5 }}>
+              Use this before conducting end-to-end testing. Strictly preserves your <strong>Produce Products</strong>, <strong>Employees/Staff</strong>, <strong>Master Units</strong>, <strong>Categories</strong>, and <strong>Hub Warehouses</strong> while wiping test orders, warehouse stock, Mandi bills, and payouts.
+            </p>
+
+            <button
+              type="button"
+              onClick={handleCleanOperationalData}
+              disabled={cleaningData}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: '9px 16px',
+                borderRadius: '7px',
+                background: cleaningData ? '#9CA3AF' : '#DC2626',
+                color: '#FFFFFF',
+                border: 'none',
+                fontWeight: 700,
+                fontSize: '12.5px',
+                cursor: cleaningData ? 'not-allowed' : 'pointer',
+                transition: 'background 0.2s'
+              }}
+            >
+              <Trash2 size={14} />
+              <span>{cleaningData ? 'Wiping Live Test Data...' : 'Wipe Live Operational Data (Keep Catalog & Staff)'}</span>
+            </button>
+
+            {cleanReport && (
+              <div style={{ marginTop: '10px', padding: '8px 10px', background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '6px', fontSize: '11px', color: '#166534' }}>
+                ✓ {cleanReport.message}
+                <div style={{ marginTop: '4px', fontSize: '10.5px', color: '#15803D' }}>
+                  Preserved: {cleanReport.preserved?.products} products, {cleanReport.preserved?.employees} staff, {cleanReport.preserved?.warehouses} hubs, {cleanReport.preserved?.categories} categories.
+                </div>
+              </div>
+            )}
           </div>
 
         </div>
