@@ -25,7 +25,9 @@ import {
   Check,
   RotateCcw,
   Camera,
-  Edit2
+  Edit2,
+  Lock,
+  ShieldCheck
 } from 'lucide-react';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
@@ -83,6 +85,16 @@ export default function WarehouseCratingPage() {
     currentUser?.role === 'SUPER_ADMIN' ||
     currentUser?.role === 'WAREHOUSE_MANAGER' ||
     currentUser?.role === 'PROCUREMENT_OFFICER';
+
+  // Role Guard: Quality & Returns Audit values and hub restocking can ONLY be modified by Warehouse Manager or Super Admin
+  const isReturnAuditAllowed =
+    currentRoleId === 'SUPER_ADMIN' ||
+    currentRoleId === 'WAREHOUSE_MANAGER' ||
+    currentUser?.roles?.includes('SUPER_ADMIN') ||
+    currentUser?.roles?.includes('WAREHOUSE_MANAGER') ||
+    currentUser?.role === 'SUPER_ADMIN' ||
+    currentUser?.role === 'WAREHOUSE_MANAGER' ||
+    currentUser?.email === 'superadmin@gmail.com';
 
   const { data: rawOrders = [], isLoading: isLoadingOrders } = orderResource.useList();
   const { data: rawEmployees = [] } = employeeResource.useList(null, { enabled: !isDeliveryExecutive });
@@ -530,6 +542,10 @@ export default function WarehouseCratingPage() {
   }, [orders, isWarehouseScoped, warehouses.length, assignedWhId, assignedWhCode, resolvedWh, societies]);
 
   const handleApproveReturnAudit = async (order) => {
+    if (!isReturnAuditAllowed) {
+      showToast('Access Denied: Quality audit and return value adjustments must be performed by the Warehouse Manager.', 'error');
+      return;
+    }
     setIsSubmittingAudit(true);
     try {
       const targetWhId = order.warehouseId || assignedWhId || resolvedWh?.id || 'WH_HEBBAL_01';
@@ -2136,6 +2152,27 @@ export default function WarehouseCratingPage() {
             </div>
           </div>
 
+          {/* Role Access Notice for Quality & Returns Audit */}
+          {!isReturnAuditAllowed && (
+            <div style={{
+              background: '#F8FAFC',
+              border: '1.5px solid #CBD5E1',
+              borderRadius: '10px',
+              padding: '12px 16px',
+              fontSize: '12.5px',
+              color: '#334155',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              fontWeight: 600
+            }}>
+              <ShieldCheck size={18} color="#059669" style={{ flexShrink: 0 }} />
+              <div>
+                <strong style={{ color: '#0F172A' }}>Staff View Mode:</strong> You can inspect returned produce lots and customer doorstep rejection reasons. Modifying return quantities, recording wastage, and restocking produce to hub inventory must be signed off by the <strong>Warehouse Manager</strong>.
+              </div>
+            </div>
+          )}
+
           {returnedOrders.length === 0 ? (
             <div style={{
               background: '#FFFFFF',
@@ -2198,43 +2235,45 @@ export default function WarehouseCratingPage() {
                             <CheckCircle2 size={14} />
                             <span>Audited & Restocked by {auditData.auditedBy}</span>
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const currentAdjustments = {};
-                              items.forEach((it, idx) => {
-                                const k = `${order.id}_${idx}`;
-                                const saved = auditData?.itemAdjustments?.[k];
-                                const gQty = saved?.goodQty !== undefined ? saved.goodQty : (items.length === 1 && auditData?.totalGoodKg !== undefined ? auditData.totalGoodKg : formatProduceQuantity(it.qty || 1, it.unit).totalCount);
-                                const wQty = saved?.wastageQty !== undefined ? saved.wastageQty : Math.max(0, formatProduceQuantity(it.qty || 1, it.unit).totalCount - gQty);
-                                currentAdjustments[k] = { goodQty: gQty, wastageQty: wQty };
-                              });
-                              setReturnItemAdjustments(prev => ({ ...prev, ...currentAdjustments }));
-                              setReturnAudits(prev => {
-                                const next = { ...prev };
-                                delete next[order.id];
-                                localStorage.setItem('freshioz_warehouse_return_audits', JSON.stringify(next));
-                                return next;
-                              });
-                            }}
-                            style={{
-                              background: '#FFFFFF',
-                              border: '1px solid #CBD5E1',
-                              color: '#334155',
-                              fontSize: '11px',
-                              fontWeight: 700,
-                              padding: '3px 8px',
-                              borderRadius: '6px',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px'
-                            }}
-                            title="Click to re-inspect or correct quantities"
-                          >
-                            <Edit2 size={11} />
-                            <span>Edit / Re-audit</span>
-                          </button>
+                          {isReturnAuditAllowed && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const currentAdjustments = {};
+                                items.forEach((it, idx) => {
+                                  const k = `${order.id}_${idx}`;
+                                  const saved = auditData?.itemAdjustments?.[k];
+                                  const gQty = saved?.goodQty !== undefined ? saved.goodQty : (items.length === 1 && auditData?.totalGoodKg !== undefined ? auditData.totalGoodKg : formatProduceQuantity(it.qty || 1, it.unit).totalCount);
+                                  const wQty = saved?.wastageQty !== undefined ? saved.wastageQty : Math.max(0, formatProduceQuantity(it.qty || 1, it.unit).totalCount - gQty);
+                                  currentAdjustments[k] = { goodQty: gQty, wastageQty: wQty };
+                                });
+                                setReturnItemAdjustments(prev => ({ ...prev, ...currentAdjustments }));
+                                setReturnAudits(prev => {
+                                  const next = { ...prev };
+                                  delete next[order.id];
+                                  localStorage.setItem('freshioz_warehouse_return_audits', JSON.stringify(next));
+                                  return next;
+                                });
+                              }}
+                              style={{
+                                background: '#FFFFFF',
+                                border: '1px solid #CBD5E1',
+                                color: '#334155',
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                padding: '3px 8px',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                              title="Click to re-inspect or correct quantities"
+                            >
+                              <Edit2 size={11} />
+                              <span>Edit / Re-audit</span>
+                            </button>
+                          )}
                         </>
                       ) : (
                         <span style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A', padding: '4px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: 800 }}>
@@ -2352,7 +2391,7 @@ export default function WarehouseCratingPage() {
                                 </span>
                               </td>
                               <td style={{ padding: '10px 14px', textAlign: 'center' }}>
-                                {isAudited ? (
+                                {isAudited || !isReturnAuditAllowed ? (
                                   <span style={{ fontWeight: 800, color: '#166534', background: '#DCFCE7', padding: '4px 10px', borderRadius: '6px' }}>
                                     {produceFmt.formatQty(goodQty)}
                                   </span>
@@ -2394,7 +2433,7 @@ export default function WarehouseCratingPage() {
                                 )}
                               </td>
                               <td style={{ padding: '10px 14px', textAlign: 'center' }}>
-                                {isAudited ? (
+                                {isAudited || !isReturnAuditAllowed ? (
                                   <span style={{
                                     padding: '4px 10px',
                                     borderRadius: '6px',
@@ -2449,30 +2488,48 @@ export default function WarehouseCratingPage() {
                     </table>
                   </div>
 
-                  {/* Approve Audit Button */}
+                  {/* Approve Audit Button / Role Lock */}
                   {!isAudited && (
                     <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '4px' }}>
-                      <button
-                        type="button"
-                        onClick={() => handleApproveReturnAudit(order)}
-                        disabled={isSubmittingAudit}
-                        style={{
-                          background: '#059669',
-                          color: '#FFFFFF',
-                          border: 'none',
-                          padding: '8px 18px',
+                      {isReturnAuditAllowed ? (
+                        <button
+                          type="button"
+                          onClick={() => handleApproveReturnAudit(order)}
+                          disabled={isSubmittingAudit}
+                          style={{
+                            background: '#059669',
+                            color: '#FFFFFF',
+                            border: 'none',
+                            padding: '8px 18px',
+                            borderRadius: '8px',
+                            fontSize: '12.5px',
+                            fontWeight: 800,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                          }}
+                        >
+                          <Check size={16} />
+                          <span>{isSubmittingAudit ? 'Restocking Hub...' : '✓ Approve Quality Audit & Restock to Hub'}</span>
+                        </button>
+                      ) : (
+                        <span style={{
+                          fontSize: '12px',
+                          color: '#475569',
+                          background: '#F1F5F9',
+                          border: '1px solid #CBD5E1',
+                          padding: '6px 14px',
                           borderRadius: '8px',
-                          fontSize: '12.5px',
-                          fontWeight: 800,
-                          cursor: 'pointer',
-                          display: 'flex',
+                          fontWeight: 700,
+                          display: 'inline-flex',
                           alignItems: 'center',
                           gap: '6px'
-                        }}
-                      >
-                        <Check size={16} />
-                        <span>{isSubmittingAudit ? 'Restocking Hub...' : '✓ Approve Quality Audit & Restock to Hub'}</span>
-                      </button>
+                        }}>
+                          <Lock size={13} color="#64748B" />
+                          <span>Sign-Off Restricted to Warehouse Manager (Staff Read-Only)</span>
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
