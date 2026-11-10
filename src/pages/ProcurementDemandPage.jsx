@@ -285,6 +285,42 @@ export default function ProcurementDemandPage() {
     return map;
   }, [activeOrders, products]);
 
+  // Calculate quantity of produce already consumed by DELIVERED orders matching scope
+  const deliveredDemandMap = useMemo(() => {
+    const map = {};
+    const productsList = products;
+
+    allOrders.forEach(order => {
+      if (order.status !== 'DELIVERED') return;
+      if (!matchesWarehouse(order)) return;
+      if (selectedSlot !== 'ALL') {
+        const orderSlot = order.deliverySlot || 'Morning Fresh Slot';
+        if (!orderSlot.toLowerCase().includes(selectedSlot.toLowerCase())) return;
+      }
+      if (selectedDate !== 'ALL' && order.deliveryDate !== selectedDate) return;
+
+      (order.items || []).forEach(item => {
+        const rawName = item.name || item.productName || 'Fresh Item';
+        const prod = productsList.find(p => 
+          (item.id && p.id === item.id) ||
+          p.name.toLowerCase() === rawName.toLowerCase() ||
+          p.name.toLowerCase().includes(rawName.toLowerCase()) ||
+          rawName.toLowerCase().includes(p.name.toLowerCase())
+        ) || {};
+
+        const itemName = prod.name || rawName;
+        const unit = item.unit || prod.retailUnit || 'kg';
+        const qty = Number(item.qty || item.quantity) || 1;
+        const weightPerUnitKg = parseUnitWeightInKg(unit);
+        const itemTotalKg = Number((weightPerUnitKg * qty).toFixed(2));
+
+        map[itemName] = Number(((map[itemName] || 0) + itemTotalKg).toFixed(2));
+      });
+    });
+
+    return map;
+  }, [allOrders, selectedWarehouseId, selectedSlot, selectedDate, warehouses, products]);
+
   // Calculate already procured quantities directly from matching procurementLogs
   const matchingProcurementLogs = useMemo(() => {
     const targetWh = warehouses.find(w => w.id === selectedWarehouseId || w.code === selectedWarehouseId);
@@ -310,7 +346,10 @@ export default function ProcurementDemandPage() {
 
   const alreadyProcuredMap = useMemo(() => {
     const map = {};
-    const demandKeys = Object.keys(cropDemandMap);
+    const demandKeys = Array.from(new Set([
+      ...Object.keys(cropDemandMap),
+      ...Object.keys(deliveredDemandMap)
+    ]));
     const productsList = products;
 
     matchingProcurementLogs.forEach(log => {
@@ -331,7 +370,7 @@ export default function ProcurementDemandPage() {
         let matchedKey = demandKeys.find(k => k.toLowerCase() === cropName.toLowerCase());
         if (!matchedKey) {
           const prod = productsList.find(p => p.name.toLowerCase() === cropName.toLowerCase());
-          if (prod && cropDemandMap[prod.name]) {
+          if (prod && (cropDemandMap[prod.name] || deliveredDemandMap[prod.name])) {
             matchedKey = prod.name;
           }
         }
@@ -354,15 +393,21 @@ export default function ProcurementDemandPage() {
     });
 
     return map;
-  }, [matchingProcurementLogs, cropDemandMap, products]);
+  }, [matchingProcurementLogs, cropDemandMap, deliveredDemandMap, products]);
 
   // Combine into complete Demand Sheet with Rigorous Inventory Reconciliation:
-  // Includes both active demand crops and any procured crops whose orders were cancelled pre-dispatch
+  // Includes active demand crops, delivered crops, and any procured crops
   const allDemandItems = useMemo(() => {
     const combinedMap = { ...cropDemandMap };
 
-    // Ensure crops that were procured today (even if all their orders were cancelled pre-dispatch) are included
-    Object.keys(alreadyProcuredMap).forEach(cropName => {
+    // Ensure crops that were procured today or delivered today are included in the view
+    const allKnownProduce = Array.from(new Set([
+      ...Object.keys(combinedMap),
+      ...Object.keys(alreadyProcuredMap),
+      ...Object.keys(deliveredDemandMap)
+    ]));
+
+    allKnownProduce.forEach(cropName => {
       if (!combinedMap[cropName]) {
         const prod = products.find(p => p.name.toLowerCase() === cropName.toLowerCase()) || {};
         combinedMap[cropName] = {
@@ -386,14 +431,19 @@ export default function ProcurementDemandPage() {
 
     const items = Object.values(combinedMap).map(d => {
       const rawStockKg = getCropStockInWarehouse(d.name, d.productId);
-      const alreadyProcuredKg = Number(alreadyProcuredMap[d.name] || 0);
+      const totalProcuredTodayKg = Number(alreadyProcuredMap[d.name] || 0);
+      const deliveredConsumedKg = Number(deliveredDemandMap[d.name] || 0);
+
+      // How much of today's procurement is STILL available for active pending orders
+      // (Total procured today minus quantity already fulfilled/delivered to residents)
+      const availableProcuredKg = Math.max(0, Number((totalProcuredTodayKg - deliveredConsumedKg).toFixed(2)));
 
       // Prior buffer stock existing in warehouse before today's procurement
-      const priorStockKg = Math.max(0, Number((rawStockKg - alreadyProcuredKg).toFixed(2)));
+      const priorStockKg = Math.max(0, Number((rawStockKg - availableProcuredKg).toFixed(2)));
 
-      // Total available supply in the warehouse to fulfill customer demand
-      // (Prior buffer stock + today's freshly procured stock, bounded by physical stock)
-      const totalSupplyCoveredKg = Math.max(rawStockKg, Number((priorStockKg + alreadyProcuredKg).toFixed(2)));
+      // Total available supply in the warehouse to fulfill active customer demand
+      // (Prior buffer stock + today's unconsumed procured stock, bounded by physical stock)
+      const totalSupplyCoveredKg = Math.max(rawStockKg, Number((priorStockKg + availableProcuredKg).toFixed(2)));
 
       // Net Mandi Requirement: What is still missing and must be purchased at APMC Mandi
       const netRequiredKg = Math.max(0, Number((d.grossDemandKg - totalSupplyCoveredKg).toFixed(2)));
@@ -404,7 +454,10 @@ export default function ProcurementDemandPage() {
         ...d,
         rawStockKg,
         priorStockKg,
-        alreadyProcuredKg,
+        totalProcuredTodayKg,
+        deliveredConsumedKg,
+        alreadyProcuredKg: availableProcuredKg,
+        availableProcuredKg,
         totalSupplyCoveredKg,
         netRequiredKg,
         isFullyCovered,
@@ -426,7 +479,7 @@ export default function ProcurementDemandPage() {
     });
 
     return items;
-  }, [cropDemandMap, alreadyProcuredMap, inventoryStockMap, selectedWarehouseId, warehouses]);
+  }, [cropDemandMap, alreadyProcuredMap, deliveredDemandMap, inventoryStockMap, selectedWarehouseId, warehouses, products]);
 
   // Pending items that still have net required > 0
   const pendingDemandList = useMemo(() => allDemandItems.filter(d => !d.isFullyCovered), [allDemandItems]);
@@ -1102,6 +1155,11 @@ export default function ProcurementDemandPage() {
                           <span style={{ fontSize: '13.5px', fontWeight: 700, color: d.alreadyProcuredKg > 0 ? '#15803D' : '#94A3B8' }}>
                             {d.alreadyProcuredKg} kg
                           </span>
+                          {d.deliveredConsumedKg > 0 && (
+                            <div style={{ fontSize: '10.5px', color: '#64748B', marginTop: '2px' }}>
+                              ({d.deliveredConsumedKg} kg delivered)
+                            </div>
+                          )}
                         </td>
 
                         <td>
@@ -1117,7 +1175,7 @@ export default function ProcurementDemandPage() {
                             </strong>
                             <div style={{ fontSize: '10.5px', color: '#64748B' }}>
                               {d.netRequiredKg === 0 
-                                ? `✓ ${d.totalSupplyCoveredKg} kg Covered` 
+                                ? (d.grossDemandKg === 0 && d.deliveredConsumedKg > 0 ? `✓ ${d.deliveredConsumedKg} kg Delivered` : `✓ ${d.totalSupplyCoveredKg} kg Covered`) 
                                 : `${d.grossDemandKg} kg - ${d.totalSupplyCoveredKg} kg covered`}
                             </div>
                           </div>
