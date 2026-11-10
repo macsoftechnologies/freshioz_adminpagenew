@@ -2078,19 +2078,6 @@ export default function WarehouseCratingPage() {
                           </button>
                         </div>
                       )}
-                          gap: '5px',
-                          background: '#FEF3C7',
-                          color: '#92400E',
-                          border: '1px solid #FDE68A',
-                          padding: '4px 10px',
-                          borderRadius: '6px',
-                          fontSize: '11.5px',
-                          fontWeight: 800
-                        }}>
-                          <Truck size={13} color="#D97706" />
-                          <span>In-Transit</span>
-                        </span>
-                      )}
 
                       {lot.status === 'DELIVERED' && (
                         <span style={{
