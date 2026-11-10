@@ -29,9 +29,10 @@ function makeResource(key, service, { refetchMs = 0, extraInvalidate = [] } = {}
         queryKey: [key, params ?? {}],
         queryFn: () => service.getAll(params ?? {}),
         placeholderData: keepPreviousData,
-        staleTime: 15_000,
+        staleTime: 5_000,
         refetchInterval: refetchMs || false,
         refetchIntervalInBackground: false,
+        refetchOnWindowFocus: true,
         ...options,
       }),
     useCreate: () => {
@@ -49,16 +50,16 @@ function makeResource(key, service, { refetchMs = 0, extraInvalidate = [] } = {}
   };
 }
 
-export const products = makeResource('products', productService);
-export const vendors = makeResource('vendors', vendorService);
-export const warehouses = makeResource('warehouses', warehouseService);
-export const societies = makeResource('societies', societyService);
-export const employees = makeResource('employees', employeeService);
-export const categories = makeResource('categories', categoryService);
-export const units = makeResource('units', unitService);
-export const procurement = makeResource('procurement', procurementService, { refetchMs: 15_000, extraInvalidate: ['orders', 'inventory'] });
-export const leads = makeResource('leads', inboundService);
-export const orders = makeResource('orders', orderService, { refetchMs: 15_000 }); // ops desk wants near-live
+export const products = makeResource('products', productService, { refetchMs: 20_000 });
+export const vendors = makeResource('vendors', vendorService, { refetchMs: 30_000 });
+export const warehouses = makeResource('warehouses', warehouseService, { refetchMs: 30_000 });
+export const societies = makeResource('societies', societyService, { refetchMs: 12_000 });
+export const employees = makeResource('employees', employeeService, { refetchMs: 30_000 });
+export const categories = makeResource('categories', categoryService, { refetchMs: 30_000 });
+export const units = makeResource('units', unitService, { refetchMs: 30_000 });
+export const procurement = makeResource('procurement', procurementService, { refetchMs: 12_000, extraInvalidate: ['orders', 'inventory'] });
+export const leads = makeResource('leads', inboundService, { refetchMs: 12_000 });
+export const orders = makeResource('orders', orderService, { refetchMs: 12_000 }); // ops desk wants near-live
 
 // ---- Operations that are NOT plain CRUD (each maps to ONE server transaction) ----
 
@@ -75,9 +76,10 @@ export function useInventory(warehouseId, options = {}) {
     queryKey: ['inventory', warehouseId ?? 'ALL'],
     queryFn: () => inventoryService.getAll(warehouseId),
     placeholderData: keepPreviousData,
-    staleTime: 15_000,
-    refetchInterval: 20_000,
+    staleTime: 5_000,
+    refetchInterval: 12_000,
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
     ...options,
   });
 }
@@ -89,7 +91,16 @@ export function useAdjustStock() {
 }
 
 export function usePayouts(params, options = {}) {
-  return useQuery({ queryKey: ['payouts', params ?? {}], queryFn: () => societyService.listPayouts(params ?? {}), ...options });
+  return useQuery({
+    queryKey: ['payouts', params ?? {}],
+    queryFn: () => societyService.listPayouts(params ?? {}),
+    placeholderData: keepPreviousData,
+    staleTime: 5_000,
+    refetchInterval: 12_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    ...options,
+  });
 }
 
 export function useApprovePayout() {
@@ -118,8 +129,10 @@ export function useMisAnalytics(params, options = {}) {
     queryKey: ['mis-analytics', params ?? {}],
     queryFn: () => misService.getExecutiveSummary(params ?? {}),
     placeholderData: keepPreviousData,
-    staleTime: 30_000,
-    refetchInterval: 60_000,
+    staleTime: 10_000,
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
     ...options,
   });
 }

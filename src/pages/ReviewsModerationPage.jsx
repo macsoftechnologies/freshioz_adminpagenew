@@ -84,11 +84,15 @@ export default function ReviewsModerationPage() {
 
   useEffect(() => {
     fetchReviews();
+    const interval = setInterval(fetchReviews, 15_000);
+    return () => clearInterval(interval);
   }, [statusFilter, typeFilter]);
 
   useEffect(() => {
     if (activeTab === 'DISCOUNTS') {
       fetchDiscounts();
+      const interval = setInterval(fetchDiscounts, 15_000);
+      return () => clearInterval(interval);
     }
   }, [activeTab, discountStatusFilter]);
 

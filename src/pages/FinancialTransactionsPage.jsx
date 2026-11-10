@@ -131,22 +131,30 @@ export default function FinancialTransactionsPage() {
   const [confirmDriverPayoutModal, setConfirmDriverPayoutModal] = useState(null);
   const [isSubmittingDriverPayout, setIsSubmittingDriverPayout] = useState(false);
 
-  // Load server driver payouts and sync
+  // Load server driver payouts and auto-poll every 12s so settlements update in real-time
   useEffect(() => {
     let isMounted = true;
-    apiClient('/payments/driver-payouts')
-      .then(res => {
-        if (isMounted && Array.isArray(res) && res.length > 0) {
-          setDriverPayoutLogs(res);
-          try {
-            localStorage.setItem('freshioz_driver_payout_logs', JSON.stringify(res));
-          } catch (e) {}
-        }
-      })
-      .catch(err => {
-        console.warn('Fallback to local driver payout logs:', err);
-      });
-    return () => { isMounted = false; };
+    const fetchDriverPayouts = () => {
+      apiClient('/payments/driver-payouts')
+        .then(res => {
+          if (isMounted && Array.isArray(res)) {
+            setDriverPayoutLogs(res);
+            try {
+              localStorage.setItem('freshioz_driver_payout_logs', JSON.stringify(res));
+            } catch (e) {}
+          }
+        })
+        .catch(err => {
+          console.warn('Fallback to local driver payout logs:', err);
+        });
+    };
+
+    fetchDriverPayouts();
+    const intervalId = setInterval(fetchDriverPayouts, 12_000);
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+    };
   }, []);
 
   // Sync state with URL hash
