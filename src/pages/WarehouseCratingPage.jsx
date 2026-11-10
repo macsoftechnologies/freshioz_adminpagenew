@@ -1737,7 +1737,10 @@ export default function WarehouseCratingPage() {
                                     color: '#1E293B'
                                   }}
                                 >
-                                  {i.name} <strong style={{ color: '#0F172A', marginLeft: '4px' }}>({i.qty} * {i.unit || '1 pc'})</strong>
+                                  <span>{i.name}</span>
+                                  <strong style={{ color: '#15803D', background: '#DCFCE7', padding: '1px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 800, marginLeft: '6px' }}>
+                                    {formatProduceQuantity(i.qty, i.unit).badge}
+                                  </strong>
                                 </span>
                               ))}
                             </div>
@@ -1945,7 +1948,7 @@ export default function WarehouseCratingPage() {
                             {o.flatNo} — {o.userName}
                           </div>
                           <div style={{ fontSize: '11px', color: '#64748B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {(o.items || []).map(it => `${it.name} (${it.qty} * ${it.unit || '1 pc'})`).join(', ')}
+                            {(o.items || []).map(it => `${it.name} (${formatProduceQuantity(it.qty, it.unit).badge})`).join(', ')}
                           </div>
                         </div>
 
@@ -2338,7 +2341,10 @@ export default function WarehouseCratingPage() {
                           return (
                             <tr key={idx} style={{ borderBottom: '1px solid #F1F5F9' }}>
                               <td style={{ padding: '10px 14px', fontWeight: 700, color: '#1E293B' }}>
-                                {it.name || 'Fresh Produce'} <span style={{ color: '#64748B', fontWeight: 500 }}>({it.unit || '1 kg'})</span>
+                                {it.name || 'Fresh Produce'}
+                                {it.unit && !/^(?:1\s*)?(?:pc|pcs|piece|pieces|nos|unit|item)$/i.test(it.unit) && !/^(?:1\s*)?kg$/i.test(it.unit) && (
+                                  <span style={{ color: '#64748B', fontWeight: 500, fontSize: '12px', marginLeft: '4px' }}>({it.unit})</span>
+                                )}
                               </td>
                               <td style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 800, color: '#334155' }}>
                                 <span style={{ background: '#F1F5F9', border: '1px solid #CBD5E1', padding: '3px 9px', borderRadius: '6px', fontSize: '12px' }}>
@@ -2972,7 +2978,7 @@ export default function WarehouseCratingPage() {
                           <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: idx < labelModalOrder.items.length - 1 ? '1px dashed #E2E8F0' : 'none', fontSize: '12.5px' }}>
                             <span style={{ fontWeight: 700, color: '#0F172A' }}>• {it.name}</span>
                             <span style={{ fontWeight: 800, color: '#166534', background: '#DCFCE7', padding: '2px 8px', borderRadius: '4px', fontSize: '11.5px' }}>
-                              {q} * {u}
+                              {formatProduceQuantity(q, u).badge}
                             </span>
                           </div>
                         );
@@ -3207,16 +3213,7 @@ export default function WarehouseCratingPage() {
                             padding: '2px 8px',
                             borderRadius: '5px'
                           }}>
-                            {(() => {
-                              const q = Number(it.qty) || 1;
-                              const rawU = (it.unit || '').trim();
-                              const isPc = /^(1\s*)?pcs?$/i.test(rawU);
-                              if (isPc || !rawU) {
-                                return q > 1 ? `×${q}` : `1 Unit`;
-                              }
-                              const cleanU = rawU.replace(/^1\s*/, '').trim();
-                              return cleanU ? `${q > 1 ? `${q} ` : ''}${cleanU}` : `×${q}`;
-                            })()}
+                            {formatProduceQuantity(it.qty, it.unit).badge}
                           </span>
                         </div>
                       );

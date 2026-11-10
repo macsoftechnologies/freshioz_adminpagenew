@@ -388,13 +388,12 @@ export default function ProcurementDemandPage() {
       const rawStockKg = getCropStockInWarehouse(d.name, d.productId);
       const alreadyProcuredKg = Number(alreadyProcuredMap[d.name] || 0);
 
-      // Prior reserve stock + any procured stock freed up by pre-dispatch order cancellations
+      // Prior buffer stock existing in warehouse before today's procurement
       const priorStockKg = Math.max(0, Number((rawStockKg - alreadyProcuredKg).toFixed(2)));
-      const freedFromCancelledKg = Math.max(0, Number((alreadyProcuredKg - d.grossDemandKg).toFixed(2)));
-      const openingStockKg = Number((priorStockKg + freedFromCancelledKg).toFixed(2));
 
-      // Total available supply to cover customer demand
-      const totalSupplyCoveredKg = Number((priorStockKg + alreadyProcuredKg).toFixed(2));
+      // Total available supply in the warehouse to fulfill customer demand
+      // (Prior buffer stock + today's freshly procured stock, bounded by physical stock)
+      const totalSupplyCoveredKg = Math.max(rawStockKg, Number((priorStockKg + alreadyProcuredKg).toFixed(2)));
 
       // Net Mandi Requirement: What is still missing and must be purchased at APMC Mandi
       const netRequiredKg = Math.max(0, Number((d.grossDemandKg - totalSupplyCoveredKg).toFixed(2)));
@@ -404,7 +403,7 @@ export default function ProcurementDemandPage() {
       return {
         ...d,
         rawStockKg,
-        openingStockKg,
+        priorStockKg,
         alreadyProcuredKg,
         totalSupplyCoveredKg,
         netRequiredKg,
@@ -435,9 +434,9 @@ export default function ProcurementDemandPage() {
 
   // Overall KPIs
   const totalGrossDemandKg = useMemo(() => Number(allDemandItems.reduce((acc, d) => acc + d.grossDemandKg, 0).toFixed(2)), [allDemandItems]);
-  const totalOpeningStockKg = useMemo(() => Number(allDemandItems.reduce((acc, d) => acc + d.openingStockKg, 0).toFixed(2)), [allDemandItems]);
+  const totalPriorStockKg = useMemo(() => Number(allDemandItems.reduce((acc, d) => acc + d.priorStockKg, 0).toFixed(2)), [allDemandItems]);
   const totalAlreadyProcuredKg = useMemo(() => Number(allDemandItems.reduce((acc, d) => acc + d.alreadyProcuredKg, 0).toFixed(2)), [allDemandItems]);
-  const totalCoveredKg = useMemo(() => Number((totalOpeningStockKg + totalAlreadyProcuredKg).toFixed(2)), [totalOpeningStockKg, totalAlreadyProcuredKg]);
+  const totalCoveredKg = useMemo(() => Number(allDemandItems.reduce((acc, d) => acc + d.totalSupplyCoveredKg, 0).toFixed(2)), [allDemandItems]);
   const totalNetRequiredKg = useMemo(() => Number(allDemandItems.reduce((acc, d) => acc + d.netRequiredKg, 0).toFixed(2)), [allDemandItems]);
   const totalPendingEstimatedCost = useMemo(() => pendingDemandList.reduce((acc, d) => acc + d.estSpend, 0), [pendingDemandList]);
 
@@ -836,15 +835,15 @@ export default function ProcurementDemandPage() {
             <div style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A' }}>{totalGrossDemandKg} kg</div>
           </div>
           <div>
-            <div style={{ fontSize: '11px', color: '#0284C7', fontWeight: 600 }}>Warehouse Stock</div>
-            <div style={{ fontSize: '15px', fontWeight: 800, color: '#0284C7' }}>{totalOpeningStockKg} kg</div>
+            <div style={{ fontSize: '11px', color: '#0284C7', fontWeight: 600 }}>Prior Buffer Stock</div>
+            <div style={{ fontSize: '15px', fontWeight: 800, color: '#0284C7' }}>{totalPriorStockKg} kg</div>
           </div>
           <div>
             <div style={{ fontSize: '11px', color: '#15803D', fontWeight: 600 }}>Procured Today</div>
             <div style={{ fontSize: '15px', fontWeight: 800, color: '#15803D' }}>{totalAlreadyProcuredKg} kg</div>
           </div>
           <div>
-            <div style={{ fontSize: '11px', color: '#475569', fontWeight: 600 }}>Total Stock</div>
+            <div style={{ fontSize: '11px', color: '#475569', fontWeight: 600 }}>Total Hub Stock</div>
             <div style={{ fontSize: '15px', fontWeight: 800, color: '#334155' }}>{totalCoveredKg} kg</div>
           </div>
           <div>
@@ -1029,9 +1028,9 @@ export default function ProcurementDemandPage() {
                     <tr>
                       <th>Produce Item</th>
                       <th>Gross Orders (kg)</th>
-                      <th>Warehouse Stock (kg)</th>
+                      <th>Prior Buffer Stock (kg)</th>
                       <th>Procured Today (kg)</th>
-                      <th>Total Covered (kg)</th>
+                      <th>Total Available (kg)</th>
                       <th>Net Needed (kg)</th>
                       <th>Purchase Rate</th>
                       <th>Est. Cost</th>
@@ -1076,22 +1075,27 @@ export default function ProcurementDemandPage() {
 
                         <td>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontSize: '13.5px', fontWeight: 700, color: d.openingStockKg > 0 ? '#0284C7' : '#94A3B8' }}>
-                              {d.openingStockKg} kg
+                            <span style={{ fontSize: '13.5px', fontWeight: 700, color: d.priorStockKg > 0 ? '#0284C7' : '#94A3B8' }}>
+                              {d.priorStockKg} kg
                             </span>
                             <button
                               type="button"
                               onClick={() => {
                                 setStockEditCrop(d.name);
                                 setStockEditWhId(selectedWarehouseId !== 'ALL' ? selectedWarehouseId : (warehouses[0]?.id || ''));
-                                setStockInputVal(String(d.rawStockKg || d.openingStockKg));
+                                setStockInputVal(String(d.rawStockKg));
                               }}
                               style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', padding: '2px' }}
-                              title="Update in-stock warehouse inventory"
+                              title="Update live physical stock in warehouse"
                             >
                               <Edit3 size={12} />
                             </button>
                           </div>
+                          {d.rawStockKg > 0 && (
+                            <div style={{ fontSize: '10px', color: '#64748B' }}>
+                              Live: {d.rawStockKg} kg
+                            </div>
+                          )}
                         </td>
 
                         <td>
@@ -1183,10 +1187,10 @@ export default function ProcurementDemandPage() {
           <div className="admin-table-header">
             <div>
               <h3 style={{ fontSize: '15px', color: '#0F172A', margin: 0 }}>
-                Procured Farm Lots (In-Transit to Warehouse)
+                Procured Produce Lots (Inwarded at Warehouse Hub)
               </h3>
               <span style={{ fontSize: '12px', color: '#64748B' }}>
-                Produce purchased and in-transit to warehouse
+                Produce purchased today and inwarded into warehouse inventory
               </span>
             </div>
             <Link
@@ -1263,8 +1267,10 @@ export default function ProcurementDemandPage() {
                         <div style={{ fontSize: '12.5px', fontWeight: 600, color: '#0F172A' }}>
                           {Array.from(p.societies).join(', ')}
                         </div>
-                        <div style={{ fontSize: '11px', color: '#64748B' }}>
-                          Fulfilling {p.ordersCount} Customer Orders
+                        <div style={{ fontSize: '11px', color: p.ordersCount > 0 ? '#64748B' : '#0369A1', fontWeight: p.ordersCount > 0 ? 500 : 700 }}>
+                          {p.ordersCount > 0
+                            ? `Fulfilling ${p.ordersCount} Customer Order${p.ordersCount > 1 ? 's' : ''}`
+                            : '📦 Available in Hub Buffer (Restocked)'}
                         </div>
                       </td>
                       <td>
@@ -1291,7 +1297,7 @@ export default function ProcurementDemandPage() {
                           gap: '4px'
                         }}>
                           <CheckCircle2 size={12} />
-                          <span>Inward Stock • In-Transit</span>
+                          <span>✓ Inwarded to Hub Stock</span>
                         </span>
                       </td>
                     </tr>
