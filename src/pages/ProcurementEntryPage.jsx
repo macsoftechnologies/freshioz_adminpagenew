@@ -171,6 +171,39 @@ export default function ProcurementEntryPage() {
     });
   });
 
+  // Calculate quantity of produce already consumed by DELIVERED orders matching scope
+  const deliveredDemandMap = useMemo(() => {
+    const map = {};
+    orders.forEach(o => {
+      if (o.status !== 'DELIVERED') return;
+      if (queryWarehouseId && queryWarehouseId !== 'ALL') {
+        if (o.warehouseId && o.warehouseId !== queryWarehouseId) return;
+      }
+      if (querySlot !== 'ALL') {
+        const orderSlot = o.deliverySlot || 'Morning Fresh Slot';
+        if (!orderSlot.toLowerCase().includes(querySlot.toLowerCase())) return;
+      }
+      if (queryDate !== 'ALL' && o.deliveryDate !== queryDate) return;
+
+      (o.items || []).forEach(item => {
+        const itemName = item.name || item.productName || 'Fresh Item';
+        const prod = products.find(p => 
+          (item.id && p.id === item.id) ||
+          p.name.toLowerCase() === itemName.toLowerCase() ||
+          p.name.toLowerCase().includes(itemName.toLowerCase()) ||
+          itemName.toLowerCase().includes(p.name.toLowerCase())
+        ) || {};
+        const canonicalName = prod.name || itemName;
+        const unit = item.unit || prod.retailUnit || 'kg';
+        const qty = Number(item.qty || item.quantity) || 1;
+        const weightKg = parseUnitWeightInKg(unit) * qty;
+
+        map[canonicalName.toLowerCase()] = Number(((map[canonicalName.toLowerCase()] || 0) + weightKg).toFixed(2));
+      });
+    });
+    return map;
+  }, [orders, queryWarehouseId, querySlot, queryDate, products]);
+
   // Calculate what has ALREADY been procured across bills today for this run
   const matchingProcLogs = procurementLogs.filter(log => {
     if (queryWarehouseId && queryWarehouseId !== 'ALL' && log.destinationWarehouseId && log.destinationWarehouseId !== queryWarehouseId) {
@@ -188,7 +221,10 @@ export default function ProcurementEntryPage() {
 
   const alreadyProcuredMap = useMemo(() => {
     const map = {};
-    const demandKeys = Object.keys(aggregatedDemandMap);
+    const demandKeys = Array.from(new Set([
+      ...Object.keys(aggregatedDemandMap).map(k => k.toLowerCase()),
+      ...Object.keys(deliveredDemandMap)
+    ]));
 
     matchingProcLogs.forEach(log => {
       (log.items || []).forEach(it => {
@@ -204,38 +240,43 @@ export default function ProcurementEntryPage() {
         }
         const itemKg = Number((unitWeight * numQty).toFixed(2));
 
-        let matchedKey = demandKeys.find(k => k.toLowerCase() === cropName.toLowerCase());
+        let matchedKey = demandKeys.find(k => k === cropName.toLowerCase());
         if (!matchedKey) {
           const prod = products.find(p => p.name.toLowerCase() === cropName.toLowerCase());
-          if (prod && aggregatedDemandMap[prod.name]) {
-            matchedKey = prod.name;
+          if (prod && (aggregatedDemandMap[prod.name] || deliveredDemandMap[prod.name.toLowerCase()])) {
+            matchedKey = prod.name.toLowerCase();
           }
         }
         if (!matchedKey) {
           matchedKey = demandKeys.find(k => 
-            k.toLowerCase().startsWith(cropName.toLowerCase()) ||
-            cropName.toLowerCase().startsWith(k.toLowerCase())
+            k.startsWith(cropName.toLowerCase()) ||
+            cropName.toLowerCase().startsWith(k)
           );
         }
         if (!matchedKey) {
           matchedKey = demandKeys.find(k => 
-            k.toLowerCase().includes(cropName.toLowerCase()) ||
-            cropName.toLowerCase().includes(k.toLowerCase())
+            k.includes(cropName.toLowerCase()) ||
+            cropName.toLowerCase().includes(k)
           );
         }
-        matchedKey = matchedKey || cropName;
+        matchedKey = matchedKey || cropName.toLowerCase();
 
-        map[matchedKey.toLowerCase()] = Number(((map[matchedKey.toLowerCase()] || 0) + itemKg).toFixed(2));
+        map[matchedKey] = Number(((map[matchedKey] || 0) + itemKg).toFixed(2));
       });
     });
 
     return map;
-  }, [matchingProcLogs, aggregatedDemandMap, products]);
+  }, [matchingProcLogs, aggregatedDemandMap, deliveredDemandMap, products]);
 
   // Calculate net quantities needed with opening stock & already procured reconciliation
   const unprocuredItemsList = Object.values(aggregatedDemandMap).map(item => {
-    const rawStock = Number(warehouseStock[item.name.toLowerCase()] ?? warehouseStock[item.productId?.toLowerCase()] ?? 0);
-    const alreadyBought = Number(alreadyProcuredMap[item.name.toLowerCase()] || 0);
+    const key = item.name.toLowerCase();
+    const rawStock = Number(warehouseStock[key] ?? warehouseStock[item.productId?.toLowerCase()] ?? 0);
+    const totalBought = Number(alreadyProcuredMap[key] || 0);
+    const deliveredConsumed = Number(deliveredDemandMap[key] || 0);
+
+    // Only unconsumed procurements are available for active orders
+    const alreadyBought = Math.max(0, Number((totalBought - deliveredConsumed).toFixed(2)));
     const openingStock = Math.max(0, Number((rawStock - alreadyBought).toFixed(2)));
     const totalCovered = Number((openingStock + alreadyBought).toFixed(2));
     const netQty = Math.max(0, Number((item.grossQty - totalCovered).toFixed(2)));
@@ -244,6 +285,8 @@ export default function ProcurementEntryPage() {
       qty: netQty,
       grossQty: item.grossQty,
       alreadyBought,
+      totalBought,
+      deliveredConsumed,
       openingStock,
       totalCovered,
       unit: 'kg',
@@ -294,6 +337,24 @@ export default function ProcurementEntryPage() {
       setItemsInitialized(true);
     }
   }, [computedInitialItems, itemsInitialized]);
+
+  // Sync if queryCrop or selected run parameters change
+  const prevParamsRef = React.useRef({ queryCrop, queryWarehouseId, querySlot, queryDate });
+  useEffect(() => {
+    const prev = prevParamsRef.current;
+    if (
+      prev.queryCrop !== queryCrop || 
+      prev.queryWarehouseId !== queryWarehouseId || 
+      prev.querySlot !== querySlot || 
+      prev.queryDate !== queryDate
+    ) {
+      prevParamsRef.current = { queryCrop, queryWarehouseId, querySlot, queryDate };
+      if (computedInitialItems.length > 0) {
+        setItems(computedInitialItems);
+        setItemsInitialized(true);
+      }
+    }
+  }, [queryCrop, queryWarehouseId, querySlot, queryDate, computedInitialItems]);
   const [receiptPhoto, setReceiptPhoto] = useState(null);
   const [previewPhotoModal, setPreviewPhotoModal] = useState(false);
 
