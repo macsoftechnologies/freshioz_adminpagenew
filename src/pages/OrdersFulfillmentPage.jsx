@@ -170,7 +170,7 @@ export default function OrdersFulfillmentPage() {
         .catch(err => {
           console.warn('Dynamic QR fetch fallback to standard UPI URI:', err);
           const amt = codModalOrder.totalAmount || 0;
-          const upiUri = `upi://pay?pa=freshioz@icici&pn=Freshioz%20Produce&am=${amt}&cu=INR&tn=Order_${codModalOrder.id?.slice(-6)}`;
+          const upiUri = `upi://pay?pn=Freshioz%20Produce&am=${amt}&cu=INR&tn=Order_${codModalOrder.id?.slice(-6)}`;
           if (isMounted) {
             setDynamicQrData({
               orderId: codModalOrder.id,
@@ -178,6 +178,7 @@ export default function OrdersFulfillmentPage() {
               imageUrl: `https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=8&data=${encodeURIComponent(upiUri)}`,
               paymentUrl: upiUri,
               upiString: upiUri,
+              payeeInfo: 'Any UPI App',
               gatewaySource: 'DIRECT_UPI_FALLBACK',
             });
           }
@@ -583,15 +584,18 @@ export default function OrdersFulfillmentPage() {
 
   // Track cancellations in real-time to alert the driver immediately
   const prevCancelledIdsRef = useRef(new Set());
-  const isInitialCancelLoadRef = useRef(true);
+  const hasInitializedCancelsRef = useRef(false);
 
   useEffect(() => {
     if (!isDeliveryExecutive) return;
     const currentCancelledIds = new Set(customerCancelledOrders.map(o => o.id));
 
-    if (isInitialCancelLoadRef.current) {
-      prevCancelledIdsRef.current = currentCancelledIds;
-      isInitialCancelLoadRef.current = false;
+    // Suppress alerts on initial login/page load until orders data is loaded
+    if (!hasInitializedCancelsRef.current) {
+      if (orders && orders.length > 0) {
+        prevCancelledIdsRef.current = currentCancelledIds;
+        hasInitializedCancelsRef.current = true;
+      }
       return;
     }
 
@@ -607,7 +611,7 @@ export default function OrdersFulfillmentPage() {
     }
 
     prevCancelledIdsRef.current = currentCancelledIds;
-  }, [customerCancelledOrders, isDeliveryExecutive, playCancellationAlertChime, showToast]);
+  }, [customerCancelledOrders, orders, isDeliveryExecutive, playCancellationAlertChime, showToast]);
 
   const riderTotalCodToCollect = riderBaseOrders
     .filter(o => o.status !== 'DELIVERED' && o.status !== 'CANCELLED' && ((o.paymentMethod || '').includes('PAY_ON_DELIVERY') || o.paymentMethod === 'COD'))
@@ -4160,7 +4164,7 @@ export default function OrdersFulfillmentPage() {
                       Scan to Pay ₹{(codModalOrder.totalAmount || 0).toLocaleString()}
                     </div>
                     <div style={{ fontSize: '10.5px', color: '#64748B', marginTop: '2px' }}>
-                      freshioz@icici • Any UPI App
+                      {dynamicQrData?.payeeInfo || 'Razorpay Gateway • Any UPI App'}
                     </div>
 
                     <input
@@ -4182,7 +4186,7 @@ export default function OrdersFulfillmentPage() {
                   </div>
                 ) : (
                   <div style={{ color: '#DC2626', fontSize: '11.5px', padding: '10px' }}>
-                    UPI QR unavailable. Collect cash or pay to freshioz@icici.
+                    UPI QR unavailable. Collect cash from resident.
                   </div>
                 )}
               </div>
