@@ -254,6 +254,7 @@ export default function WarehouseCratingPage() {
 
   // Handover modal state
   const [handoverLot, setHandoverLot] = useState(null); // { societyName, orders, totalWeight, ... }
+  const [selectedHandoverOrderIds, setSelectedHandoverOrderIds] = useState(new Set());
   const [isSubmittingHandover, setIsSubmittingHandover] = useState(false);
   const [viewHandoverDetailsLot, setViewHandoverDetailsLot] = useState(null);
   const [bulkPackModalCrate, setBulkPackModalCrate] = useState(null);
@@ -976,6 +977,11 @@ export default function WarehouseCratingPage() {
       totalWeightKg: activeWeight
     });
 
+    // Default select pending orders not yet out for delivery (or all if all are being reassigned)
+    const pendingOrders = activeOrders.filter(o => o.status !== 'OUT_FOR_DELIVERY');
+    const defaultSelected = pendingOrders.length > 0 ? pendingOrders : activeOrders;
+    setSelectedHandoverOrderIds(new Set(defaultSelected.map(o => o.id)));
+
     // 1. Check if orders in this lot already have an assigned driver
     const existingDriverOrder = activeOrders.find(o => o.deliveryPartnerId || o.deliveryPartnerName);
 
@@ -1014,16 +1020,17 @@ export default function WarehouseCratingPage() {
     }
   };
 
-  // Submit Handover to Delivery Partner
+  // Submit Handover to Delivery Partner (Supports split multi-driver flat assignment)
   const handleConfirmHandover = async (e) => {
     e.preventDefault();
     if (!handoverLot) return;
 
-    // Safety guard: only dispatch orders that are not already delivered or cancelled
-    const ordersToDispatch = handoverLot.orders.filter(o => o.status !== 'DELIVERED' && o.status !== 'CANCELLED');
+    // Safety guard: only dispatch orders that are selected, and not already delivered or cancelled
+    const ordersToDispatch = handoverLot.orders.filter(o => 
+      selectedHandoverOrderIds.has(o.id) && o.status !== 'DELIVERED' && o.status !== 'CANCELLED'
+    );
     if (ordersToDispatch.length === 0) {
-      showToast('No pending orders to dispatch in this lot.', 'warning');
-      setHandoverLot(null);
+      showToast('Please select at least one flat to hand over to this driver.', 'warning');
       return;
     }
 
@@ -1040,7 +1047,14 @@ export default function WarehouseCratingPage() {
         dispatchedBy: currentUser?.name || 'Warehouse Dispatch Lead',
         dispatchedById: currentUser?.id || 'emp-lead'
       })));
-      showToast(`✓ Lot #${handoverLot.lotId} (${ordersToDispatch.length} flats) handed over to driver ${driverName} (${vehicleNumber})!`, 'success');
+
+      const totalActiveInLot = handoverLot.orders.filter(o => o.status !== 'DELIVERED' && o.status !== 'CANCELLED').length;
+      const remainingFlats = totalActiveInLot - ordersToDispatch.length;
+
+      showToast(
+        `✓ Lot #${handoverLot.lotId}: ${ordersToDispatch.length} flat(s) dispatched with ${driverName} (${vehicleNumber})!${remainingFlats > 0 ? ` ${remainingFlats} remaining flat(s) can be assigned to another driver.` : ''}`,
+        'success'
+      );
       setHandoverLot(null);
     } catch (err) {
       console.error('Backend dispatch status update failed:', err);
@@ -1049,6 +1063,27 @@ export default function WarehouseCratingPage() {
       setIsSubmittingHandover(false);
     }
   };
+
+  // Dynamically calculate produce weight of selected flats for current handover
+  const selectedHandoverWeightKg = useMemo(() => {
+    if (!handoverLot) return '0.0';
+    const sum = handoverLot.orders
+      .filter(o => selectedHandoverOrderIds.has(o.id))
+      .reduce((total, order) => {
+        let w = 0;
+        (order.items || []).forEach(it => {
+          const q = parseFloat(it.qty) || 1;
+          const unit = String(it.unit || '').toLowerCase();
+          let mult = 1;
+          if (unit.includes('25 kg') || unit.includes('sack')) mult = 25;
+          else if (unit.includes('20 kg') || unit.includes('crate')) mult = 20;
+          else if (unit.includes('10 kg') || unit.includes('box')) mult = 10;
+          w += q * mult;
+        });
+        return total + w;
+      }, 0);
+    return sum.toFixed(1);
+  }, [handoverLot, selectedHandoverOrderIds]);
 
   // Mark lot delivered at society drop desk with unified commission crediting
   const handleMarkLotDelivered = async (lot) => {
@@ -2882,17 +2917,140 @@ export default function WarehouseCratingPage() {
                       <strong style={{ color: '#1E293B' }}>{vehicleType} • <span style={{ fontFamily: 'monospace' }}>{vehicleNumber || '—'}</span></strong>
                     </div>
 
-                    {/* Quick Pills of Customer Flats in Lot */}
-                    <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #E2E8F0' }}>
-                      <div style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', marginBottom: '4px' }}>
-                        Flats Handed Over to Driver ({handoverLot.orders.length}):
-                      </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxHeight: '90px', overflowY: 'auto' }}>
-                        {handoverLot.orders.map(o => (
-                          <span key={o.id} style={{ background: '#FFFFFF', border: '1px solid #CBD5E1', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, color: '#0F172A' }}>
-                            Flat {extractBlockAndFlat(o.flatNo).flat || o.flatNo} ({o.userName || 'Resident'})
+                    {/* Interactive Flat-Level Multi-Driver Selection Checklist */}
+                    <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #CBD5E1' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
+                        <div>
+                          <div style={{ fontSize: '11.5px', fontWeight: 800, color: '#0F172A', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                            Select Flats for this Driver:
+                          </div>
+                          <div style={{ fontSize: '10.5px', color: '#64748B' }}>
+                            Unselected flats remain in lot to assign to another driver
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (selectedHandoverOrderIds.size === handoverLot.orders.length) {
+                                setSelectedHandoverOrderIds(new Set());
+                              } else {
+                                setSelectedHandoverOrderIds(new Set(handoverLot.orders.map(o => o.id)));
+                              }
+                            }}
+                            style={{
+                              background: '#FFFFFF',
+                              border: '1px solid #CBD5E1',
+                              borderRadius: '5px',
+                              padding: '2px 8px',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              color: '#334155',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {selectedHandoverOrderIds.size === handoverLot.orders.length ? 'Deselect All' : 'Select All'}
+                          </button>
+                          <span style={{
+                            fontSize: '11px',
+                            fontWeight: 800,
+                            background: '#DCFCE7',
+                            color: '#166534',
+                            border: '1px solid #86EFAC',
+                            padding: '2px 8px',
+                            borderRadius: '9999px'
+                          }}>
+                            {selectedHandoverOrderIds.size} / {handoverLot.orders.length} Flats ({selectedHandoverWeightKg} kg)
                           </span>
-                        ))}
+                        </div>
+                      </div>
+
+                      <div style={{
+                        maxHeight: '170px',
+                        overflowY: 'auto',
+                        border: '1.5px solid #CBD5E1',
+                        borderRadius: '8px',
+                        background: '#FFFFFF',
+                        padding: '4px'
+                      }}>
+                        {handoverLot.orders.map(o => {
+                          const isSelected = selectedHandoverOrderIds.has(o.id);
+                          const isAlreadyOut = o.status === 'OUT_FOR_DELIVERY';
+                          const orderWeight = (o.items || []).reduce((sum, it) => {
+                            const q = parseFloat(it.qty) || 1;
+                            const unit = String(it.unit || '').toLowerCase();
+                            let mult = 1;
+                            if (unit.includes('25 kg') || unit.includes('sack')) mult = 25;
+                            else if (unit.includes('20 kg') || unit.includes('crate')) mult = 20;
+                            else if (unit.includes('10 kg') || unit.includes('box')) mult = 10;
+                            return sum + (q * mult);
+                          }, 0).toFixed(1);
+
+                          return (
+                            <label
+                              key={o.id}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '6px 10px',
+                                borderRadius: '6px',
+                                marginBottom: '3px',
+                                background: isSelected ? '#F0FDF4' : '#FFFFFF',
+                                border: isSelected ? '1px solid #86EFAC' : '1px solid #F1F5F9',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => {
+                                    setSelectedHandoverOrderIds(prev => {
+                                      const next = new Set(prev);
+                                      if (next.has(o.id)) next.delete(o.id);
+                                      else next.add(o.id);
+                                      return next;
+                                    });
+                                  }}
+                                  style={{ width: '16px', height: '16px', accentColor: '#166534', cursor: 'pointer' }}
+                                />
+                                <div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span style={{ fontSize: '12.5px', fontWeight: 800, color: '#0F172A' }}>
+                                      Flat {extractBlockAndFlat(o.flatNo).flat || o.flatNo}
+                                    </span>
+                                    {extractBlockAndFlat(o.flatNo).block && (
+                                      <span style={{ fontSize: '10.5px', color: '#64748B', background: '#F1F5F9', padding: '1px 5px', borderRadius: '3px' }}>
+                                        Block {extractBlockAndFlat(o.flatNo).block}
+                                      </span>
+                                    )}
+                                    <span style={{ fontSize: '12px', color: '#334155', fontWeight: 600 }}>
+                                      ({o.userName || 'Resident'})
+                                    </span>
+                                  </div>
+                                  <div style={{ fontSize: '10.5px', color: '#64748B', display: 'flex', gap: '8px', marginTop: '2px', flexWrap: 'wrap' }}>
+                                    <span>{(o.items || []).length} items • ~{orderWeight} kg</span>
+                                    <span style={{ fontFamily: 'monospace' }}>#{o.id}</span>
+                                    {isAlreadyOut && (
+                                      <span style={{ color: '#D97706', fontWeight: 700 }}>
+                                        🚚 Currently Out with {o.deliveryPartnerName || 'Driver'}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              <span style={{
+                                fontSize: '11px',
+                                fontWeight: 800,
+                                color: isSelected ? '#166534' : '#94A3B8'
+                              }}>
+                                {isSelected ? '✓ Selected' : 'Unassigned'}
+                              </span>
+                            </label>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
@@ -2920,17 +3078,19 @@ export default function WarehouseCratingPage() {
                 <button
                   type="submit"
                   className="admin-btn-accent"
-                  disabled={!driverId || deliveryRiders.length === 0 || isSubmittingHandover}
+                  disabled={!driverId || deliveryRiders.length === 0 || isSubmittingHandover || selectedHandoverOrderIds.size === 0}
                   style={{
                     padding: '8px 18px',
                     borderRadius: '6px',
                     fontSize: '13px',
                     fontWeight: 800,
-                    opacity: (!driverId || deliveryRiders.length === 0 || isSubmittingHandover) ? 0.5 : 1,
-                    cursor: (!driverId || deliveryRiders.length === 0 || isSubmittingHandover) ? 'not-allowed' : 'pointer'
+                    opacity: (!driverId || deliveryRiders.length === 0 || isSubmittingHandover || selectedHandoverOrderIds.size === 0) ? 0.5 : 1,
+                    cursor: (!driverId || deliveryRiders.length === 0 || isSubmittingHandover || selectedHandoverOrderIds.size === 0) ? 'not-allowed' : 'pointer'
                   }}
                 >
-                  {isSubmittingHandover ? 'Dispatching & Handing Over...' : 'Confirm Handover & Dispatch ➔'}
+                  {isSubmittingHandover 
+                    ? 'Dispatching & Handing Over...' 
+                    : `Confirm Handover & Dispatch (${selectedHandoverOrderIds.size} Flats) ➔`}
                 </button>
               </div>
             </form>

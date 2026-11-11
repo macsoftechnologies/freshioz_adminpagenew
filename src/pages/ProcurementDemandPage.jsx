@@ -1094,15 +1094,28 @@ export default function ProcurementDemandPage() {
                     {allDemandItems.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((d, idx) => (
                       <tr key={d.name || d.productId || idx} style={{ background: d.isFullyCovered ? '#F8FAFC' : '#FFFFFF' }}>
                         <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                             <strong style={{ fontSize: '14px', color: '#0F172A' }}>{d.name}</strong>
                             {d.isFullyCovered && (
-                              <span style={{ fontSize: '10.5px', background: '#DCFCE7', color: '#15803D', fontWeight: 700, padding: '1px 6px', borderRadius: '4px' }}>
-                                ✓ Fully Procured
+                              <span style={{
+                                fontSize: '10.5px',
+                                background: (d.grossDemandKg > 0 && d.priorStockKg >= d.grossDemandKg) ? '#ECFDF5' : '#DCFCE7',
+                                color: (d.grossDemandKg > 0 && d.priorStockKg >= d.grossDemandKg) ? '#065F46' : '#15803D',
+                                border: (d.grossDemandKg > 0 && d.priorStockKg >= d.grossDemandKg) ? '1px solid #A7F3D0' : 'none',
+                                fontWeight: 700,
+                                padding: '1px 6px',
+                                borderRadius: '4px'
+                              }}>
+                                {(d.grossDemandKg > 0 && d.priorStockKg >= d.grossDemandKg) ? '🟢 Fulfilled from Hub Stock' : '✓ Fully Procured'}
                               </span>
                             )}
                           </div>
                           <div style={{ fontSize: '11px', color: '#64748B' }}>Origin: {d.origin}</div>
+                          {d.netRequiredKg === 0 && d.grossDemandKg > 0 && d.priorStockKg >= d.grossDemandKg && (
+                            <div style={{ fontSize: '10.5px', color: '#059669', fontWeight: 600, marginTop: '2px' }}>
+                              Available in Hub ({d.priorStockKg} kg) • 0 kg Mandi buy required
+                            </div>
+                          )}
                         </td>
 
                         <td>
@@ -1173,11 +1186,18 @@ export default function ProcurementDemandPage() {
                             <strong style={{ color: d.netRequiredKg > 0 ? '#B45309' : '#059669', fontSize: '15px' }}>
                               {d.netRequiredKg} kg
                             </strong>
-                            <div style={{ fontSize: '10.5px', color: '#64748B' }}>
+                            <div style={{ fontSize: '10.5px', color: d.netRequiredKg === 0 ? '#059669' : '#64748B', fontWeight: d.netRequiredKg === 0 ? 700 : 400, marginTop: '2px' }}>
                               {d.netRequiredKg === 0 
-                                ? (d.grossDemandKg === 0 && d.deliveredConsumedKg > 0 ? `✓ ${d.deliveredConsumedKg} kg Delivered` : `✓ ${d.totalSupplyCoveredKg} kg Covered`) 
+                                ? (d.grossDemandKg > 0 && d.priorStockKg >= d.grossDemandKg
+                                    ? `✓ Hub Stock Fulfilled`
+                                    : (d.grossDemandKg === 0 && d.deliveredConsumedKg > 0 ? `✓ ${d.deliveredConsumedKg} kg Delivered` : `✓ ${d.totalSupplyCoveredKg} kg Covered`)) 
                                 : `${d.grossDemandKg} kg - ${d.totalSupplyCoveredKg} kg covered`}
                             </div>
+                            {d.netRequiredKg === 0 && d.grossDemandKg > 0 && d.priorStockKg >= d.grossDemandKg && (
+                              <div style={{ fontSize: '10px', color: '#64748B' }}>
+                                {d.grossDemandKg} kg needed • {d.priorStockKg} kg in stock
+                              </div>
+                            )}
                           </div>
                         </td>
 
@@ -1209,14 +1229,15 @@ export default function ProcurementDemandPage() {
                               fontWeight: 700,
                               padding: '3px 8px',
                               borderRadius: '9999px',
-                              background: '#DCFCE7',
-                              color: '#15803D',
+                              background: (d.grossDemandKg > 0 && d.priorStockKg >= d.grossDemandKg) ? '#ECFDF5' : '#DCFCE7',
+                              color: (d.grossDemandKg > 0 && d.priorStockKg >= d.grossDemandKg) ? '#065F46' : '#15803D',
+                              border: (d.grossDemandKg > 0 && d.priorStockKg >= d.grossDemandKg) ? '1px solid #A7F3D0' : 'none',
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: '4px'
                             }}>
                               <CheckCircle2 size={12} />
-                              <span>Done</span>
+                              <span>{(d.grossDemandKg > 0 && d.priorStockKg >= d.grossDemandKg) ? 'Stock Fulfilled' : 'Done'}</span>
                             </span>
                           )}
                         </td>

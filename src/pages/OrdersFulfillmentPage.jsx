@@ -483,6 +483,43 @@ export default function OrdersFulfillmentPage() {
     return riderBaseOrders.filter(o => o.status === 'CANCELLED');
   }, [riderBaseOrders]);
 
+  // Track acknowledged / dismissed cancellation alert IDs so they disappear from the top banner
+  const [dismissedCancelAlertIds, setDismissedCancelAlertIds] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`freshioz_dismissed_cancels_${currentUser?.id || 'rider'}`);
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  const handleDismissCancellationAlert = (orderId) => {
+    setDismissedCancelAlertIds(prev => {
+      const next = new Set(prev);
+      if (orderId === 'ALL') {
+        customerCancelledOrders.forEach(o => next.add(o.id));
+      } else {
+        next.add(orderId);
+      }
+      try {
+        localStorage.setItem(
+          `freshioz_dismissed_cancels_${currentUser?.id || 'rider'}`,
+          JSON.stringify(Array.from(next))
+        );
+      } catch (e) {
+        console.warn('Failed to save dismissed cancel alerts', e);
+      }
+      return next;
+    });
+  };
+
+  const unacknowledgedCancelledOrders = useMemo(() => {
+    return customerCancelledOrders.filter(o => !dismissedCancelAlertIds.has(o.id));
+  }, [customerCancelledOrders, dismissedCancelAlertIds]);
+
+  // Collapsible toggle for bottom returns / hub return bag
+  const [showRiderReturnTray, setShowRiderReturnTray] = useState(false);
+
   // Audio synthesizer & mobile haptic alert when an order is cancelled
   const playCancellationAlertChime = React.useCallback(() => {
     try {
@@ -1519,8 +1556,8 @@ export default function OrdersFulfillmentPage() {
       )}
 
       {/* ================= PRIMARY CONTENT AREA ================= */}
-      {/* URGENT DRIVER CANCELLATION NOTICE BANNER */}
-      {isDeliveryExecutive && customerCancelledOrders.length > 0 && (
+      {/* URGENT DRIVER CANCELLATION NOTICE BANNER (DISMISSABLE WITH OK BUTTON) */}
+      {isDeliveryExecutive && unacknowledgedCancelledOrders.length > 0 && (
         <div style={{
           background: '#FEF2F2',
           border: '2px solid #EF4444',
@@ -1548,52 +1585,77 @@ export default function OrdersFulfillmentPage() {
               </div>
               <div>
                 <div style={{ fontSize: '13.5px', fontWeight: 900, color: '#991B1B' }}>
-                  DO NOT DELIVER — {customerCancelledOrders.length} Order(s) Cancelled on Your Route!
+                  DO NOT DELIVER — {unacknowledgedCancelledOrders.length} New Order Cancellation(s) on Route!
                 </div>
                 <div style={{ fontSize: '11.5px', color: '#B91C1C', marginTop: '1px' }}>
                   Resident cancelled this order. Retain crate items in vehicle and return them to the Warehouse Hub inventory.
                 </div>
               </div>
             </div>
-            {riderTab !== 'CANCELLED' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {/* Primary OK Button to acknowledge and vanish the top alert */}
               <button
                 type="button"
-                onClick={() => handleRiderTabChange('CANCELLED')}
+                onClick={() => handleDismissCancellationAlert('ALL')}
                 style={{
-                  background: '#DC2626',
+                  background: '#059669',
                   color: '#FFF',
                   border: 'none',
-                  padding: '6px 14px',
+                  padding: '7px 16px',
                   borderRadius: '6px',
-                  fontSize: '11.5px',
+                  fontSize: '12px',
                   fontWeight: 800,
                   cursor: 'pointer',
-                  boxShadow: '0 2px 4px rgba(220, 38, 38, 0.25)'
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 2px 6px rgba(5, 150, 105, 0.3)'
                 }}
+                title="Acknowledge all cancellation notices and clear this alert banner from the top"
               >
-                Review Cancelled Stops ({customerCancelledOrders.length}) →
+                <span>✓ OK, Got It ({unacknowledgedCancelledOrders.length})</span>
               </button>
-            )}
+              {riderTab !== 'CANCELLED' && (
+                <button
+                  type="button"
+                  onClick={() => handleRiderTabChange('CANCELLED')}
+                  style={{
+                    background: '#DC2626',
+                    color: '#FFF',
+                    border: 'none',
+                    padding: '6px 14px',
+                    borderRadius: '6px',
+                    fontSize: '11.5px',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 4px rgba(220, 38, 38, 0.25)'
+                  }}
+                >
+                  Review Returns Tab →
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* List of Cancelled Flats */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed #FCA5A5' }}>
-            {customerCancelledOrders.map(co => (
+          {/* List of Cancelled Flats with individual OK buttons */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed #FCA5A5' }}>
+            {unacknowledgedCancelledOrders.map(co => (
               <div
                 key={co.id}
                 style={{
                   background: '#FFFFFF',
                   border: '1.5px solid #F87171',
-                  borderRadius: '6px',
-                  padding: '4px 10px',
+                  borderRadius: '8px',
+                  padding: '6px 12px',
                   fontSize: '11.5px',
                   color: '#1E293B',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px'
+                  gap: '8px',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
                 }}
               >
-                <span style={{ fontWeight: 900, color: '#DC2626', fontSize: '12.5px' }}>
+                <span style={{ fontWeight: 900, color: '#DC2626', fontSize: '13px' }}>
                   {co.flatNo || co.flatNumber || 'Flat'}
                 </span>
                 <span style={{ color: '#94A3B8' }}>•</span>
@@ -1604,11 +1666,29 @@ export default function OrdersFulfillmentPage() {
                   color: '#991B1B',
                   fontSize: '10.5px',
                   fontWeight: 800,
-                  padding: '1px 6px',
+                  padding: '2px 6px',
                   borderRadius: '4px'
                 }}>
                   {co.cancelledReason || 'Cancelled by resident'}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => handleDismissCancellationAlert(co.id)}
+                  style={{
+                    background: '#F1F5F9',
+                    border: '1px solid #CBD5E1',
+                    borderRadius: '4px',
+                    padding: '2px 8px',
+                    fontSize: '11px',
+                    fontWeight: 800,
+                    color: '#0F172A',
+                    cursor: 'pointer',
+                    marginLeft: '2px'
+                  }}
+                  title="Dismiss this alert"
+                >
+                  OK ✓
+                </button>
               </div>
             ))}
           </div>
@@ -2348,6 +2428,89 @@ export default function OrdersFulfillmentPage() {
                   Next ›
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* Collapsible Bottom Return Tray for Items to Bring Back to Hub */}
+          {customerCancelledOrders.length > 0 && (
+            <div style={{
+              marginTop: '16px',
+              background: '#FFFFFF',
+              border: '1.5px solid #FCA5A5',
+              borderRadius: '12px',
+              overflow: 'hidden',
+              boxShadow: '0 2px 8px rgba(239, 68, 68, 0.08)'
+            }}>
+              <div
+                onClick={() => setShowRiderReturnTray(prev => !prev)}
+                style={{
+                  padding: '12px 16px',
+                  background: '#FEF2F2',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  cursor: 'pointer',
+                  userSelect: 'none'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '16px' }}>📦</span>
+                  <strong style={{ fontSize: '13px', color: '#991B1B' }}>
+                    Hub Return Tray ({customerCancelledOrders.length} Cancelled / Returned Orders)
+                  </strong>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '11px', color: '#B91C1C', fontWeight: 600 }}>
+                    Keep in vehicle & hand over at Hub
+                  </span>
+                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#991B1B' }}>
+                    {showRiderReturnTray ? 'Hide ▴' : 'Show ▾'}
+                  </span>
+                </div>
+              </div>
+              {showRiderReturnTray && (
+                <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ fontSize: '11.5px', color: '#64748B' }}>
+                    These orders were cancelled by residents. Retain produce crate bags in your vehicle and hand them over to the Warehouse Quality Audit lead upon return:
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {customerCancelledOrders.map(co => (
+                      <div key={co.id} style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '10px 14px',
+                        borderRadius: '8px',
+                        background: '#F8FAFC',
+                        border: '1px solid #E2E8F0',
+                        fontSize: '12.5px',
+                        flexWrap: 'wrap',
+                        gap: '8px'
+                      }}>
+                        <div>
+                          <strong style={{ color: '#DC2626', fontSize: '13px' }}>Flat {co.flatNo || co.flatNumber || '—'}</strong>
+                          <span style={{ color: '#64748B', margin: '0 6px' }}>•</span>
+                          <span style={{ color: '#0F172A', fontWeight: 700 }}>{co.userName}</span>
+                          <span style={{ color: '#64748B', fontSize: '11px', marginLeft: '6px' }}>#{co.id}</span>
+                          <div style={{ fontSize: '11.5px', color: '#991B1B', marginTop: '2px' }}>
+                            Reason: {co.cancelledReason || 'Cancelled by resident'}
+                          </div>
+                        </div>
+                        <span style={{
+                          fontSize: '11px',
+                          fontWeight: 800,
+                          color: '#B91C1C',
+                          background: '#FEE2E2',
+                          padding: '3px 9px',
+                          borderRadius: '6px'
+                        }}>
+                          Return to Hub
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
