@@ -314,7 +314,7 @@ export default function DailyPricingPage() {
             padding: '2px 8px', 
             borderRadius: '4px' 
           }}>
-            {products.length} Items Live • {globalGstRate}% GST {globalGstRate === 0 ? '(0% Exempt)' : 'Applied'}
+            {products.length} Items Live • {globalGstRate}% GST
           </span>
         </div>
 
@@ -1049,7 +1049,7 @@ export default function DailyPricingPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px dashed #CBD5E1' }}>
                 <span style={{ color: '#64748B', fontWeight: 600 }}>Consolidated Order GST:</span>
                 <span style={{ color: globalGstRate === 0 ? '#059669' : '#B45309', fontWeight: 800 }}>
-                  {globalGstRate}% {globalGstRate === 0 ? '(0% Statutory Exempt)' : 'Applied on Produce Sum'}
+                  {globalGstRate}%
                 </span>
               </div>
 

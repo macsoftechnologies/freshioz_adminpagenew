@@ -1682,47 +1682,79 @@ export default function OrdersFulfillmentPage() {
           </div>
 
           {/* List of Cancelled Flats with individual OK buttons */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed #FCA5A5' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed #FCA5A5' }}>
             {unacknowledgedCancelledOrders.map(co => (
               <div
                 key={co.id}
                 style={{
                   background: '#FFFFFF',
                   border: '1.5px solid #F87171',
-                  borderRadius: '8px',
-                  padding: '6px 12px',
-                  fontSize: '11.5px',
+                  borderRadius: '10px',
+                  padding: '10px 12px',
+                  fontSize: '12px',
                   color: '#1E293B',
                   display: 'flex',
-                  alignItems: 'center',
+                  flexDirection: 'column',
                   gap: '8px',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                  boxShadow: '0 2px 6px rgba(239, 68, 68, 0.08)',
+                  width: '100%',
+                  boxSizing: 'border-box'
                 }}
               >
-                <span style={{ fontWeight: 900, color: '#DC2626', fontSize: '13px' }}>
-                  {co.flatNo || co.flatNumber || 'Flat'}
-                </span>
-                <span style={{ color: '#94A3B8' }}>•</span>
-                <span style={{ fontWeight: 700, color: '#0F172A' }}>{co.userName}</span>
-                <span style={{ fontFamily: 'monospace', fontSize: '11px', color: '#64748B' }}>#{co.id}</span>
+                {/* Top Row: Flat # • Name • #ID and Dismiss Button */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 900, color: '#DC2626', fontSize: '13px', background: '#FEE2E2', padding: '2px 8px', borderRadius: '6px' }}>
+                      Flat {co.flatNo || co.flatNumber || '—'}
+                    </span>
+                    <span style={{ fontWeight: 700, color: '#0F172A', fontSize: '13px' }}>{co.userName}</span>
+                    <span style={{ fontFamily: 'monospace', fontSize: '11px', color: '#64748B', whiteSpace: 'nowrap' }}>
+                      #{co.id}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleDismissCancellationAlert(co.id)}
+                    style={{
+                      background: '#F1F5F9',
+                      border: '1px solid #CBD5E1',
+                      borderRadius: '6px',
+                      padding: '3px 10px',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      color: '#0F172A',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                    title="Dismiss this alert"
+                  >
+                    OK ✓
+                  </button>
+                </div>
+
+                {/* Bottom Row: Reason Pill & Optional Proof Button */}
                 {(() => {
                   const { reason, photos } = parseCancelDetails(co.cancelledReason);
                   return (
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{
-                        background: '#FEE2E2',
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', flexWrap: 'wrap', paddingTop: '4px', borderTop: '1px dashed #FEE2E2' }}>
+                      <div style={{
+                        background: '#FEF2F2',
+                        border: '1px solid #FECACA',
                         color: '#991B1B',
-                        fontSize: '10.5px',
-                        fontWeight: 800,
-                        padding: '2px 6px',
-                        borderRadius: '4px',
-                        maxWidth: '280px',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
+                        fontSize: '11.5px',
+                        fontWeight: 700,
+                        padding: '4px 8px',
+                        borderRadius: '6px',
+                        wordBreak: 'break-word',
+                        lineHeight: 1.4,
+                        flex: 1
                       }}>
                         {reason}
-                      </span>
+                      </div>
                       {photos.length > 0 && (
                         <button
                           type="button"
@@ -1731,40 +1763,23 @@ export default function OrdersFulfillmentPage() {
                             background: '#EFF6FF',
                             border: '1px solid #BFDBFE',
                             color: '#1D4ED8',
-                            borderRadius: '4px',
-                            fontSize: '10px',
-                            padding: '1px 6px',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            padding: '4px 8px',
                             cursor: 'pointer',
                             fontWeight: 700,
                             display: 'inline-flex',
                             alignItems: 'center',
-                            gap: '3px'
+                            gap: '4px',
+                            whiteSpace: 'nowrap'
                           }}
                         >
-                          <Camera size={11} /> Proof ({photos.length})
+                          <Camera size={13} /> Proof ({photos.length})
                         </button>
                       )}
                     </div>
                   );
                 })()}
-                <button
-                  type="button"
-                  onClick={() => handleDismissCancellationAlert(co.id)}
-                  style={{
-                    background: '#F1F5F9',
-                    border: '1px solid #CBD5E1',
-                    borderRadius: '4px',
-                    padding: '2px 8px',
-                    fontSize: '11px',
-                    fontWeight: 800,
-                    color: '#0F172A',
-                    cursor: 'pointer',
-                    marginLeft: '2px'
-                  }}
-                  title="Dismiss this alert"
-                >
-                  OK ✓
-                </button>
               </div>
             ))}
           </div>
