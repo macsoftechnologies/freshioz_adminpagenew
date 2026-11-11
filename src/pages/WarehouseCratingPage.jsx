@@ -27,7 +27,10 @@ import {
   Camera,
   Edit2,
   Lock,
-  ShieldCheck
+  ShieldCheck,
+  Trash2,
+  AlertTriangle,
+  Search
 } from 'lucide-react';
 import { useAdminRole } from '../context/AdminRoleContext';
 import { useToast } from '../context/ToastContext';
@@ -122,10 +125,11 @@ export default function WarehouseCratingPage() {
     });
   }, [employees]);
 
-  // URL Hash synchronization (#packing, #dispatch, #delivered, #returns)
+  // URL Hash synchronization (#packing, #dispatch, #delivered, #returns, #wastage)
   const getTabFromHash = () => {
     if (typeof window === 'undefined') return 'PACKING_STATION';
     const hash = (window.location.hash || '').toLowerCase();
+    if (hash === '#wastage' || hash === '#spoilage' || hash === '#wastage-ledger') return 'WASTAGE_LEDGER';
     if (hash === '#returns' || hash === '#return-audit') return 'RETURN_AUDIT';
     if (hash === '#dispatch' || hash === '#lots' || hash === '#delivered' || hash === '#out-for-delivery' || hash === '#ready') return 'SOCIETY_LOTS';
     return 'PACKING_STATION';
@@ -141,7 +145,7 @@ export default function WarehouseCratingPage() {
     return 'ALL';
   };
 
-  // Active view tab: 'PACKING_STATION' | 'SOCIETY_LOTS' | 'RETURN_AUDIT'
+  // Active view tab: 'PACKING_STATION' | 'SOCIETY_LOTS' | 'RETURN_AUDIT' | 'WASTAGE_LEDGER'
   const [activeTab, setActiveTab] = useState(getTabFromHash);
   const [lotFilter, setLotFilter] = useState(getLotFilterFromHash); // 'ALL' | 'READY_FOR_HANDOVER' | 'OUT_FOR_DELIVERY' | 'DELIVERED'
   const [dateFilter, setDateFilter] = useState('ALL'); // 'ALL' | 'TODAY' | 'TOMORROW' | dateStr
@@ -153,6 +157,13 @@ export default function WarehouseCratingPage() {
   const [packingOrderIds, setPackingOrderIds] = useState({});
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
+
+  // Wastage Ledger Filters State
+  const [wastageSearchQuery, setWastageSearchQuery] = useState('');
+  const [wastageDateFilter, setWastageDateFilter] = useState('ALL'); // 'ALL' | 'TODAY' | 'YESTERDAY' | customDate
+  const [wastageCustomDate, setWastageCustomDate] = useState('');
+  const [wastageCurrentPage, setWastageCurrentPage] = useState(1);
+  const [wastagePageSize] = useState(15);
 
   // Return & Wastage Quality Audit Desk State
   const adjustStockMutation = useAdjustStock();
@@ -234,9 +245,11 @@ export default function WarehouseCratingPage() {
     setActiveTab(newTab);
     const targetHash = newTab === 'RETURN_AUDIT'
       ? '#returns'
-      : (newTab === 'SOCIETY_LOTS' 
-        ? (lotFilter === 'DELIVERED' ? '#delivered' : (lotFilter === 'OUT_FOR_DELIVERY' ? '#out-for-delivery' : '#dispatch')) 
-        : '#packing');
+      : (newTab === 'WASTAGE_LEDGER'
+          ? '#wastage'
+          : (newTab === 'SOCIETY_LOTS' 
+            ? (lotFilter === 'DELIVERED' ? '#delivered' : (lotFilter === 'OUT_FOR_DELIVERY' ? '#out-for-delivery' : '#dispatch')) 
+            : '#packing'));
     if (window.location.hash !== targetHash) {
       window.location.hash = targetHash;
     }
@@ -525,18 +538,22 @@ export default function WarehouseCratingPage() {
     });
   }, [procurementBills, isWarehouseScoped, warehouses.length, assignedWhId, assignedWhCode, resolvedWh]);
 
-  // Filter returned / cancelled orders for this warehouse (ONLY physical returns from delivery runs)
+  // Filter returned / cancelled orders for this warehouse (Physical doorstep returns and partial rejections)
   const returnedOrders = useMemo(() => {
     return orders.filter(order => {
-      if (order.status !== 'CANCELLED') return false;
+      const isFullCancel = order.status === 'CANCELLED';
+      const isPartialReturn = order.status === 'PARTIALLY_DELIVERED' || Boolean(order.returnedItems && order.returnedItems.length > 0);
+      if (!isFullCancel && !isPartialReturn) return false;
 
-      // Only orders that were physically dispatched / assigned to a delivery partner require warehouse quality audit
+      // Only orders that were physically dispatched / assigned to a delivery partner or have return items require warehouse quality audit
       const isPhysicalDoorstepReturn = Boolean(
+        isPartialReturn ||
         order.deliveryLotId || 
         order.deliveryPartnerId || 
         order.deliveryPartnerName ||
         (order.cancelledReason && (
           order.cancelledReason.includes('[PROOF_PHOTO]') || 
+          order.cancelledReason.includes('[RETURNED_ITEMS]') ||
           order.cancelledReason.includes('Reported by Rider') ||
           order.cancelledReason.includes('Doorstep') ||
           order.cancelledReason.includes('Refused') ||
@@ -557,6 +574,77 @@ export default function WarehouseCratingPage() {
       return true;
     });
   }, [orders, isWarehouseScoped, warehouses.length, assignedWhId, assignedWhCode, resolvedWh, societies]);
+
+  // Wastage & Spoilage Ledger Records (Indexed by Order Number and Delivery Date)
+  const wastageRecords = useMemo(() => {
+    const list = [];
+    orders.forEach(order => {
+      const { auditRecord: dbAudit } = parseCancelDetails(order.cancelledReason);
+      const auditData = returnAudits[order.id] || dbAudit;
+      const isPartial = order.status === 'PARTIALLY_DELIVERED' || Boolean(order.returnedItems && order.returnedItems.length > 0);
+      const orderItems = isPartial && Array.isArray(order.returnedItems) && order.returnedItems.length > 0
+        ? order.returnedItems
+        : (Array.isArray(order.items) ? order.items : []);
+
+      if (auditData?.itemAdjustments) {
+        orderItems.forEach((it, idx) => {
+          const adj = auditData.itemAdjustments[`${order.id}_${idx}`] || 
+                      auditData.itemAdjustments[`${order.id}_${it.id}`] ||
+                      auditData.itemAdjustments[`${order.id}_${it.productId}`];
+          const wQty = Number(adj?.wastageQty) || 0;
+          if (wQty > 0) {
+            const unitRate = Number(it.rate || it.price || 0) || 30;
+            list.push({
+              id: `WST_${order.id}_${idx}`,
+              orderId: order.id,
+              date: auditData.auditedAt ? auditData.auditedAt.split('T')[0] : (order.deliveryDate || order.createdAt?.split('T')[0] || new Date().toISOString().split('T')[0]),
+              timestamp: auditData.auditedAt || order.cancelledAt || order.updatedAt || order.createdAt,
+              societyName: order.societyName,
+              flatNo: order.flatNo || order.flatNumber,
+              userName: order.userName,
+              userPhone: order.userPhone,
+              cropName: it.name || it.productName || 'Produce Item',
+              wastageQty: wQty,
+              unit: it.unit || 'kg',
+              estimatedLoss: Math.round(wQty * unitRate),
+              reason: order.cancelledReason ? order.cancelledReason.split(' [')[0] : 'Produce Spoilage / Doorstep Rejection',
+              auditedBy: auditData.auditedBy || 'Warehouse Operations Lead',
+              driverName: order.deliveryPartnerName || order.dispatchedToRiderName || 'Delivery Partner',
+              isPartial: isPartial,
+              status: 'AUDITED_WASTAGE'
+            });
+          }
+        });
+      } else if (Array.isArray(order.returnedItems) && order.returnedItems.length > 0) {
+        // Doorstep returns recorded by delivery executive before warehouse audit
+        order.returnedItems.forEach((it, idx) => {
+          const wQty = Number(it.qty || it.quantity) || 1;
+          const unitRate = Number(it.rate || it.price || 0) || 30;
+          list.push({
+            id: `WST_RET_${order.id}_${idx}`,
+            orderId: order.id,
+            date: order.deliveryDate || order.updatedAt?.split('T')[0] || order.createdAt?.split('T')[0] || new Date().toISOString().split('T')[0],
+            timestamp: it.rejectedAt || order.updatedAt || order.createdAt,
+            societyName: order.societyName,
+            flatNo: order.flatNo || order.flatNumber,
+            userName: order.userName,
+            userPhone: order.userPhone,
+            cropName: it.name || it.productName || 'Produce Item',
+            wastageQty: wQty,
+            unit: it.unit || 'kg',
+            estimatedLoss: Number(it.amount) || Math.round(wQty * unitRate),
+            reason: it.reason ? String(it.reason).replace(/_/g, ' ') : 'Quality Damaged / Rejected at Doorstep',
+            auditedBy: 'Pending Warehouse Verification',
+            driverName: order.deliveryPartnerName || 'Delivery Partner',
+            isPartial: true,
+            status: 'PENDING_AUDIT_WASTAGE'
+          });
+        });
+      }
+    });
+
+    return list.sort((a, b) => new Date(b.timestamp || b.date) - new Date(a.timestamp || a.date));
+  }, [orders, returnAudits]);
 
   // Auto-sync any existing local audits in localStorage to the backend so all clients/incognito tabs stay in sync
   useEffect(() => {
@@ -583,7 +671,10 @@ export default function WarehouseCratingPage() {
     setIsSubmittingAudit(true);
     try {
       const targetWhId = order.warehouseId || assignedWhId || resolvedWh?.id || 'WH_HEBBAL_01';
-      const items = Array.isArray(order.items) ? order.items : [];
+      const isPartial = order.status === 'PARTIALLY_DELIVERED' || Boolean(order.returnedItems && order.returnedItems.length > 0);
+      const items = isPartial && Array.isArray(order.returnedItems) && order.returnedItems.length > 0
+        ? order.returnedItems
+        : (Array.isArray(order.items) ? order.items : []);
       let totalGoodKg = 0;
       let totalWastageKg = 0;
       const auditedItemAdjustments = {};
@@ -1263,11 +1354,13 @@ export default function WarehouseCratingPage() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <h1 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-              {activeTab === 'RETURN_AUDIT'
-                ? '3. Quality & Returns Audit'
-                : activeTab === 'SOCIETY_LOTS'
-                  ? '2. Crates & Dispatch'
-                  : '1. Packing Station'}
+              {activeTab === 'WASTAGE_LEDGER'
+                ? '4. Spoilage & Wastage Ledger'
+                : (activeTab === 'RETURN_AUDIT'
+                    ? '3. Quality & Returns Audit'
+                    : (activeTab === 'SOCIETY_LOTS'
+                        ? '2. Crates & Dispatch'
+                        : '1. Packing Station'))}
             </h1>
             <span style={{
               fontSize: '10.5px',
@@ -1296,8 +1389,69 @@ export default function WarehouseCratingPage() {
         </div>
       </div>
 
+      {/* 4-Tab Navigation Bar */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        overflowX: 'auto',
+        marginBottom: '12px',
+        borderBottom: '2px solid #E2E8F0',
+        paddingBottom: '2px'
+      }}>
+        {[
+          { id: 'PACKING_STATION', label: '1. Packing Station', icon: PackageCheck, count: readyToPackCount },
+          { id: 'SOCIETY_LOTS', label: '2. Crates & Dispatch', icon: Truck, count: societyLots.length },
+          { id: 'RETURN_AUDIT', label: '3. Quality & Returns Audit', icon: RotateCcw, count: returnedOrders.length, alert: returnedOrders.some(o => !returnAudits[o.id]) },
+          { id: 'WASTAGE_LEDGER', label: '4. Wastage & Spoilage Ledger', icon: Trash2, count: wastageRecords.length }
+        ].map(tab => {
+          const isSelected = activeTab === tab.id;
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => handleTabChange(tab.id)}
+              style={{
+                padding: '8px 14px',
+                borderRadius: '8px 8px 0 0',
+                border: 'none',
+                background: isSelected ? '#234B3C' : 'transparent',
+                color: isSelected ? '#FFFFFF' : '#475569',
+                fontSize: '12.5px',
+                fontWeight: 800,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '7px',
+                whiteSpace: 'nowrap',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <Icon size={14} color={isSelected ? '#6EE7B7' : '#64748B'} />
+              <span>{tab.label}</span>
+              {tab.count !== undefined && (
+                <span style={{
+                  fontSize: '10.5px',
+                  fontWeight: 800,
+                  padding: '1px 6px',
+                  borderRadius: '999px',
+                  background: isSelected ? 'rgba(255,255,255,0.2)' : '#E2E8F0',
+                  color: isSelected ? '#FFFFFF' : '#334155'
+                }}>
+                  {tab.count}
+                </span>
+              )}
+              {tab.alert && (
+                <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#EF4444' }} />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
       {/* STICKY DELIVERY DATE + EXACT WAREHOUSE TIME-BATCH BAR */}
-      {activeTab !== 'RETURN_AUDIT' && (
+      {activeTab !== 'RETURN_AUDIT' && activeTab !== 'WASTAGE_LEDGER' && (
         <div style={{
           position: 'sticky',
           top: 0,
@@ -2264,7 +2418,10 @@ export default function WarehouseCratingPage() {
               const { reason, photo, photos = [], auditRecord: dbAudit } = parseCancelDetails(order.cancelledReason);
               const auditData = returnAudits[order.id] || dbAudit;
               const isAudited = Boolean(auditData);
-              const items = Array.isArray(order.items) ? order.items : [];
+              const isPartial = order.status === 'PARTIALLY_DELIVERED' || Boolean(order.returnedItems && order.returnedItems.length > 0);
+              const items = isPartial && Array.isArray(order.returnedItems) && order.returnedItems.length > 0
+                ? order.returnedItems
+                : (Array.isArray(order.items) ? order.items : []);
 
               return (
                 <div
@@ -2280,6 +2437,27 @@ export default function WarehouseCratingPage() {
                     gap: '14px'
                   }}
                 >
+                  {/* Partial Return Notice Banner */}
+                  {isPartial && (
+                    <div style={{
+                      background: '#FFFBEB',
+                      border: '1.5px solid #FCD34D',
+                      borderRadius: '8px',
+                      padding: '8px 12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: '12px',
+                      color: '#92400E',
+                      fontWeight: 700
+                    }}>
+                      <AlertTriangle size={16} color="#D97706" style={{ flexShrink: 0 }} />
+                      <span>
+                        Doorstep Partial Return: Resident accepted delivered items ({order.deliveredItems?.length || 0} items) and returned {items.length} item(s) at doorstep. Audit ONLY the returned produce below for Hub stock vs wastage.
+                      </span>
+                    </div>
+                  )}
+
                   {/* Top Order Information Bar */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
@@ -2619,6 +2797,399 @@ export default function WarehouseCratingPage() {
           )}
         </div>
       )}
+
+      {/* VIEW 4: WASTAGE & SPOILAGE LEDGER (INDEXED BY ORDER NUMBER AND DATE) */}
+      {activeTab === 'WASTAGE_LEDGER' && (() => {
+        const todayStr = new Date().toISOString().split('T')[0];
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+        // Filter records by Date and Search Query (Order #, Crop Name, Society)
+        const filteredWastage = wastageRecords.filter(rec => {
+          // Date Filter
+          if (wastageDateFilter === 'TODAY' && rec.date !== todayStr) return false;
+          if (wastageDateFilter === 'YESTERDAY' && rec.date !== yesterdayStr) return false;
+          if (wastageDateFilter !== 'ALL' && wastageDateFilter !== 'TODAY' && wastageDateFilter !== 'YESTERDAY') {
+            if (rec.date !== wastageDateFilter) return false;
+          }
+
+          // Search Query (Order #, Crop Name, Society, Resident)
+          if (wastageSearchQuery.trim()) {
+            const q = wastageSearchQuery.toLowerCase();
+            const orderMatch = String(rec.orderId || '').toLowerCase().includes(q);
+            const cropMatch = String(rec.cropName || '').toLowerCase().includes(q);
+            const socMatch = String(rec.societyName || '').toLowerCase().includes(q);
+            const nameMatch = String(rec.userName || '').toLowerCase().includes(q);
+            if (!orderMatch && !cropMatch && !socMatch && !nameMatch) return false;
+          }
+
+          return true;
+        });
+
+        // Metrics calculations
+        const totalWastageKg = filteredWastage.reduce((sum, r) => sum + (Number(r.wastageQty) || 0), 0).toFixed(1);
+        const totalLossValue = filteredWastage.reduce((sum, r) => sum + (Number(r.estimatedLoss) || 0), 0);
+        const uniqueOrdersCount = new Set(filteredWastage.map(r => r.orderId)).size;
+
+        // Top Wasted Crop
+        const cropTotals = {};
+        filteredWastage.forEach(r => {
+          cropTotals[r.cropName] = (cropTotals[r.cropName] || 0) + (Number(r.wastageQty) || 0);
+        });
+        const topCrop = Object.entries(cropTotals).sort((a, b) => b[1] - a[1])[0];
+
+        // Pagination
+        const totalPages = Math.ceil(filteredWastage.length / wastagePageSize) || 1;
+        const pageItems = filteredWastage.slice((wastageCurrentPage - 1) * wastagePageSize, wastageCurrentPage * wastagePageSize);
+
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* Top Banner */}
+            <div style={{
+              background: '#FEF2F2',
+              border: '1.5px solid #FECACA',
+              borderRadius: '12px',
+              padding: '16px 20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '14px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: '#DC2626', color: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Trash2 size={22} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '15px', fontWeight: 900, color: '#991B1B', margin: 0 }}>
+                    Warehouse Spoilage & Wastage Ledger
+                  </h3>
+                  <p style={{ fontSize: '12px', color: '#B91C1C', margin: '3px 0 0' }}>
+                    Official write-off register indexed by Order Number and Delivery Date. Tracks produce discarded during hub grading, transit crushing, and doorstep returns.
+                  </p>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 800, background: '#FFFFFF', color: '#991B1B', border: '1px solid #FECACA', padding: '4px 12px', borderRadius: '999px' }}>
+                  {filteredWastage.length} Wastage Incident(s)
+                </span>
+              </div>
+            </div>
+
+            {/* KPI Summary Cards */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+              gap: '12px'
+            }}>
+              <div style={{ background: '#FFFFFF', border: '1.5px solid #FCA5A5', borderRadius: '10px', padding: '14px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 800, color: '#991B1B', textTransform: 'uppercase' }}>
+                  Total Wastage Weight
+                </div>
+                <div style={{ fontSize: '22px', fontWeight: 900, color: '#DC2626', marginTop: '4px' }}>
+                  {totalWastageKg} <span style={{ fontSize: '14px', fontWeight: 700 }}>kg</span>
+                </div>
+                <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
+                  Across {filteredWastage.length} line items
+                </div>
+              </div>
+
+              <div style={{ background: '#FFFFFF', border: '1.5px solid #CBD5E1', borderRadius: '10px', padding: '14px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>
+                  Estimated Loss Value
+                </div>
+                <div style={{ fontSize: '22px', fontWeight: 900, color: '#0F172A', marginTop: '4px' }}>
+                  ₹{totalLossValue.toLocaleString('en-IN')}
+                </div>
+                <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
+                  Direct produce loss
+                </div>
+              </div>
+
+              <div style={{ background: '#FFFFFF', border: '1.5px solid #CBD5E1', borderRadius: '10px', padding: '14px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>
+                  Affected Customer Orders
+                </div>
+                <div style={{ fontSize: '22px', fontWeight: 900, color: '#0284C7', marginTop: '4px' }}>
+                  {uniqueOrdersCount} <span style={{ fontSize: '14px', fontWeight: 700 }}>Orders</span>
+                </div>
+                <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
+                  Doorstep & return write-offs
+                </div>
+              </div>
+
+              <div style={{ background: '#FFFFFF', border: '1.5px solid #CBD5E1', borderRadius: '10px', padding: '14px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>
+                  Highest Wasted Crop
+                </div>
+                <div style={{ fontSize: '16px', fontWeight: 800, color: '#D97706', marginTop: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {topCrop ? `${topCrop[0]} (${topCrop[1].toFixed(1)} kg)` : 'None'}
+                </div>
+                <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>
+                  Lead contributor to spoilage
+                </div>
+              </div>
+            </div>
+
+            {/* Filter & Search Bar */}
+            <div style={{
+              background: '#FFFFFF',
+              border: '1.5px solid #CBD5E1',
+              borderRadius: '10px',
+              padding: '12px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px'
+            }}>
+              {/* Date Filter Pills */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748B', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Calendar size={13} /> Date:
+                </span>
+                {[
+                  { id: 'ALL', label: 'All Dates' },
+                  { id: 'TODAY', label: 'Today' },
+                  { id: 'YESTERDAY', label: 'Yesterday' }
+                ].map(d => {
+                  const isSelected = wastageDateFilter === d.id;
+                  return (
+                    <button
+                      key={d.id}
+                      type="button"
+                      onClick={() => { setWastageDateFilter(d.id); setWastageCustomDate(''); setWastageCurrentPage(1); }}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: '6px',
+                        fontSize: '11.5px',
+                        fontWeight: 800,
+                        border: isSelected ? '1.5px solid #234B3C' : '1px solid #CBD5E1',
+                        background: isSelected ? '#234B3C' : '#F8FAFC',
+                        color: isSelected ? '#FFFFFF' : '#334155',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {d.label}
+                    </button>
+                  );
+                })}
+
+                <input
+                  type="date"
+                  value={wastageCustomDate}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setWastageCustomDate(val);
+                    if (val) setWastageDateFilter(val);
+                    setWastageCurrentPage(1);
+                  }}
+                  style={{
+                    padding: '3px 8px',
+                    borderRadius: '6px',
+                    border: '1px solid #CBD5E1',
+                    fontSize: '11.5px',
+                    color: '#0F172A',
+                    fontWeight: 700,
+                    background: '#FFFFFF',
+                    cursor: 'pointer'
+                  }}
+                />
+              </div>
+
+              {/* Order # & Crop Search Box */}
+              <div style={{ position: 'relative', minWidth: '260px', flex: '1', maxWidth: '400px' }}>
+                <Search size={14} color="#94A3B8" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
+                <input
+                  type="text"
+                  placeholder="Search Order # (e.g. 1048), Society, Crop..."
+                  value={wastageSearchQuery}
+                  onChange={(e) => { setWastageSearchQuery(e.target.value); setWastageCurrentPage(1); }}
+                  style={{
+                    width: '100%',
+                    height: '34px',
+                    padding: '0 10px 0 32px',
+                    borderRadius: '6px',
+                    border: '1.5px solid #CBD5E1',
+                    fontSize: '12px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Wastage Ledger Table */}
+            {filteredWastage.length === 0 ? (
+              <div style={{
+                background: '#FFFFFF',
+                border: '1.5px solid #E2E8F0',
+                borderRadius: '12px',
+                padding: '60px 20px',
+                textAlign: 'center',
+                color: '#64748B'
+              }}>
+                <CheckCircle2 size={44} color="#059669" style={{ margin: '0 auto 12px' }} />
+                <div style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>
+                  No Wastage Records Found
+                </div>
+                <div style={{ fontSize: '13px', color: '#64748B', maxWidth: '440px', margin: '6px auto 0' }}>
+                  {wastageSearchQuery || wastageDateFilter !== 'ALL'
+                    ? 'No wastage incidents matched your search or date filter. Try clearing filters.'
+                    : 'Zero produce wastage recorded in this warehouse.'}
+                </div>
+              </div>
+            ) : (
+              <div style={{
+                background: '#FFFFFF',
+                border: '1.5px solid #E2E8F0',
+                borderRadius: '12px',
+                overflow: 'hidden',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.04)'
+              }}>
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="admin-data-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12.5px' }}>
+                    <thead>
+                      <tr style={{ background: '#F8FAFC', borderBottom: '1.5px solid #E2E8F0' }}>
+                        <th style={{ padding: '12px 14px', fontWeight: 800, color: '#475569' }}>Date & Time</th>
+                        <th style={{ padding: '12px 14px', fontWeight: 800, color: '#475569' }}>Order # & Society</th>
+                        <th style={{ padding: '12px 14px', fontWeight: 800, color: '#475569' }}>Resident</th>
+                        <th style={{ padding: '12px 14px', fontWeight: 800, color: '#475569' }}>Produce Item</th>
+                        <th style={{ padding: '12px 14px', fontWeight: 800, color: '#DC2626' }}>Wasted Qty</th>
+                        <th style={{ padding: '12px 14px', fontWeight: 800, color: '#475569' }}>Loss Value</th>
+                        <th style={{ padding: '12px 14px', fontWeight: 800, color: '#475569' }}>Root Cause / Reason</th>
+                        <th style={{ padding: '12px 14px', fontWeight: 800, color: '#475569' }}>Audited By</th>
+                        <th style={{ padding: '12px 14px', fontWeight: 800, color: '#475569' }}>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pageItems.map(row => (
+                        <tr key={row.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                          <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
+                            <div style={{ fontWeight: 800, color: '#0F172A' }}>
+                              {row.date}
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#64748B' }}>
+                              {new Date(row.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          </td>
+
+                          <td style={{ padding: '12px 14px' }}>
+                            <div style={{ fontWeight: 800, color: '#0F172A', fontFamily: 'monospace' }}>
+                              #{row.orderId}
+                            </div>
+                            <div style={{ fontSize: '11.5px', color: '#64748B' }}>
+                              Flat {row.flatNo || '—'} • {row.societyName}
+                            </div>
+                          </td>
+
+                          <td style={{ padding: '12px 14px' }}>
+                            <div style={{ fontWeight: 700, color: '#0F172A' }}>{row.userName || 'Resident'}</div>
+                            <div style={{ fontSize: '11px', color: '#64748B' }}>{row.userPhone ? `+91 ${row.userPhone}` : '—'}</div>
+                          </td>
+
+                          <td style={{ padding: '12px 14px' }}>
+                            <strong style={{ color: '#0F172A' }}>{row.cropName}</strong>
+                          </td>
+
+                          <td style={{ padding: '12px 14px' }}>
+                            <span style={{
+                              fontWeight: 900,
+                              color: '#DC2626',
+                              background: '#FEF2F2',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              border: '1px solid #FECACA',
+                              display: 'inline-block'
+                            }}>
+                              {row.wastageQty} {row.unit}
+                            </span>
+                          </td>
+
+                          <td style={{ padding: '12px 14px' }}>
+                            <strong style={{ color: '#0F172A' }}>
+                              ₹{row.estimatedLoss.toLocaleString('en-IN')}
+                            </strong>
+                          </td>
+
+                          <td style={{ padding: '12px 14px', maxWidth: '240px' }}>
+                            <div style={{ color: '#991B1B', fontWeight: 600, fontSize: '11.5px' }}>
+                              {row.reason}
+                            </div>
+                            {row.isPartial && (
+                              <span style={{ fontSize: '10px', color: '#D97706', fontWeight: 800 }}>
+                                (Doorstep Partial Rejection)
+                              </span>
+                            )}
+                          </td>
+
+                          <td style={{ padding: '12px 14px', fontSize: '11.5px' }}>
+                            <div style={{ fontWeight: 700, color: '#334155' }}>{row.auditedBy}</div>
+                            <div style={{ fontSize: '10.5px', color: '#64748B' }}>Driver: {row.driverName}</div>
+                          </td>
+
+                          <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }}>
+                            <span style={{
+                              fontSize: '11px',
+                              fontWeight: 800,
+                              padding: '2px 8px',
+                              borderRadius: '999px',
+                              background: row.status === 'AUDITED_WASTAGE' ? '#DCFCE7' : '#FEF3C7',
+                              color: row.status === 'AUDITED_WASTAGE' ? '#166534' : '#92400E',
+                              border: row.status === 'AUDITED_WASTAGE' ? '1px solid #86EFAC' : '1px solid #FCD34D'
+                            }}>
+                              {row.status === 'AUDITED_WASTAGE' ? '✓ Audited Write-off' : '⏳ Doorstep Return'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination */}
+                {filteredWastage.length > wastagePageSize && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '12px 16px',
+                    borderTop: '1px solid #E2E8F0',
+                    background: '#F8FAFC',
+                    flexWrap: 'wrap',
+                    gap: '8px'
+                  }}>
+                    <span style={{ fontSize: '12px', color: '#64748B' }}>
+                      Showing <strong>{(wastageCurrentPage - 1) * wastagePageSize + 1}</strong>–<strong>{Math.min(wastageCurrentPage * wastagePageSize, filteredWastage.length)}</strong> of <strong>{filteredWastage.length}</strong> records
+                    </span>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button
+                        type="button"
+                        disabled={wastageCurrentPage <= 1}
+                        onClick={() => setWastageCurrentPage(p => Math.max(1, p - 1))}
+                        style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', background: wastageCurrentPage <= 1 ? '#F1F5F9' : '#FFF', fontSize: '12px', fontWeight: 700, cursor: wastageCurrentPage <= 1 ? 'not-allowed' : 'pointer' }}
+                      >
+                        ‹ Prev
+                      </button>
+                      <span style={{ fontSize: '12px', fontWeight: 800, color: '#0F172A', padding: '4px 8px' }}>
+                        {wastageCurrentPage} / {totalPages}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={wastageCurrentPage >= totalPages}
+                        onClick={() => setWastageCurrentPage(p => Math.min(totalPages, p + 1))}
+                        style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid #CBD5E1', background: wastageCurrentPage >= totalPages ? '#F1F5F9' : '#FFF', fontSize: '12px', fontWeight: 700, cursor: wastageCurrentPage >= totalPages ? 'not-allowed' : 'pointer' }}
+                      >
+                        Next ›
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* MODAL: PREVIEW CANCELLATION PHOTO PROOF */}
       {previewPhotoModal && (

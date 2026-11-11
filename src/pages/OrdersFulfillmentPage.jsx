@@ -141,6 +141,8 @@ export default function OrdersFulfillmentPage() {
 
   // Delivery Confirmation Modal State
   const [deliveryConfirmOrder, setDeliveryConfirmOrder] = useState(null);
+  const [isPartialDeliveryMode, setIsPartialDeliveryMode] = useState(false);
+  const [partialItemReturns, setPartialItemReturns] = useState({}); // { [idx]: { rejected: boolean, reason: string } }
 
   // COD Payment Collection Modal state
   const [codModalOrder, setCodModalOrder] = useState(null);
@@ -193,6 +195,7 @@ export default function OrdersFulfillmentPage() {
     AT_WAREHOUSE: { label: 'At Warehouse', badgeClass: 'approved', desc: 'Arrived at hub for sorting', color: '#0284C7' },
     PACKED: { label: 'Packed & Crated', badgeClass: 'approved', desc: 'Quality checked, flat-tagged & loaded in crate', color: '#10B981' },
     OUT_FOR_DELIVERY: { label: 'Out for Delivery', badgeClass: 'in-progress', desc: 'Dispatched to society drop desk', color: '#F28E14' },
+    PARTIALLY_DELIVERED: { label: 'Partially Delivered', badgeClass: 'in-progress', desc: 'Delivered with partial item returns', color: '#D97706' },
     DELIVERED: { label: 'Delivered', badgeClass: 'approved', desc: 'Secured at society drop desk', color: '#059669' },
     CANCELLED: { label: 'Cancelled', badgeClass: 'rejected', desc: 'Order voided / cancelled', color: '#DC2626' }
   };
@@ -248,19 +251,20 @@ export default function OrdersFulfillmentPage() {
     AT_WAREHOUSE: 3,
     PACKED: 4,
     OUT_FOR_DELIVERY: 5,
+    PARTIALLY_DELIVERED: 6,
     DELIVERED: 6,
     CANCELLED: 99
   };
 
   const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN' || currentUser?.roles?.includes('SUPER_ADMIN') || currentUser?.email === 'superadmin@gmail.com';
 
-  // Single Order Status Change (Accrues society commission strictly when becoming DELIVERED)
+  // Single Order Status Change (Accrues society commission strictly when becoming DELIVERED or PARTIALLY_DELIVERED)
   const handleUpdateOrderStatus = async (orderId, newStatus, paymentCollectionData = null) => {
     const targetOrder = (orders || []).find(o => o.id === orderId);
     if (!targetOrder) return;
 
-    if (targetOrder.status === 'DELIVERED') {
-      showToast('Order has already been delivered and is final. Status cannot be modified.', 'error');
+    if (targetOrder.status === 'DELIVERED' || targetOrder.status === 'PARTIALLY_DELIVERED') {
+      showToast('Order has already been completed and is final. Status cannot be modified.', 'error');
       return;
     }
 
@@ -278,14 +282,14 @@ export default function OrdersFulfillmentPage() {
       return;
     }
 
-    // Role Guard: Delivery Executive can ONLY mark orders as DELIVERED or CANCELLED
+    // Role Guard: Delivery Executive can ONLY mark orders as DELIVERED, PARTIALLY_DELIVERED, or CANCELLED
     if (isDeliveryExecutive) {
-      if (newStatus !== 'DELIVERED' && newStatus !== 'CANCELLED') {
-        showToast('Delivery executives can only mark assigned orders as DELIVERED or CANCELLED.', 'error');
+      if (newStatus !== 'DELIVERED' && newStatus !== 'PARTIALLY_DELIVERED' && newStatus !== 'CANCELLED') {
+        showToast('Delivery executives can only mark assigned orders as DELIVERED, PARTIALLY_DELIVERED, or CANCELLED.', 'error');
         return;
       }
-      if (targetOrder.status === 'DELIVERED') {
-        showToast('This order has already been delivered and verified.', 'info');
+      if (targetOrder.status === 'DELIVERED' || targetOrder.status === 'PARTIALLY_DELIVERED') {
+        showToast('This order has already been completed and verified.', 'info');
         return;
       }
       if (targetOrder.status === 'CANCELLED') {
@@ -302,32 +306,52 @@ export default function OrdersFulfillmentPage() {
         showToast('Permission Denied: Only Super Admin can revert an order to a previous stage.', 'error');
         return;
       }
-      if (targetOrder.status === 'DELIVERED' && newStatus !== 'DELIVERED') {
+      if ((targetOrder.status === 'DELIVERED' || targetOrder.status === 'PARTIALLY_DELIVERED') && (newStatus !== 'DELIVERED' && newStatus !== 'PARTIALLY_DELIVERED')) {
         showToast('Permission Denied: Delivered orders cannot be reversed except by Super Admin.', 'error');
         return;
       }
     }
 
     try {
+      const isDeliveredOrPartial = newStatus === 'DELIVERED' || newStatus === 'PARTIALLY_DELIVERED';
+      const effectiveAmount = paymentCollectionData?.totalAmount !== undefined 
+        ? paymentCollectionData.totalAmount 
+        : (targetOrder.totalAmount || 0);
+
       await updateOrderStatusMutation.mutateAsync({
         id: orderId,
         status: newStatus,
-        paymentStatus: (isCod && newStatus === 'DELIVERED') ? 'PAID' : undefined,
-        codCollectedAmount: (isCod && newStatus === 'DELIVERED') ? (targetOrder.totalAmount || 0) : undefined,
+        paymentStatus: (isCod && isDeliveredOrPartial) ? 'PAID' : undefined,
+        codCollectedAmount: (isCod && isDeliveredOrPartial) 
+          ? (paymentCollectionData?.codCollectedAmount !== undefined ? paymentCollectionData.codCollectedAmount : effectiveAmount) 
+          : undefined,
         codCollectedBy: currentUser?.name || 'Delivery Partner',
         codReceivedMode: paymentCollectionData?.mode || (isCod ? 'CASH' : null),
+        ...(paymentCollectionData?.isPartial ? {
+          totalAmount: paymentCollectionData.totalAmount,
+          originalTotalAmount: paymentCollectionData.originalTotalAmount,
+          deliveredItems: paymentCollectionData.deliveredItems,
+          returnedItems: paymentCollectionData.returnedItems,
+          refundAmount: paymentCollectionData.refundAmount,
+          cancelledReason: paymentCollectionData.cancelledReason
+        } : {}),
         ...(paymentCollectionData?.paymentRef ? { razorpayPaymentId: paymentCollectionData.paymentRef } : {})
       });
 
-      if (newStatus === 'DELIVERED') {
+      if (newStatus === 'DELIVERED' || newStatus === 'PARTIALLY_DELIVERED') {
         if (isCod) {
-          showToast(`✅ Payment of ₹${(targetOrder.totalAmount || 0).toLocaleString()} received via ${paymentCollectionData?.mode === 'UPI_QR' ? 'UPI QR' : 'Cash'}! Order #${orderId} marked DELIVERED.`, 'success');
+          showToast(`✅ Payment of ₹${effectiveAmount.toLocaleString()} received via ${paymentCollectionData?.mode === 'UPI_QR' ? 'UPI QR' : 'Cash'}! Order #${orderId} marked ${newStatus === 'PARTIALLY_DELIVERED' ? 'Partially Delivered' : 'Delivered'}.`, 'success');
         } else {
-          showToast(`Order #${orderId} marked DELIVERED! Society commission credited to community wallet.`, 'success');
+          showToast(`Order #${orderId} marked ${newStatus === 'PARTIALLY_DELIVERED' ? 'Partially Delivered' : 'Delivered'}! Society commission credited.`, 'success');
         }
       } else {
         showToast(`Order #${orderId} status set to ${newStatus}`);
       }
+    } catch (err) {
+      console.error('Status PATCH sync error:', err);
+      showToast(err.message || 'Failed to update order status on server.', 'error');
+    }
+  };
     } catch (err) {
       console.error('Status PATCH sync error:', err);
       showToast(err.message || 'Failed to update order status on server.', 'error');
@@ -474,13 +498,18 @@ export default function OrdersFulfillmentPage() {
     return Array.from(blockSet).sort();
   }, [isDeliveryExecutive, riderBaseOrders, scopedOrders, societyFilter]);
 
-  const countRiderPending = riderBaseOrders.filter(o => o.status === 'OUT_FOR_DELIVERY' || o.status === 'PACKED').length;
-  const countRiderDelivered = riderBaseOrders.filter(o => o.status === 'DELIVERED').length;
+  const countRiderPending = riderBaseOrders.filter(o => o.status !== 'DELIVERED' && o.status !== 'PARTIALLY_DELIVERED' && o.status !== 'CANCELLED').length;
+  const countRiderDelivered = riderBaseOrders.filter(o => o.status === 'DELIVERED' || o.status === 'PARTIALLY_DELIVERED').length;
   const countRiderCancelled = riderBaseOrders.filter(o => o.status === 'CANCELLED').length;
 
   // Active customer-cancelled orders assigned to this rider's route run
   const customerCancelledOrders = useMemo(() => {
     return riderBaseOrders.filter(o => o.status === 'CANCELLED');
+  }, [riderBaseOrders]);
+
+  // All returns (full cancellations and doorstep partial returns) that rider must bring back to Hub
+  const riderOrdersWithReturns = useMemo(() => {
+    return riderBaseOrders.filter(o => o.status === 'CANCELLED' || o.status === 'PARTIALLY_DELIVERED' || (o.returnedItems && o.returnedItems.length > 0));
   }, [riderBaseOrders]);
 
   // Track acknowledged / dismissed cancellation alert IDs so they disappear from the top banner
@@ -801,8 +830,8 @@ export default function OrdersFulfillmentPage() {
     if (isDeliveryExecutive) {
       if (!isAssignedToCurrentRider(o)) return false;
 
-      if (riderTab === 'PENDING' && (o.status === 'DELIVERED' || o.status === 'CANCELLED')) return false;
-      if (riderTab === 'DELIVERED' && o.status !== 'DELIVERED') return false;
+      if (riderTab === 'PENDING' && (o.status === 'DELIVERED' || o.status === 'PARTIALLY_DELIVERED' || o.status === 'CANCELLED')) return false;
+      if (riderTab === 'DELIVERED' && o.status !== 'DELIVERED' && o.status !== 'PARTIALLY_DELIVERED') return false;
       if (riderTab === 'CANCELLED' && o.status !== 'CANCELLED') return false;
     } else {
       // Warehouse Scope Guard: Staff assigned to a warehouse only see orders for their warehouse
@@ -2345,7 +2374,11 @@ export default function OrdersFulfillmentPage() {
                                   )}
                                   <button
                                     type="button"
-                                    onClick={() => setDeliveryConfirmOrder(order)}
+                                    onClick={() => {
+                                      setDeliveryConfirmOrder(order);
+                                      setIsPartialDeliveryMode(false);
+                                      setPartialItemReturns({});
+                                    }}
                                     style={{
                                       display: 'inline-flex',
                                       alignItems: 'center',
@@ -2432,7 +2465,7 @@ export default function OrdersFulfillmentPage() {
           )}
 
           {/* Collapsible Bottom Return Tray for Items to Bring Back to Hub */}
-          {customerCancelledOrders.length > 0 && (
+          {riderOrdersWithReturns.length > 0 && (
             <div style={{
               marginTop: '16px',
               background: '#FFFFFF',
@@ -2456,7 +2489,7 @@ export default function OrdersFulfillmentPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ fontSize: '16px' }}>📦</span>
                   <strong style={{ fontSize: '13px', color: '#991B1B' }}>
-                    Hub Return Tray ({customerCancelledOrders.length} Cancelled / Returned Orders)
+                    Hub Return Tray ({riderOrdersWithReturns.length} Cancelled & Return Orders)
                   </strong>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -2471,43 +2504,66 @@ export default function OrdersFulfillmentPage() {
               {showRiderReturnTray && (
                 <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <div style={{ fontSize: '11.5px', color: '#64748B' }}>
-                    These orders were cancelled by residents. Retain produce crate bags in your vehicle and hand them over to the Warehouse Quality Audit lead upon return:
+                    These orders contain cancelled or returned produce. Retain produce crate bags in your vehicle and hand them over to the Warehouse Quality Audit lead upon return:
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {customerCancelledOrders.map(co => (
-                      <div key={co.id} style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '10px 14px',
-                        borderRadius: '8px',
-                        background: '#F8FAFC',
-                        border: '1px solid #E2E8F0',
-                        fontSize: '12.5px',
-                        flexWrap: 'wrap',
-                        gap: '8px'
-                      }}>
-                        <div>
-                          <strong style={{ color: '#DC2626', fontSize: '13px' }}>Flat {co.flatNo || co.flatNumber || '—'}</strong>
-                          <span style={{ color: '#64748B', margin: '0 6px' }}>•</span>
-                          <span style={{ color: '#0F172A', fontWeight: 700 }}>{co.userName}</span>
-                          <span style={{ color: '#64748B', fontSize: '11px', marginLeft: '6px' }}>#{co.id}</span>
-                          <div style={{ fontSize: '11.5px', color: '#991B1B', marginTop: '2px' }}>
-                            Reason: {co.cancelledReason || 'Cancelled by resident'}
-                          </div>
-                        </div>
-                        <span style={{
-                          fontSize: '11px',
-                          fontWeight: 800,
-                          color: '#B91C1C',
-                          background: '#FEE2E2',
-                          padding: '3px 9px',
-                          borderRadius: '6px'
+                    {riderOrdersWithReturns.map(co => {
+                      const isPartial = co.status === 'PARTIALLY_DELIVERED' || Boolean(co.returnedItems && co.returnedItems.length > 0);
+                      const retItems = Array.isArray(co.returnedItems) ? co.returnedItems : [];
+
+                      return (
+                        <div key={co.id} style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '10px 14px',
+                          borderRadius: '8px',
+                          background: '#F8FAFC',
+                          border: isPartial ? '1.5px solid #FCD34D' : '1px solid #E2E8F0',
+                          fontSize: '12.5px',
+                          flexWrap: 'wrap',
+                          gap: '8px'
                         }}>
-                          Return to Hub
-                        </span>
-                      </div>
-                    ))}
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <strong style={{ color: '#DC2626', fontSize: '13px' }}>Flat {co.flatNo || co.flatNumber || '—'}</strong>
+                              <span style={{ color: '#64748B' }}>•</span>
+                              <span style={{ color: '#0F172A', fontWeight: 700 }}>{co.userName}</span>
+                              <span style={{ color: '#64748B', fontSize: '11px' }}>#{co.id}</span>
+                              <span style={{
+                                fontSize: '10.5px',
+                                fontWeight: 800,
+                                padding: '1px 6px',
+                                borderRadius: '4px',
+                                background: isPartial ? '#FEF3C7' : '#FEE2E2',
+                                color: isPartial ? '#92400E' : '#991B1B'
+                              }}>
+                                {isPartial ? 'Doorstep Partial Return' : 'Full Order Cancelled'}
+                              </span>
+                            </div>
+                            {isPartial && retItems.length > 0 ? (
+                              <div style={{ fontSize: '11.5px', color: '#92400E', marginTop: '3px', fontWeight: 600 }}>
+                                Returned Produce: {retItems.map(it => `${it.name} (${it.qty} ${it.unit || 'kg'})`).join(', ')}
+                              </div>
+                            ) : (
+                              <div style={{ fontSize: '11.5px', color: '#991B1B', marginTop: '2px' }}>
+                                Reason: {co.cancelledReason || 'Cancelled by resident'}
+                              </div>
+                            )}
+                          </div>
+                          <span style={{
+                            fontSize: '11px',
+                            fontWeight: 800,
+                            color: '#B91C1C',
+                            background: '#FEE2E2',
+                            padding: '3px 9px',
+                            borderRadius: '6px'
+                          }}>
+                            Return to Hub
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -3291,161 +3347,481 @@ export default function OrdersFulfillmentPage() {
         );
       })()}
 
-      {/* ================= ORDER DELIVERY CONFIRMATION MODAL ================= */}
-      {deliveryConfirmOrder && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(15, 23, 42, 0.65)',
-          backdropFilter: 'blur(4px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 11000,
-          padding: '16px'
-        }}>
+      {/* ================= ORDER DELIVERY & DOORSTEP PARTIAL RETURN MODAL ================= */}
+      {deliveryConfirmOrder && (() => {
+        const orderItems = Array.isArray(deliveryConfirmOrder.items) ? deliveryConfirmOrder.items : [];
+        const isCod = (deliveryConfirmOrder.paymentMethod || '').includes('PAY_ON_DELIVERY') || deliveryConfirmOrder.paymentMethod === 'COD';
+        const originalTotal = Number(deliveryConfirmOrder.totalAmount) || 0;
+
+        // Calculate rejected vs accepted items
+        let returnedAmount = 0;
+        const acceptedItems = [];
+        const rejectedItems = [];
+
+        orderItems.forEach((it, idx) => {
+          const isRejected = Boolean(partialItemReturns[idx]?.rejected);
+          const itemPrice = Number(it.total || it.price || ((Number(it.qty) || 1) * (Number(it.rate) || 0))) || 0;
+          if (isRejected) {
+            returnedAmount += itemPrice;
+            rejectedItems.push({
+              ...it,
+              rejectedAt: new Date().toISOString(),
+              reason: partialItemReturns[idx]?.reason || 'QUALITY_REJECTED',
+              amount: itemPrice
+            });
+          } else {
+            acceptedItems.push(it);
+          }
+        });
+
+        const adjustedFinalAmount = Math.max(0, originalTotal - returnedAmount);
+
+        const handleConfirmDeliveryOrPartial = async () => {
+          if (!isPartialDeliveryMode || rejectedItems.length === 0) {
+            // Standard Full Order Delivery
+            await handleUpdateOrderStatus(deliveryConfirmOrder.id, 'DELIVERED');
+            setDeliveryConfirmOrder(null);
+            return;
+          }
+
+          if (acceptedItems.length === 0) {
+            showToast('All items are rejected. Please use "Undelivered" to cancel the whole order instead.', 'warning');
+            return;
+          }
+
+          await handleUpdateOrderStatus(deliveryConfirmOrder.id, 'PARTIALLY_DELIVERED', {
+            isPartial: true,
+            totalAmount: adjustedFinalAmount,
+            originalTotalAmount: originalTotal,
+            deliveredItems: acceptedItems,
+            returnedItems: rejectedItems,
+            refundAmount: returnedAmount,
+            codCollectedAmount: isCod ? adjustedFinalAmount : 0,
+            codReceivedMode: isCod ? 'CASH' : 'ONLINE',
+            cancelledReason: `Doorstep Partial Return: ${rejectedItems.length} item(s) rejected (${rejectedItems.map(r => r.name).join(', ')}) [RETURNED_ITEMS]${JSON.stringify(rejectedItems)}`
+          });
+
+          setDeliveryConfirmOrder(null);
+          setIsPartialDeliveryMode(false);
+          setPartialItemReturns({});
+        };
+
+        return (
           <div style={{
-            background: '#FFFFFF',
-            borderRadius: '16px',
-            maxWidth: '460px',
-            width: '100%',
-            overflow: 'hidden',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.25)',
-            border: '1.5px solid #E2E8F0'
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 11000,
+            padding: '16px'
           }}>
             <div style={{
-              background: '#F0FDF4',
-              padding: '18px 20px',
-              borderBottom: '1.5px solid #BBF7D0',
+              background: '#FFFFFF',
+              borderRadius: '16px',
+              maxWidth: '540px',
+              width: '100%',
+              maxHeight: '90vh',
               display: 'flex',
-              alignItems: 'center',
-              gap: '12px'
+              flexDirection: 'column',
+              overflow: 'hidden',
+              boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+              border: isPartialDeliveryMode ? '2px solid #D97706' : '1.5px solid #BBF7D0'
             }}>
+              {/* Modal Header */}
               <div style={{
-                width: '38px',
-                height: '38px',
-                borderRadius: '50%',
-                background: '#DCFCE7',
-                color: '#15803D',
+                background: isPartialDeliveryMode ? '#FFFBEB' : '#F0FDF4',
+                padding: '16px 20px',
+                borderBottom: isPartialDeliveryMode ? '1.5px solid #FDE68A' : '1.5px solid #BBF7D0',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
+                justifyContent: 'space-between',
                 flexShrink: 0
               }}>
-                <CheckCircle2 size={22} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '50%',
+                    background: isPartialDeliveryMode ? '#FEF3C7' : '#DCFCE7',
+                    color: isPartialDeliveryMode ? '#B45309' : '#15803D',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}>
+                    {isPartialDeliveryMode ? <AlertTriangle size={20} /> : <CheckCircle2 size={22} />}
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: '15.5px', fontWeight: 800, color: isPartialDeliveryMode ? '#92400E' : '#166534', margin: 0 }}>
+                      {isPartialDeliveryMode ? 'Doorstep Partial Return & Delivery' : 'Confirm Order Delivery'}
+                    </h3>
+                    <p style={{ fontSize: '11.5px', color: isPartialDeliveryMode ? '#B45309' : '#15803D', margin: '2px 0 0' }}>
+                      #{deliveryConfirmOrder.id} • Flat {deliveryConfirmOrder.flat || deliveryConfirmOrder.flatNo || 'Resident'} ({deliveryConfirmOrder.societyName})
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDeliveryConfirmOrder(null)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', padding: '4px' }}
+                >
+                  <X size={18} />
+                </button>
               </div>
-              <div>
-                <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#166534', margin: 0 }}>
-                  Confirm Order Delivery
-                </h3>
-                <p style={{ fontSize: '12px', color: '#15803D', margin: '2px 0 0' }}>
-                  Society Doorstep Drop Verification
-                </p>
-              </div>
-            </div>
-            <div style={{ padding: '20px' }}>
+
+              {/* Mode Toggle Switcher */}
               <div style={{
-                background: '#F8FAFC',
-                border: '1px solid #E2E8F0',
-                borderRadius: '10px',
-                padding: '14px',
-                marginBottom: '16px'
+                display: 'flex',
+                background: '#F1F5F9',
+                padding: '4px',
+                borderBottom: '1px solid #E2E8F0',
+                flexShrink: 0
               }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '12px', color: '#64748B' }}>Order ID:</span>
-                  <strong style={{ fontSize: '13px', color: '#0F172A', fontFamily: 'monospace' }}>#{deliveryConfirmOrder.id}</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '12px', color: '#64748B' }}>Customer:</span>
-                  <strong style={{ fontSize: '13px', color: '#0F172A' }}>{deliveryConfirmOrder.userName || 'Resident'}</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <span style={{ fontSize: '12px', color: '#64748B' }}>Flat / Society:</span>
-                  <strong style={{ fontSize: '13px', color: '#0F172A', textAlign: 'right', maxWidth: '240px' }}>
-                    {deliveryConfirmOrder.flat ? `${deliveryConfirmOrder.flat}, ` : ''}{deliveryConfirmOrder.societyName}
-                  </strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '8px', borderTop: '1px solid #E2E8F0' }}>
-                  <span style={{ fontSize: '12px', color: '#64748B' }}>Amount & Mode:</span>
-                  <strong style={{ fontSize: '13px', color: '#059669' }}>
-                    ₹{deliveryConfirmOrder.totalAmount || 0} ({deliveryConfirmOrder.paymentMethod || 'PAID'})
-                  </strong>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsPartialDeliveryMode(false)}
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    fontSize: '12px',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    background: !isPartialDeliveryMode ? '#FFFFFF' : 'transparent',
+                    color: !isPartialDeliveryMode ? '#166534' : '#64748B',
+                    boxShadow: !isPartialDeliveryMode ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <CheckCircle2 size={14} />
+                  <span>All Items Good (Full Delivery)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsPartialDeliveryMode(true)}
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    fontSize: '12px',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    background: isPartialDeliveryMode ? '#FFFFFF' : 'transparent',
+                    color: isPartialDeliveryMode ? '#B45309' : '#64748B',
+                    boxShadow: isPartialDeliveryMode ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <AlertTriangle size={14} />
+                  <span>Item Issue / Partial Return</span>
+                </button>
               </div>
-              {deliveryConfirmOrder.paymentMethod === 'COD' && (
+
+              {/* Scrollable Body */}
+              <div style={{ padding: '16px 20px', overflowY: 'auto', flex: 1 }}>
+                {/* Order Summary Info Box */}
                 <div style={{
-                  background: '#FEF3C7',
-                  border: '1px solid #FCD34D',
-                  color: '#92400E',
-                  borderRadius: '8px',
-                  padding: '10px 12px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  marginBottom: '16px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
+                  background: '#F8FAFC',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: '10px',
+                  padding: '12px 14px',
+                  marginBottom: '14px',
+                  fontSize: '12.5px'
                 }}>
-                  <AlertCircle size={16} />
-                  <span>Cash on Delivery: Ensure ₹{deliveryConfirmOrder.totalAmount} cash was collected.</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <span style={{ color: '#64748B' }}>Resident:</span>
+                    <strong style={{ color: '#0F172A' }}>{deliveryConfirmOrder.userName || 'Resident'} (+91 {deliveryConfirmOrder.userPhone || '—'})</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <span style={{ color: '#64748B' }}>Flat / Community:</span>
+                    <strong style={{ color: '#0F172A' }}>
+                      Flat {deliveryConfirmOrder.flat || deliveryConfirmOrder.flatNo || '—'} • {deliveryConfirmOrder.societyName}
+                    </strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '6px', borderTop: '1px solid #E2E8F0' }}>
+                    <span style={{ color: '#64748B' }}>Original Amount & Mode:</span>
+                    <strong style={{ color: '#059669' }}>
+                      ₹{originalTotal} ({isCod ? 'Pay on Delivery / COD' : (deliveryConfirmOrder.paymentMethod || 'Online Paid')})
+                    </strong>
+                  </div>
                 </div>
-              )}
-              <p style={{ fontSize: '13px', color: '#475569', margin: '0 0 4px', lineHeight: 1.5 }}>
-                Are you sure you want to mark this order as <strong>DELIVERED</strong>?
-              </p>
-            </div>
-            <div style={{
-              padding: '14px 20px',
-              background: '#F8FAFC',
-              borderTop: '1px solid #E2E8F0',
-              display: 'flex',
-              justifyContent: 'flex-end',
-              gap: '10px'
-            }}>
-              <button
-                type="button"
-                onClick={() => setDeliveryConfirmOrder(null)}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '8px',
-                  background: '#FFFFFF',
-                  border: '1.5px solid #CBD5E1',
-                  color: '#475569',
-                  fontWeight: 700,
-                  fontSize: '13px',
-                  cursor: 'pointer'
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  handleUpdateOrderStatus(deliveryConfirmOrder.id, 'DELIVERED');
-                  setDeliveryConfirmOrder(null);
-                }}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '8px 18px',
-                  borderRadius: '8px',
-                  background: '#059669',
-                  color: '#FFFFFF',
-                  border: 'none',
-                  fontWeight: 800,
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  boxShadow: '0 2px 6px rgba(5, 150, 105, 0.3)'
-                }}
-              >
-                <CheckCircle2 size={15} />
-                <span>Yes, Confirm Delivered</span>
-              </button>
+
+                {/* PARTIAL DELIVERY ITEM CHECKLIST */}
+                {isPartialDeliveryMode ? (
+                  <div>
+                    <div style={{ fontSize: '12px', fontWeight: 800, color: '#0F172A', textTransform: 'uppercase', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>Doorstep Items Inspection ({orderItems.length}):</span>
+                      <span style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>Mark rejected produce</span>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
+                      {orderItems.map((item, idx) => {
+                        const isRejected = Boolean(partialItemReturns[idx]?.rejected);
+                        const itemPrice = Number(item.total || item.price || ((Number(item.qty) || 1) * (Number(item.rate) || 0))) || 0;
+
+                        return (
+                          <div
+                            key={idx}
+                            style={{
+                              border: isRejected ? '1.5px solid #F87171' : '1px solid #CBD5E1',
+                              borderRadius: '8px',
+                              padding: '10px 12px',
+                              background: isRejected ? '#FEF2F2' : '#FFFFFF',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '6px'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <div>
+                                <strong style={{ fontSize: '13px', color: isRejected ? '#991B1B' : '#0F172A' }}>
+                                  {item.name || item.productName}
+                                </strong>
+                                <div style={{ fontSize: '11.5px', color: '#64748B' }}>
+                                  {item.qty} {item.unit || 'kg'} • ₹{itemPrice}
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setPartialItemReturns(prev => {
+                                      const next = { ...prev };
+                                      delete next[idx];
+                                      return next;
+                                    });
+                                  }}
+                                  style={{
+                                    padding: '4px 10px',
+                                    borderRadius: '5px',
+                                    border: !isRejected ? '1.5px solid #166534' : '1px solid #CBD5E1',
+                                    background: !isRejected ? '#DCFCE7' : '#FFFFFF',
+                                    color: !isRejected ? '#166534' : '#64748B',
+                                    fontSize: '11px',
+                                    fontWeight: 800,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  ✓ Accept
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setPartialItemReturns(prev => ({
+                                      ...prev,
+                                      [idx]: { rejected: true, reason: prev[idx]?.reason || 'QUALITY_REJECTED' }
+                                    }));
+                                  }}
+                                  style={{
+                                    padding: '4px 10px',
+                                    borderRadius: '5px',
+                                    border: isRejected ? '1.5px solid #DC2626' : '1px solid #CBD5E1',
+                                    background: isRejected ? '#DC2626' : '#FFFFFF',
+                                    color: isRejected ? '#FFFFFF' : '#64748B',
+                                    fontSize: '11px',
+                                    fontWeight: 800,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  ✗ Reject
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Dropdown for rejection reason */}
+                            {isRejected && (
+                              <div style={{ marginTop: '4px', paddingTop: '6px', borderTop: '1px dashed #FCA5A5' }}>
+                                <label style={{ fontSize: '11px', fontWeight: 700, color: '#991B1B', display: 'block', marginBottom: '3px' }}>
+                                  Rejection / Return Reason:
+                                </label>
+                                <select
+                                  value={partialItemReturns[idx]?.reason || 'QUALITY_REJECTED'}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setPartialItemReturns(prev => ({
+                                      ...prev,
+                                      [idx]: { ...prev[idx], reason: val }
+                                    }));
+                                  }}
+                                  style={{
+                                    width: '100%',
+                                    height: '32px',
+                                    borderRadius: '5px',
+                                    border: '1px solid #FCA5A5',
+                                    background: '#FFF',
+                                    fontSize: '12px',
+                                    color: '#991B1B',
+                                    fontWeight: 700,
+                                    padding: '0 8px'
+                                  }}
+                                >
+                                  <option value="QUALITY_REJECTED">🥦 Produce Damaged / Overripe / Rotten</option>
+                                  <option value="TRANSIT_DAMAGED">📦 Crushed or Bruised during Transit</option>
+                                  <option value="WRONG_ITEM">❌ Wrong Item or Size Variant</option>
+                                  <option value="CUSTOMER_REFUSED">🙅 Resident Refused at Doorstep</option>
+                                </select>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Recalculated Financial Summary Card */}
+                    <div style={{
+                      background: '#FFFBEB',
+                      border: '1.5px solid #FDE68A',
+                      borderRadius: '10px',
+                      padding: '12px 14px',
+                      fontSize: '12.5px',
+                      marginBottom: '12px'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                        <span style={{ color: '#64748B' }}>Original Order Value:</span>
+                        <span>₹{originalTotal}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', color: '#DC2626' }}>
+                        <span>Returned Produce ({rejectedItems.length} items):</span>
+                        <strong>-₹{returnedAmount}</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '6px', borderTop: '1.5px solid #FCD34D', fontSize: '14px' }}>
+                        <span style={{ fontWeight: 800, color: '#92400E' }}>Adjusted Delivered Bill:</span>
+                        <strong style={{ color: '#059669', fontSize: '16px' }}>₹{adjustedFinalAmount}</strong>
+                      </div>
+                    </div>
+
+                    {/* Payment Instruction Banner */}
+                    {isCod ? (
+                      <div style={{
+                        background: '#FEF3C7',
+                        border: '1.5px solid #F59E0B',
+                        borderRadius: '8px',
+                        padding: '10px 12px',
+                        fontSize: '12px',
+                        color: '#92400E',
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}>
+                        <AlertCircle size={16} color="#D97706" style={{ flexShrink: 0 }} />
+                        <span>💵 Cash on Delivery: Collect ₹{adjustedFinalAmount} cash from resident (reduced for returned items).</span>
+                      </div>
+                    ) : (
+                      <div style={{
+                        background: '#E0F2FE',
+                        border: '1.5px solid #38BDF8',
+                        borderRadius: '8px',
+                        padding: '10px 12px',
+                        fontSize: '12px',
+                        color: '#0369A1',
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}>
+                        <CheckCircle2 size={16} color="#0284C7" style={{ flexShrink: 0 }} />
+                        <span>💳 Online Paid: ₹{returnedAmount} refund recorded for resident. Put returned item in vehicle crate for Hub Audit.</span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    {isCod && (
+                      <div style={{
+                        background: '#FEF3C7',
+                        border: '1px solid #FCD34D',
+                        color: '#92400E',
+                        borderRadius: '8px',
+                        padding: '10px 12px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        marginBottom: '16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}>
+                        <AlertCircle size={16} />
+                        <span>Cash on Delivery: Ensure ₹{deliveryConfirmOrder.totalAmount} cash was collected.</span>
+                      </div>
+                    )}
+                    <p style={{ fontSize: '13px', color: '#475569', margin: '0 0 4px', lineHeight: 1.5 }}>
+                      Are you sure you want to mark this order as <strong>DELIVERED</strong>?
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div style={{
+                padding: '14px 20px',
+                background: '#F8FAFC',
+                borderTop: '1px solid #E2E8F0',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: '10px',
+                flexShrink: 0
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setDeliveryConfirmOrder(null)}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    background: '#FFFFFF',
+                    border: '1.5px solid #CBD5E1',
+                    color: '#475569',
+                    fontWeight: 700,
+                    fontSize: '13px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDeliveryOrPartial}
+                  disabled={isPartialDeliveryMode && rejectedItems.length > 0 && acceptedItems.length === 0}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 18px',
+                    borderRadius: '8px',
+                    background: isPartialDeliveryMode ? '#D97706' : '#059669',
+                    color: '#FFFFFF',
+                    border: 'none',
+                    fontWeight: 800,
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    boxShadow: isPartialDeliveryMode ? '0 2px 6px rgba(217, 119, 6, 0.3)' : '0 2px 6px rgba(5, 150, 105, 0.3)'
+                  }}
+                >
+                  <CheckCircle2 size={15} />
+                  <span>
+                    {isPartialDeliveryMode 
+                      ? (rejectedItems.length > 0 
+                          ? `Confirm Partial Delivery (${acceptedItems.length} Delivered, ${rejectedItems.length} Returned) ➔` 
+                          : 'Confirm Full Delivery ➔')
+                      : 'Yes, Confirm Delivered'}
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ================= COMPACT COD / UPI PAYMENT MODAL ================= */}
       {codModalOrder && (
