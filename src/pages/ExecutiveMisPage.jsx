@@ -42,6 +42,7 @@ import {
 import FreshiozLogo from '../components/common/FreshiozLogo';
 import { useMisAnalytics, useReconcileRiderCash, warehouses as warehouseResource, orders as orderResource } from '../hooks/resources';
 import { useToast } from '../context/ToastContext';
+import { parseCancelDetails } from '../utils/cancelReasonParser';
 
 // Clean Executive Palette for Official Brand & Audit Review
 const C = {
@@ -195,13 +196,13 @@ export default function ExecutiveMisPage() {
       return misData.cancelledOrdersList;
     }
     return allOrders.filter(o => o.status === 'CANCELLED').map(o => {
-      const [reasonText, photoProof] = (o.cancelledReason || '').split(' [PROOF_PHOTO]');
+      const { reason: cleanReasonText, photo } = parseCancelDetails(o.cancelledReason);
       return {
         id: o.id,
         createdAt: o.createdAt,
         cancelledAt: o.cancelledAt,
-        reasonText: reasonText || 'Doorstep Delivery Exception / Refusal',
-        photoProof: photoProof || null,
+        reasonText: cleanReasonText || 'Doorstep Delivery Exception / Refusal',
+        photoProof: photo || null,
         totalAmount: o.totalAmount || 0,
         societyName: o.societyName || 'N/A',
         flatNo: o.flatNo || 'N/A',

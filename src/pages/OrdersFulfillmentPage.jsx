@@ -42,6 +42,7 @@ import { printOrderTaxInvoice, printSocietyDispatchManifest } from '../utils/pri
 import { apiClient } from '../api/client';
 import { extractBlockAndFlat } from '../utils/addressParser';
 import { formatProduceQuantity } from '../utils/produceFormatter';
+import { parseCancelDetails } from '../utils/cancelReasonParser';
 
 export default function OrdersFulfillmentPage() {
   const { currentUser, currentRoleId } = useAdminRole();
@@ -139,67 +140,6 @@ export default function OrdersFulfillmentPage() {
   // Order Details Modal
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [previewPhotoModal, setPreviewPhotoModal] = useState(null);
-
-  // Parse structured metadata embedded inside cancelledReason ([AUDIT_RECORD], [RETURNED_ITEMS], [PROOF_PHOTOS], [PROOF_PHOTO])
-  const parseCancelDetails = (reasonStr) => {
-    if (!reasonStr) return { reason: 'Cancelled by resident', photo: null, photos: [], auditRecord: null, returnedItems: [], isAudited: false };
-    
-    let text = String(reasonStr);
-    let auditRecord = null;
-    let returnedItems = [];
-
-    // 1. Quality Audit record [AUDIT_RECORD]
-    if (text.includes(' [AUDIT_RECORD]')) {
-      const auditSplit = text.split(' [AUDIT_RECORD]');
-      text = auditSplit[0];
-      try {
-        auditRecord = JSON.parse(auditSplit[1] || 'null');
-      } catch {
-        auditRecord = null;
-      }
-    }
-
-    // 2. Doorstep returned items [RETURNED_ITEMS]
-    if (text.includes(' [RETURNED_ITEMS]')) {
-      const retSplit = text.split(' [RETURNED_ITEMS]');
-      text = retSplit[0];
-      try {
-        returnedItems = JSON.parse(retSplit[1] || '[]');
-      } catch {
-        returnedItems = [];
-      }
-    }
-
-    // 3. Multi-photo proof [PROOF_PHOTOS]
-    let photos = [];
-    if (text.includes(' [PROOF_PHOTOS]')) {
-      const parts = text.split(' [PROOF_PHOTOS]');
-      try {
-        photos = JSON.parse(parts[1] || '[]');
-      } catch {
-        photos = [];
-      }
-      text = parts[0];
-    }
-
-    // 4. Single-photo proof [PROOF_PHOTO] fallback
-    let photo = photos[0] || null;
-    if (text.includes(' [PROOF_PHOTO]')) {
-      const parts = text.split(' [PROOF_PHOTO]');
-      photo = photo || parts[1] || null;
-      if (parts[1] && photos.length === 0) photos = [parts[1]];
-      text = parts[0];
-    }
-
-    return {
-      reason: text.trim() || 'Cancelled by resident',
-      photo,
-      photos: Array.isArray(photos) ? photos : (photo ? [photo] : []),
-      auditRecord,
-      isAudited: Boolean(auditRecord),
-      returnedItems
-    };
-  };
 
   // Delivery Confirmation Modal State
   const [deliveryConfirmOrder, setDeliveryConfirmOrder] = useState(null);

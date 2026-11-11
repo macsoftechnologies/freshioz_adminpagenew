@@ -38,6 +38,7 @@ import { orders as orderResource, employees as employeeResource, warehouses as w
 import AdminPagination from '../components/common/AdminPagination';
 import { extractBlockAndFlat } from '../utils/addressParser';
 import { formatProduceQuantity } from '../utils/produceFormatter';
+import { parseCancelDetails } from '../utils/cancelReasonParser';
 
 // Helper to parse unit weight
 const parseUnitWeightInKg = (unitStr) => {
@@ -178,51 +179,6 @@ export default function WarehouseCratingPage() {
   const [returnItemAdjustments, setReturnItemAdjustments] = useState({});
   const [previewPhotoModal, setPreviewPhotoModal] = useState(null);
   const [isSubmittingAudit, setIsSubmittingAudit] = useState(false);
-
-  const parseCancelDetails = (reasonStr) => {
-    if (!reasonStr) return { reason: 'Cancelled at Doorstep', photo: null, photos: [], auditRecord: null };
-    
-    let text = String(reasonStr);
-    let auditRecord = null;
-
-    // Check for persisted Quality Audit record [AUDIT_RECORD]
-    if (text.includes(' [AUDIT_RECORD]')) {
-      const auditSplit = text.split(' [AUDIT_RECORD]');
-      text = auditSplit[0];
-      try {
-        auditRecord = JSON.parse(auditSplit[1] || 'null');
-      } catch (e) {
-        auditRecord = null;
-      }
-    }
-
-    // Check for multi-photo tag [PROOF_PHOTOS]
-    if (text.includes(' [PROOF_PHOTOS]')) {
-      const parts = text.split(' [PROOF_PHOTOS]');
-      let photos = [];
-      try {
-        photos = JSON.parse(parts[1] || '[]');
-      } catch (e) {
-        photos = [];
-      }
-      const baseReason = (parts[0] || '').split(' [PROOF_PHOTO]')[0].trim();
-      return {
-        reason: baseReason || 'Cancelled at Doorstep',
-        photo: photos[0] || null,
-        photos: Array.isArray(photos) ? photos : [],
-        auditRecord
-      };
-    }
-
-    // Single photo tag [PROOF_PHOTO] fallback
-    const parts = text.split(' [PROOF_PHOTO]');
-    return {
-      reason: parts[0] || 'Cancelled at Doorstep',
-      photo: parts[1] || null,
-      photos: parts[1] ? [parts[1]] : [],
-      auditRecord
-    };
-  };
 
   useEffect(() => {
     setActiveTab(getTabFromHash());
@@ -651,9 +607,9 @@ export default function WarehouseCratingPage() {
     if (!isReturnAuditAllowed) return;
     returnedOrders.forEach(o => {
       const local = returnAudits[o.id];
-      if (local && (!o.cancelledReason || !o.cancelledReason.includes(' [AUDIT_RECORD]'))) {
+      if (local && (!o.cancelledReason || !o.cancelledReason.includes('[AUDIT_RECORD]'))) {
         const raw = o.cancelledReason || 'Cancelled at Doorstep';
-        const cleanBase = raw.split(' [AUDIT_RECORD]')[0];
+        const cleanBase = raw.split(/\s*\[AUDIT_RECORD\]/i)[0];
         const newReason = `${cleanBase} [AUDIT_RECORD]${JSON.stringify(local)}`;
         updateOrderStatusMutation.mutate({
           id: o.id,
@@ -744,7 +700,7 @@ export default function WarehouseCratingPage() {
       // Persist to Server Database so all staff members, devices, and incognito sessions see it immediately
       try {
         const rawReason = order.cancelledReason || 'Cancelled at Doorstep';
-        const cleanBaseReason = rawReason.split(' [AUDIT_RECORD]')[0];
+        const cleanBaseReason = rawReason.split(/\s*\[AUDIT_RECORD\]/i)[0];
         const newCancelledReason = `${cleanBaseReason} [AUDIT_RECORD]${JSON.stringify(auditRecord)}`;
         await updateOrderStatusMutation.mutateAsync({
           id: order.id,
@@ -2505,7 +2461,7 @@ export default function WarehouseCratingPage() {
                                 // Clear the audit tag on the database so other staff members see it reset immediately
                                 try {
                                   const rawReason = order.cancelledReason || '';
-                                  const cleanBaseReason = rawReason.split(' [AUDIT_RECORD]')[0];
+                                  const cleanBaseReason = rawReason.split(/\s*\[AUDIT_RECORD\]/i)[0];
                                   await updateOrderStatusMutation.mutateAsync({
                                     id: order.id,
                                     cancelledReason: cleanBaseReason
