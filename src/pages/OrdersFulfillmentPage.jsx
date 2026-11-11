@@ -138,6 +138,68 @@ export default function OrdersFulfillmentPage() {
 
   // Order Details Modal
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [previewPhotoModal, setPreviewPhotoModal] = useState(null);
+
+  // Parse structured metadata embedded inside cancelledReason ([AUDIT_RECORD], [RETURNED_ITEMS], [PROOF_PHOTOS], [PROOF_PHOTO])
+  const parseCancelDetails = (reasonStr) => {
+    if (!reasonStr) return { reason: 'Cancelled by resident', photo: null, photos: [], auditRecord: null, returnedItems: [], isAudited: false };
+    
+    let text = String(reasonStr);
+    let auditRecord = null;
+    let returnedItems = [];
+
+    // 1. Quality Audit record [AUDIT_RECORD]
+    if (text.includes(' [AUDIT_RECORD]')) {
+      const auditSplit = text.split(' [AUDIT_RECORD]');
+      text = auditSplit[0];
+      try {
+        auditRecord = JSON.parse(auditSplit[1] || 'null');
+      } catch {
+        auditRecord = null;
+      }
+    }
+
+    // 2. Doorstep returned items [RETURNED_ITEMS]
+    if (text.includes(' [RETURNED_ITEMS]')) {
+      const retSplit = text.split(' [RETURNED_ITEMS]');
+      text = retSplit[0];
+      try {
+        returnedItems = JSON.parse(retSplit[1] || '[]');
+      } catch {
+        returnedItems = [];
+      }
+    }
+
+    // 3. Multi-photo proof [PROOF_PHOTOS]
+    let photos = [];
+    if (text.includes(' [PROOF_PHOTOS]')) {
+      const parts = text.split(' [PROOF_PHOTOS]');
+      try {
+        photos = JSON.parse(parts[1] || '[]');
+      } catch {
+        photos = [];
+      }
+      text = parts[0];
+    }
+
+    // 4. Single-photo proof [PROOF_PHOTO] fallback
+    let photo = photos[0] || null;
+    if (text.includes(' [PROOF_PHOTO]')) {
+      const parts = text.split(' [PROOF_PHOTO]');
+      photo = photo || parts[1] || null;
+      if (parts[1] && photos.length === 0) photos = [parts[1]];
+      text = parts[0];
+    }
+
+    return {
+      reason: text.trim() || 'Cancelled by resident',
+      photo,
+      photos: Array.isArray(photos) ? photos : (photo ? [photo] : []),
+      auditRecord,
+      isAudited: Boolean(auditRecord),
+      returnedItems
+    };
+  };
 
   // Delivery Confirmation Modal State
   const [deliveryConfirmOrder, setDeliveryConfirmOrder] = useState(null);
@@ -506,6 +568,14 @@ export default function OrdersFulfillmentPage() {
   const riderOrdersWithReturns = useMemo(() => {
     return riderBaseOrders.filter(o => o.status === 'CANCELLED' || o.status === 'PARTIALLY_DELIVERED' || (o.returnedItems && o.returnedItems.length > 0));
   }, [riderBaseOrders]);
+
+  const pendingHubReturns = useMemo(() => {
+    return riderOrdersWithReturns.filter(o => !parseCancelDetails(o.cancelledReason).isAudited);
+  }, [riderOrdersWithReturns]);
+
+  const auditedHubReturns = useMemo(() => {
+    return riderOrdersWithReturns.filter(o => parseCancelDetails(o.cancelledReason).isAudited);
+  }, [riderOrdersWithReturns]);
 
   // Track acknowledged / dismissed cancellation alert IDs so they disappear from the top banner
   const [dismissedCancelAlertIds, setDismissedCancelAlertIds] = useState(() => {
@@ -1685,16 +1755,48 @@ export default function OrdersFulfillmentPage() {
                 <span style={{ color: '#94A3B8' }}>•</span>
                 <span style={{ fontWeight: 700, color: '#0F172A' }}>{co.userName}</span>
                 <span style={{ fontFamily: 'monospace', fontSize: '11px', color: '#64748B' }}>#{co.id}</span>
-                <span style={{
-                  background: '#FEE2E2',
-                  color: '#991B1B',
-                  fontSize: '10.5px',
-                  fontWeight: 800,
-                  padding: '2px 6px',
-                  borderRadius: '4px'
-                }}>
-                  {co.cancelledReason || 'Cancelled by resident'}
-                </span>
+                {(() => {
+                  const { reason, photos } = parseCancelDetails(co.cancelledReason);
+                  return (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{
+                        background: '#FEE2E2',
+                        color: '#991B1B',
+                        fontSize: '10.5px',
+                        fontWeight: 800,
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        maxWidth: '280px',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {reason}
+                      </span>
+                      {photos.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setPreviewPhotoModal({ photos, activeIndex: 0, title: `Order #${co.id} Doorstep Proof` })}
+                          style={{
+                            background: '#EFF6FF',
+                            border: '1px solid #BFDBFE',
+                            color: '#1D4ED8',
+                            borderRadius: '4px',
+                            fontSize: '10px',
+                            padding: '1px 6px',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '3px'
+                          }}
+                        >
+                          <Camera size={11} /> Proof ({photos.length})
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
                 <button
                   type="button"
                   onClick={() => handleDismissCancellationAlert(co.id)}
@@ -2311,12 +2413,48 @@ export default function OrdersFulfillmentPage() {
                                     <XCircle size={13} color="#DC2626" />
                                     <span>DO NOT DELIVER • CANCELLED</span>
                                   </span>
-                                  <span style={{ fontSize: '10.5px', color: '#B91C1C', fontWeight: 700 }}>
-                                    {order.cancelledReason || 'Cancelled by resident'}
-                                  </span>
-                                  <span style={{ fontSize: '10px', color: '#166534', fontWeight: 800, background: '#DCFCE7', padding: '1px 6px', borderRadius: '4px' }}>
-                                    ↩ Return Produce to Hub
-                                  </span>
+                                  {(() => {
+                                    const { reason, photos, isAudited, auditRecord } = parseCancelDetails(order.cancelledReason);
+                                    return (
+                                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px' }}>
+                                        <span style={{ fontSize: '10.5px', color: '#B91C1C', fontWeight: 700, maxWidth: '240px', textAlign: 'right' }}>
+                                          {reason}
+                                        </span>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                          {isAudited ? (
+                                            <span style={{ fontSize: '10px', color: '#166534', fontWeight: 800, background: '#DCFCE7', border: '1px solid #86EFAC', padding: '1px 6px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                              <CheckCircle2 size={11} /> Handed Over at Hub ({auditRecord?.auditedBy || 'Lead'})
+                                            </span>
+                                          ) : (
+                                            <span style={{ fontSize: '10px', color: '#991B1B', fontWeight: 800, background: '#FEE2E2', border: '1px solid #FCA5A5', padding: '1px 6px', borderRadius: '4px' }}>
+                                              ↩ Keep in Vehicle • Return to Hub
+                                            </span>
+                                          )}
+                                          {photos.length > 0 && (
+                                            <button
+                                              type="button"
+                                              onClick={() => setPreviewPhotoModal({ photos, activeIndex: 0, title: `Order #${order.id} Doorstep Proof` })}
+                                              style={{
+                                                background: '#EFF6FF',
+                                                border: '1px solid #BFDBFE',
+                                                color: '#1D4ED8',
+                                                borderRadius: '4px',
+                                                fontSize: '10px',
+                                                padding: '1px 6px',
+                                                cursor: 'pointer',
+                                                fontWeight: 700,
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: '3px'
+                                              }}
+                                            >
+                                              <Camera size={11} /> Proof ({photos.length})
+                                            </button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })()}
                                 </div>
                               ) : isDelivered ? (
                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#059669', fontWeight: 800, fontSize: '12px', background: '#DCFCE7', padding: '4px 10px', borderRadius: '6px' }}>
@@ -2464,16 +2602,16 @@ export default function OrdersFulfillmentPage() {
             <div style={{
               marginTop: '16px',
               background: '#FFFFFF',
-              border: '1.5px solid #FCA5A5',
+              border: pendingHubReturns.length > 0 ? '1.5px solid #FCA5A5' : '1.5px solid #86EFAC',
               borderRadius: '12px',
               overflow: 'hidden',
-              boxShadow: '0 2px 8px rgba(239, 68, 68, 0.08)'
+              boxShadow: pendingHubReturns.length > 0 ? '0 2px 8px rgba(239, 68, 68, 0.08)' : '0 2px 8px rgba(16, 185, 129, 0.08)'
             }}>
               <div
                 onClick={() => setShowRiderReturnTray(prev => !prev)}
                 style={{
                   padding: '12px 16px',
-                  background: '#FEF2F2',
+                  background: pendingHubReturns.length > 0 ? '#FEF2F2' : '#F0FDF4',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
@@ -2483,15 +2621,17 @@ export default function OrdersFulfillmentPage() {
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ fontSize: '16px' }}>📦</span>
-                  <strong style={{ fontSize: '13px', color: '#991B1B' }}>
-                    Hub Return Tray ({riderOrdersWithReturns.length} Cancelled & Return Orders)
+                  <strong style={{ fontSize: '13px', color: pendingHubReturns.length > 0 ? '#991B1B' : '#166534' }}>
+                    {pendingHubReturns.length > 0 
+                      ? `Hub Return Tray (${pendingHubReturns.length} Pending Handover${auditedHubReturns.length > 0 ? ` · ${auditedHubReturns.length} Audited` : ''})`
+                      : `Hub Return Tray (All ${auditedHubReturns.length} Returns Audited at Hub ✓)`}
                   </strong>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '11px', color: '#B91C1C', fontWeight: 600 }}>
-                    Keep in vehicle & hand over at Hub
+                  <span style={{ fontSize: '11px', color: pendingHubReturns.length > 0 ? '#B91C1C' : '#15803D', fontWeight: 600 }}>
+                    {pendingHubReturns.length > 0 ? 'Keep in vehicle & hand over at Hub' : 'Reconciled at Hub Desk'}
                   </span>
-                  <span style={{ fontSize: '12px', fontWeight: 800, color: '#991B1B' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 800, color: pendingHubReturns.length > 0 ? '#991B1B' : '#166534' }}>
                     {showRiderReturnTray ? 'Hide ▴' : 'Show ▾'}
                   </span>
                 </div>
@@ -2499,28 +2639,31 @@ export default function OrdersFulfillmentPage() {
               {showRiderReturnTray && (
                 <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <div style={{ fontSize: '11.5px', color: '#64748B' }}>
-                    These orders contain cancelled or returned produce. Retain produce crate bags in your vehicle and hand them over to the Warehouse Quality Audit lead upon return:
+                    {pendingHubReturns.length > 0 
+                      ? 'Retain produce crate bags for pending orders in your vehicle and hand them over to the Warehouse Quality Audit lead upon return:'
+                      : 'All returned items have been handed over and audited by the Hub Quality lead. Zero active returns pending in vehicle.'}
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {riderOrdersWithReturns.map(co => {
-                      const isPartial = co.status === 'PARTIALLY_DELIVERED' || Boolean(co.returnedItems && co.returnedItems.length > 0);
-                      const retItems = Array.isArray(co.returnedItems) ? co.returnedItems : [];
+                      const { reason, photos, auditRecord, isAudited, returnedItems: parsedRetItems } = parseCancelDetails(co.cancelledReason);
+                      const isPartial = co.status === 'PARTIALLY_DELIVERED' || Boolean((co.returnedItems && co.returnedItems.length > 0) || parsedRetItems.length > 0);
+                      const retItems = (Array.isArray(co.returnedItems) && co.returnedItems.length > 0) ? co.returnedItems : parsedRetItems;
 
                       return (
                         <div key={co.id} style={{
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
-                          padding: '10px 14px',
+                          padding: '12px 14px',
                           borderRadius: '8px',
-                          background: '#F8FAFC',
-                          border: isPartial ? '1.5px solid #FCD34D' : '1px solid #E2E8F0',
+                          background: isAudited ? '#F0FDF4' : '#F8FAFC',
+                          border: isAudited ? '1.5px solid #86EFAC' : (isPartial ? '1.5px solid #FCD34D' : '1px solid #E2E8F0'),
                           fontSize: '12.5px',
                           flexWrap: 'wrap',
-                          gap: '8px'
+                          gap: '10px'
                         }}>
-                          <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <div style={{ flex: 1, minWidth: '240px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                               <strong style={{ color: '#DC2626', fontSize: '13px' }}>Flat {co.flatNo || co.flatNumber || '—'}</strong>
                               <span style={{ color: '#64748B' }}>•</span>
                               <span style={{ color: '#0F172A', fontWeight: 700 }}>{co.userName}</span>
@@ -2535,27 +2678,113 @@ export default function OrdersFulfillmentPage() {
                               }}>
                                 {isPartial ? 'Doorstep Partial Return' : 'Full Order Cancelled'}
                               </span>
+                              {isAudited && (
+                                <span style={{
+                                  fontSize: '10.5px',
+                                  fontWeight: 800,
+                                  padding: '1px 6px',
+                                  borderRadius: '4px',
+                                  background: '#DCFCE7',
+                                  color: '#15803D',
+                                  border: '1px solid #86EFAC',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '3px'
+                                }}>
+                                  <CheckCircle2 size={11} /> Handed Over & Audited
+                                </span>
+                              )}
                             </div>
+
                             {isPartial && retItems.length > 0 ? (
                               <div style={{ fontSize: '11.5px', color: '#92400E', marginTop: '3px', fontWeight: 600 }}>
                                 Returned Produce: {retItems.map(it => `${it.name} (${it.qty} ${it.unit || 'kg'})`).join(', ')}
                               </div>
                             ) : (
-                              <div style={{ fontSize: '11.5px', color: '#991B1B', marginTop: '2px' }}>
-                                Reason: {co.cancelledReason || 'Cancelled by resident'}
+                              <div style={{ fontSize: '11.5px', color: '#991B1B', marginTop: '3px', fontWeight: 600 }}>
+                                Reason: {reason}
+                              </div>
+                            )}
+
+                            {/* Hub Audit Record Details */}
+                            {isAudited && auditRecord && (
+                              <div style={{
+                                marginTop: '4px',
+                                fontSize: '11px',
+                                color: '#166534',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                flexWrap: 'wrap'
+                              }}>
+                                <span>✓ Received by <strong>{auditRecord.auditedBy || 'Warehouse Lead'}</strong></span>
+                                {auditRecord.totalGoodKg > 0 && <span>• {auditRecord.totalGoodKg} kg Restocked</span>}
+                                {auditRecord.totalWastageKg > 0 && <span>• {auditRecord.totalWastageKg} kg Spoilage Write-Off</span>}
+                              </div>
+                            )}
+
+                            {/* Photo Proof Action */}
+                            {photos.length > 0 && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewPhotoModal({ photos, activeIndex: 0, title: `Order #${co.id} Doorstep Proof` })}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    padding: '2px 8px',
+                                    borderRadius: '6px',
+                                    background: '#EFF6FF',
+                                    border: '1px solid #BFDBFE',
+                                    color: '#1D4ED8',
+                                    fontSize: '11px',
+                                    fontWeight: 700,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  <Camera size={12} />
+                                  <span>View {photos.length} Photo Proof</span>
+                                </button>
                               </div>
                             )}
                           </div>
-                          <span style={{
-                            fontSize: '11px',
-                            fontWeight: 800,
-                            color: '#B91C1C',
-                            background: '#FEE2E2',
-                            padding: '3px 9px',
-                            borderRadius: '6px'
-                          }}>
-                            Return to Hub
-                          </span>
+
+                          {/* Status Pill on the Right */}
+                          {isAudited ? (
+                            <span style={{
+                              fontSize: '11.5px',
+                              fontWeight: 800,
+                              color: '#15803D',
+                              background: '#DCFCE7',
+                              border: '1.5px solid #86EFAC',
+                              padding: '4px 10px',
+                              borderRadius: '6px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              flexShrink: 0
+                            }}>
+                              <CheckCircle2 size={13} />
+                              <span>Audited at Hub</span>
+                            </span>
+                          ) : (
+                            <span style={{
+                              fontSize: '11.5px',
+                              fontWeight: 800,
+                              color: '#B91C1C',
+                              background: '#FEE2E2',
+                              border: '1.5px solid #FCA5A5',
+                              padding: '4px 10px',
+                              borderRadius: '6px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              flexShrink: 0
+                            }}>
+                              <span>📦 Keep in Vehicle</span>
+                            </span>
+                          )}
                         </div>
                       );
                     })}
@@ -2825,7 +3054,7 @@ export default function OrdersFulfillmentPage() {
                           )}
                           {currentStatus === 'CANCELLED' && order.cancelledReason && (
                             <div style={{ fontSize: '10px', color: '#DC2626', fontWeight: 700, marginTop: '3px', maxWidth: '170px', lineHeight: 1.2 }}>
-                              ⚠️ {order.cancelledReason}
+                              ⚠️ {parseCancelDetails(order.cancelledReason).reason}
                             </div>
                           )}
                           {currentStatus === 'DELIVERED' && order.deliveredAt && (
@@ -3251,12 +3480,50 @@ export default function OrdersFulfillmentPage() {
                         <span>{selectedOrder.dispatchedBy}</span>
                       </div>
                     )}
-                    {selectedOrder.cancelledReason && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px', paddingTop: '4px', borderTop: '1px dashed #FCA5A5', color: '#991B1B' }}>
-                        <span>Cancellation Reason:</span>
-                        <strong>{selectedOrder.cancelledReason}</strong>
-                      </div>
-                    )}
+                    {selectedOrder.cancelledReason && (() => {
+                      const { reason, photos, auditRecord, isAudited } = parseCancelDetails(selectedOrder.cancelledReason);
+                      return (
+                        <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px dashed #FCA5A5', color: '#991B1B' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                            <span style={{ fontSize: '12px' }}>Cancellation Reason:</span>
+                            <strong style={{ fontSize: '12px', textAlign: 'right', maxWidth: '280px' }}>{reason}</strong>
+                          </div>
+                          {isAudited && auditRecord && (
+                            <div style={{ fontSize: '11px', color: '#166534', marginTop: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span>Hub Audit Reconciliation:</span>
+                              <span style={{ fontWeight: 700 }}>
+                                Audited by {auditRecord.auditedBy || 'Lead'} ({auditRecord.totalGoodKg || 0} kg restocked, {auditRecord.totalWastageKg || 0} kg waste)
+                              </span>
+                            </div>
+                          )}
+                          {photos.length > 0 && (
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '6px' }}>
+                              <span style={{ fontSize: '11px', color: '#64748B' }}>Doorstep Photo Proof:</span>
+                              <button
+                                type="button"
+                                onClick={() => setPreviewPhotoModal({ photos, activeIndex: 0, title: `Order #${selectedOrder.id} Doorstep Proof` })}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  padding: '2px 8px',
+                                  borderRadius: '6px',
+                                  background: '#EFF6FF',
+                                  border: '1px solid #BFDBFE',
+                                  color: '#1D4ED8',
+                                  fontSize: '11px',
+                                  fontWeight: 700,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <Camera size={12} />
+                                <span>View {photos.length} Photo Proof</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
 
@@ -4387,6 +4654,97 @@ export default function OrdersFulfillmentPage() {
           </div>
         );
       })()}
+
+      {/* MODAL: PREVIEW CANCELLATION PHOTO PROOF */}
+      {previewPhotoModal && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: '#FFFFFF',
+            borderRadius: '16px',
+            maxWidth: '640px',
+            width: '100%',
+            overflow: 'hidden',
+            border: '1.5px solid #CBD5E1',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid #E2E8F0', background: '#F8FAFC' }}>
+              <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Camera size={16} color="#DC2626" />
+                <span>{previewPhotoModal.title || 'Doorstep Photo Proof'}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewPhotoModal(null)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div style={{ padding: '16px', textAlign: 'center', background: '#0F172A' }}>
+              {(() => {
+                const photosList = previewPhotoModal.photos || (previewPhotoModal.photo ? [previewPhotoModal.photo] : []);
+                const currentIdx = previewPhotoModal.activeIndex || 0;
+                const activePhoto = photosList[currentIdx] || previewPhotoModal.photo;
+
+                return (
+                  <div>
+                    <img
+                      src={activePhoto}
+                      alt="Enlarged Proof"
+                      style={{ maxWidth: '100%', maxHeight: '60vh', borderRadius: '8px', objectFit: 'contain' }}
+                    />
+
+                    {photosList.length > 1 && (
+                      <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
+                        {photosList.map((p, pIdx) => (
+                          <img
+                            key={pIdx}
+                            src={p}
+                            alt={`Thumb ${pIdx + 1}`}
+                            onClick={() => setPreviewPhotoModal(prev => ({
+                              ...prev,
+                              activeIndex: pIdx,
+                              title: prev.title.replace(/\(\d+\/\d+\)/, `(${pIdx + 1}/${photosList.length})`)
+                            }))}
+                            style={{
+                              width: '48px',
+                              height: '48px',
+                              objectFit: 'cover',
+                              borderRadius: '6px',
+                              border: pIdx === currentIdx ? '2px solid #38BDF8' : '1px solid #475569',
+                              cursor: 'pointer',
+                              opacity: pIdx === currentIdx ? 1 : 0.6
+                            }}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+            <div style={{ padding: '12px 18px', display: 'flex', justifyContent: 'flex-end', background: '#F8FAFC', borderTop: '1px solid #E2E8F0' }}>
+              <button
+                type="button"
+                onClick={() => setPreviewPhotoModal(null)}
+                style={{ padding: '6px 16px', background: '#0F172A', color: '#FFF', borderRadius: '6px', border: 'none', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
