@@ -352,11 +352,6 @@ export default function OrdersFulfillmentPage() {
       showToast(err.message || 'Failed to update order status on server.', 'error');
     }
   };
-    } catch (err) {
-      console.error('Status PATCH sync error:', err);
-      showToast(err.message || 'Failed to update order status on server.', 'error');
-    }
-  };
 
   // Dedicated COD Payment Recorder (can be invoked independently or as part of delivery)
   const handleRecordCodPayment = async (orderId, mode = 'CASH', alsoDeliver = false, paymentRef = null) => {
