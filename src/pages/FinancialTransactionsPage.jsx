@@ -189,6 +189,7 @@ export default function FinancialTransactionsPage() {
         deliveryDate: order.deliveryDate,
         amount: Number(order.totalAmount) || 0,
         subtotal: Number(order.subtotal) || 0,
+        gstAmount: Number(order.gstAmount) || 0,
         deliveryFee: Number(order.deliveryFee) || 0,
         customerName: order.userName || order.customerName || 'Resident Customer',
         customerPhone: order.userPhone,
