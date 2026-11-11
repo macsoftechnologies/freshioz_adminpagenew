@@ -738,7 +738,7 @@ export default function OrdersFulfillmentPage() {
 
   // Rider Cancellation / Exception Modal State
   const [riderCancelModalOrder, setRiderCancelModalOrder] = useState(null);
-  const [riderCancelReason, setRiderCancelReason] = useState('CUSTOMER_NOT_AVAILABLE');
+  const [riderCancelReason, setRiderCancelReason] = useState('Produce Quality Damaged / Spoiled / Rotten');
   const [riderCancelNotes, setRiderCancelNotes] = useState('');
   const [riderCancelPhotos, setRiderCancelPhotos] = useState([]);
   const [isCompressingPhoto, setIsCompressingPhoto] = useState(false);
@@ -801,11 +801,17 @@ export default function OrdersFulfillmentPage() {
     const targetOrder = riderCancelModalOrder;
 
     const reasonLabelMap = {
-      CUSTOMER_NOT_AVAILABLE: 'Resident Not Available / Door Locked / Unreachable',
-      WRONG_ADDRESS: 'Incorrect Flat # / Invalid Address',
-      CUSTOMER_REFUSED: 'Resident Refused Delivery / Cancelled at Door',
-      QUALITY_REJECTED: 'Produce Quality Rejected by Resident',
-      SOCIETY_GATE_DENIED: 'Society Security / Association Denied Entry',
+      'Produce Quality Damaged / Spoiled / Rotten': 'Produce Quality Damaged / Spoiled / Rotten',
+      'Incorrect Produce / Wrong Item Delivered': 'Incorrect Produce / Wrong Item Delivered',
+      'Crate Sealed Damaged / Crushed Produce': 'Crate Sealed Damaged / Crushed Produce',
+      'Resident Refused Delivery at Doorstep': 'Resident Refused Delivery at Doorstep',
+      'Resident Not Available at Drop Time': 'Resident Not Available at Drop Time',
+      'Other Exception': 'Other Exception',
+      CUSTOMER_NOT_AVAILABLE: 'Resident Not Available at Drop Time',
+      WRONG_ADDRESS: 'Incorrect Produce / Wrong Item Delivered',
+      CUSTOMER_REFUSED: 'Resident Refused Delivery at Doorstep',
+      QUALITY_REJECTED: 'Produce Quality Damaged / Spoiled / Rotten',
+      SOCIETY_GATE_DENIED: 'Resident Not Available at Drop Time',
       OTHER: 'Other Exception'
     };
     const baseReason = `${reasonLabelMap[riderCancelReason] || riderCancelReason}${riderCancelNotes ? ` - ${riderCancelNotes}` : ''} (Reported by Rider ${currentUser?.name || 'Driver'})`;
@@ -3872,10 +3878,11 @@ export default function OrdersFulfillmentPage() {
                                     padding: '0 8px'
                                   }}
                                 >
-                                  <option value="QUALITY_REJECTED">🥦 Produce Damaged / Overripe / Rotten</option>
-                                  <option value="TRANSIT_DAMAGED">📦 Crushed or Bruised during Transit</option>
-                                  <option value="WRONG_ITEM">❌ Wrong Item or Size Variant</option>
-                                  <option value="CUSTOMER_REFUSED">🙅 Resident Refused at Doorstep</option>
+                                  <option value="Produce Quality Damaged / Spoiled / Rotten">🥦 Produce Quality Damaged / Spoiled / Rotten</option>
+                                  <option value="Incorrect Produce / Wrong Item Delivered">❌ Incorrect Produce / Wrong Item Delivered</option>
+                                  <option value="Crate Sealed Damaged / Crushed Produce">📦 Crate Sealed Damaged / Crushed Produce</option>
+                                  <option value="Resident Refused Delivery at Doorstep">🙅 Resident Refused Delivery at Doorstep</option>
+                                  <option value="Other Exception">✏️ Other Exception</option>
                                 </select>
                               </div>
                             )}
@@ -4348,12 +4355,12 @@ export default function OrdersFulfillmentPage() {
                     }}
                     required
                   >
-                    <option value="CUSTOMER_NOT_AVAILABLE">🚪 Resident Not Available / Flat Locked / Unreachable</option>
-                    <option value="WRONG_ADDRESS">📍 Incorrect Flat # / Wrong Community Address</option>
-                    <option value="CUSTOMER_REFUSED">🙅 Resident Refused Delivery / Cancelled at Doorstep</option>
-                    <option value="QUALITY_REJECTED">🥦 Produce Quality Rejected by Resident</option>
-                    <option value="SOCIETY_GATE_DENIED">⛔ Society Security / Association Denied Entry</option>
-                    <option value="OTHER">✏️ Other Delivery Exception</option>
+                    <option value="Produce Quality Damaged / Spoiled / Rotten">🥦 Produce Quality Damaged / Spoiled / Rotten</option>
+                    <option value="Incorrect Produce / Wrong Item Delivered">❌ Incorrect Produce / Wrong Item Delivered</option>
+                    <option value="Crate Sealed Damaged / Crushed Produce">📦 Crate Sealed Damaged / Crushed Produce</option>
+                    <option value="Resident Refused Delivery at Doorstep">🙅 Resident Refused Delivery at Doorstep</option>
+                    <option value="Resident Not Available at Drop Time">🚪 Resident Not Available at Drop Time</option>
+                    <option value="Other Exception">✏️ Other Exception</option>
                   </select>
                 </div>
 

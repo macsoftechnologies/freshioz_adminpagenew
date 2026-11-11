@@ -229,6 +229,7 @@ export function printOrderTaxInvoice(order) {
     <body>
       <div class="header">
         <div>
+          <img src="/freshioz-logo.png" style="height: 42px; display: block; margin-bottom: 6px; object-fit: contain;" alt="Freshioz" onerror="this.style.display='none'" />
           <div class="brand-title">FRESHIOZ</div>
           <div class="brand-subtitle">Farm-Direct Fresh Produce • Mandi Dawn Harvest</div>
           <div class="reg-details">
@@ -314,10 +315,12 @@ export function printOrderTaxInvoice(order) {
             <span>Delivery Fee:</span>
             <span style="color: #166534; font-weight: 700;">FREE (₹0)</span>
           </div>
-          <div class="totals-row">
-            <span>GST (0% / 5% Exempt/Included):</span>
-            <span>₹0.00</span>
-          </div>
+          ${Number(order.gstAmount || 0) > 0 ? `
+            <div class="totals-row">
+              <span>GST:</span>
+              <span>+₹${Number(order.gstAmount).toFixed(2)}</span>
+            </div>
+          ` : ''}
           <div class="totals-row totals-grand">
             <span>Grand Total:</span>
             <span>₹${(order.totalAmount || 0).toLocaleString()}</span>
